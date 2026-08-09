@@ -19,7 +19,6 @@ public class AppointmentService {
     private final BusinessRepository businessRepository;
     private final ServiceItemRepository serviceItemRepository;
 
-    // Bütün Repository'leri içeri alıyoruz (Dependency Injection)
     public AppointmentService(AppointmentRepository appointmentRepository,
             UserRepository userRepository,
             BusinessRepository businessRepository,
@@ -30,137 +29,120 @@ public class AppointmentService {
         this.serviceItemRepository = serviceItemRepository;
     }
 
-    // 1. YENİ RANDEVU OLUŞTURMA
-    public Appointment createAppointment(Long customerId, Long businessId, Long serviceId,
-            LocalDateTime appointmentDate) {
+    // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
+    public Appointment createAppointment(Appointment newAppointment) {
 
-        // 1. Adım: Müşteri veritabanında var mı?
-        User customer = userRepository.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Müşteri bulunamadı!"));
+        ServiceItem service = serviceItemRepository.findById(newAppointment.getServiceItem().getId())
+                .orElseThrow(() -> new RuntimeException("Hizmet bulunamadı."));
+        newAppointment.setServiceItem(service);
 
-        // 2. Adım: Dükkan veritabanında var mı?
-        Business business = businessRepository.findById(businessId)
-                .orElseThrow(() -> new RuntimeException("Dükkan bulunamadı!"));
+        LocalDateTime newStart = newAppointment.getAppointmentDate();
+        LocalDateTime newEnd = newStart.plusMinutes(service.getDurationInMinutes());
 
-        // 3. Adım: Hizmet veritabanında var mı?
-        ServiceItem serviceItem = serviceItemRepository.findById(serviceId)
-                .orElseThrow(() -> new RuntimeException("Hizmet bulunamadı!"));
-
-        // Hangi durumlar o saatin dolu olduğunu gösterir? (Bekleyen ve Onaylananlar)
+        LocalDateTime startOfDay = newStart.toLocalDate().atStartOfDay();
+        LocalDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
         List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
 
-        // Veritabanına sor: Bu dükkanda, bu saatte, bu durumlardan birine sahip kayıt
-        // var mı?
-        boolean isTimeSlotTaken = appointmentRepository.existsByBusinessIdAndAppointmentDateAndStatusIn(
-                businessId, appointmentDate, blockingStatuses);
+        List<Appointment> dailyAppointments = appointmentRepository
+                .findByBusinessIdAndAppointmentDateBetweenAndStatusIn(
+                        newAppointment.getBusiness().getId(),
+                        startOfDay,
+                        endOfDay,
+                        blockingStatuses);
 
-        if (isTimeSlotTaken) {
-            throw new RuntimeException("Bu saatte dükkanın başka bir randevusu var, lütfen farklı bir saat seçiniz!");
+        boolean isOverlapping = dailyAppointments.stream().anyMatch(existing -> {
+            LocalDateTime existingStart = existing.getAppointmentDate();
+            LocalDateTime existingEnd = existingStart.plusMinutes(existing.getServiceItem().getDurationInMinutes());
+
+            return newStart.isBefore(existingEnd) && newEnd.isAfter(existingStart);
+        });
+
+        if (isOverlapping) {
+            throw new IllegalStateException("Seçilen saat aralığında başka bir randevu bulunmaktadır.");
         }
 
-        // 4. Adım: Her şey tamsa randevuyu oluştur (Lombok Builder kullanarak)
-        Appointment appointment = Appointment.builder()
-                .customer(customer)
-                .business(business)
-                .serviceItem(serviceItem)
-                .appointmentDate(appointmentDate)
-                .status(AppointmentStatus.PENDING) // İlk aşamada otomatik olarak 'Onay Bekliyor' yapıyoruz
-                .build();
-
-        return appointmentRepository.save(appointment);
+        return appointmentRepository.save(newAppointment);
     }
 
-    // 2. DÜKKANA AİT RANDEVULARI LİSTELEME
+    // Belirli bir işletmeye ait tüm randevuları getirir.
     public List<Appointment> getBusinessAppointments(Long businessId) {
         return appointmentRepository.findByBusinessId(businessId);
     }
 
-    // 3. MÜŞTERİYE AİT RANDEVULARI LİSTELEME
+    // Belirli bir müşteriye ait tüm randevuları getirir.
     public List<Appointment> getCustomerAppointments(Long customerId) {
         return appointmentRepository.findByCustomerId(customerId);
     }
 
-    // 4. RANDEVU DURUMUNU GÜNCELLEME (Patronun onaylaması veya iptal etmesi için)
+    // Randevunun durumunu günceller (Örn: PENDING -> APPROVED).
     public Appointment updateAppointmentStatus(Long appointmentId, AppointmentStatus newStatus) {
         Appointment appointment = appointmentRepository.findById(appointmentId)
-                .orElseThrow(() -> new RuntimeException("Randevu bulunamadı!"));
+                .orElseThrow(() -> new RuntimeException("Randevu bulunamadı."));
 
         appointment.setStatus(newStatus);
         return appointmentRepository.save(appointment);
     }
 
-    // 5. Müşterinin Gelecekteki Randevuları (Geçmişe bakmaz)
+    // Müşterinin şu andan sonraki randevularını getirir.
     public List<Appointment> getUpcomingCustomerAppointments(Long customerId) {
         return appointmentRepository.findByCustomerIdAndAppointmentDateAfter(customerId, LocalDateTime.now());
     }
 
-    // 6. Dükkanın Gelecekteki Randevuları
+    // İşletmenin şu andan sonraki randevularını getirir.
     public List<Appointment> getUpcomingBusinessAppointments(Long businessId) {
         return appointmentRepository.findByBusinessIdAndAppointmentDateAfter(businessId, LocalDateTime.now());
     }
 
-    // AppointmentService.java içine eklenecek yeni metot
-
+    // Belirtilen gün için işletmenin ve hizmetin süresine uygun boş saat
+    // dilimlerini hesaplar.
     public List<LocalTime> getAvailableTimeSlots(Long businessId, Long serviceId, LocalDate date) {
-        // 1. Dükkanı ve Hizmeti veritabanından bul
         Business business = businessRepository.findById(businessId)
-                .orElseThrow(() -> new RuntimeException("Dükkan bulunamadı!"));
+                .orElseThrow(() -> new RuntimeException("Dükkan bulunamadı."));
 
         ServiceItem serviceItem = serviceItemRepository.findById(serviceId)
-                .orElseThrow(() -> new RuntimeException("Hizmet bulunamadı!"));
+                .orElseThrow(() -> new RuntimeException("Hizmet bulunamadı."));
 
-        int duration = serviceItem.getDurationInMinutes(); // Örn: 45 dakika
+        int duration = serviceItem.getDurationInMinutes();
 
-        // 2. O günün başlangıç ve bitiş zamanlarını ayarla (Dükkanın mesai saatlerine
-        // göre)
         LocalDateTime startOfDay = date.atTime(business.getOpenTime());
         LocalDateTime endOfDay = date.atTime(business.getCloseTime());
 
-        // 3. O günkü randevuları getir ve BAŞLANGIÇ SAATİNE GÖRE SIRALA (Linear
-        // Sweep'in ilk kuralı)
         List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
         List<Appointment> dailyAppointments = appointmentRepository
                 .findByBusinessIdAndAppointmentDateBetweenAndStatusIn(businessId, startOfDay, endOfDay,
                         blockingStatuses);
 
-        // Java Stream API ile listeyi zamana göre küçükten büyüğe sıralıyoruz
-        dailyAppointments.sort(Comparator.nullsLast(Comparator.comparing(a -> a.getAppointmentDate())));
-        List<LocalTime> availableSlots = new ArrayList<>();
-        LocalDateTime currentPointer = startOfDay; // İşaretçimizi dükkanın açılış saatine koyduk (Örn: 09:00)
+        dailyAppointments.sort(Comparator.nullsLast(Comparator.comparing(Appointment::getAppointmentDate)));
 
-        // İşaretçinin üstüne hizmet süresini eklediğimizde dükkanın kapanış saatini
-        // geçmiyorsa dönmeye devam et
+        List<LocalTime> availableSlots = new ArrayList<>();
+        LocalDateTime currentPointer = startOfDay;
+
         while (currentPointer.plusMinutes(duration).isBefore(endOfDay)
                 || currentPointer.plusMinutes(duration).isEqual(endOfDay)) {
+
             LocalDateTime proposedEnd = currentPointer.plusMinutes(duration);
             boolean isOverlapping = false;
 
-            // Bu potansiyel aralık (currentPointer - proposedEnd) mevcut randevularla
-            // çakışıyor mu?
             for (Appointment app : dailyAppointments) {
                 LocalDateTime appStart = app.getAppointmentDate();
                 LocalDateTime appEnd = appStart.plusMinutes(app.getServiceItem().getDurationInMinutes());
 
-                // Eğer işaretçimizin bitişi mevcut bir randevunun başlangıcından sonraysa ve
-                // işaretçimizin başlangıcı mevcut randevunun bitişinden önceyse çakışma vardır!
                 if (currentPointer.isBefore(appEnd) && proposedEnd.isAfter(appStart)) {
                     isOverlapping = true;
-                    // TETRİS HAMLESİ: Çakışma varsa, zamanı çöpe atma! İşaretçiyi direkt engelleyen
-                    // randevunun BİTİŞ SAATİNE zıplat.
+                    // Çakışma durumunda işaretçiyi mevcut randevunun bitiş zamanına kaydırır.
                     currentPointer = appEnd;
-                    break; // Döngüden çık, yeni işaretçiyle tekrar kontrol et
+                    break;
                 }
             }
 
-            // Eğer hiçbir çakışma bulamadıysak, burası harika bir boşluktur!
             if (!isOverlapping) {
-                availableSlots.add(currentPointer.toLocalTime()); // Boş saati listeye ekle
-                // Sıkı paketleme için işaretçiyi direkt bu hizmetin bitiş saatine kaydır
+                // Uygun boşluk bulunduğunda listeye ekler ve işaretçiyi hizmet süresi kadar
+                // ileri taşır.
+                availableSlots.add(currentPointer.toLocalTime());
                 currentPointer = currentPointer.plusMinutes(duration);
             }
         }
 
         return availableSlots;
     }
-
 }

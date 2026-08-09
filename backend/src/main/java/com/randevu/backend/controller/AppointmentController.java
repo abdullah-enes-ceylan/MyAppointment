@@ -2,6 +2,9 @@ package com.randevu.backend.controller;
 
 import com.randevu.backend.entity.Appointment;
 import com.randevu.backend.entity.AppointmentStatus;
+import com.randevu.backend.entity.Business;
+import com.randevu.backend.entity.ServiceItem;
+import com.randevu.backend.entity.User;
 import com.randevu.backend.service.AppointmentService;
 
 import org.springframework.format.annotation.DateTimeFormat;
@@ -30,12 +33,27 @@ public class AppointmentController {
     // "2024-01-15T14:30:00" }
     @PostMapping("/create")
     public Appointment createAppointment(@RequestBody AppointmentRequest request) {
-        // Artık request'in içindeki id'leri güvenle çekebiliriz
-        return appointmentService.createAppointment(
-                request.getCustomerId(),
-                request.getBusinessId(),
-                request.getServiceId(),
-                request.getAppointmentDate());
+
+        // 1. Gelen ID'leri kullanarak referans nesnelerini oluşturuyoruz
+        User customer = new User();
+        customer.setId(request.getCustomerId());
+
+        Business business = new Business();
+        business.setId(request.getBusinessId());
+
+        ServiceItem serviceItem = new ServiceItem();
+        serviceItem.setId(request.getServiceId());
+
+        // 2. Ana Appointment nesnesini oluşturup içini dolduruyoruz
+        Appointment appointment = new Appointment();
+        appointment.setCustomer(customer);
+        appointment.setBusiness(business);
+        appointment.setServiceItem(serviceItem);
+        appointment.setAppointmentDate(request.getAppointmentDate());
+        appointment.setStatus(AppointmentStatus.PENDING); // Varsayılan durum: Onay Bekliyor
+
+        // 3. Tek parça haline getirdiğimiz nesneyi servise yolluyoruz
+        return appointmentService.createAppointment(appointment);
     }
 
     // Yardımcı Request Yapısı
@@ -45,7 +63,6 @@ public class AppointmentController {
         public Long serviceId;
         public LocalDateTime appointmentDate;
 
-        // Getters and Setters (Gerekli olabilir)
         public Long getCustomerId() {
             return customerId;
         }
@@ -80,22 +97,18 @@ public class AppointmentController {
     }
 
     // 2. Dükkanın Randevularını Listeleme
-    // URL: GET /api/appointments/business/1
     @GetMapping("/business/{businessId}")
     public List<Appointment> getBusinessAppointments(@PathVariable Long businessId) {
         return appointmentService.getBusinessAppointments(businessId);
     }
 
     // 3. Müşterinin Randevularını Listeleme
-    // URL: GET /api/appointments/customer/1
     @GetMapping("/customer/{customerId}")
     public List<Appointment> getCustomerAppointments(@PathVariable Long customerId) {
         return appointmentService.getCustomerAppointments(customerId);
     }
 
     // 4. Randevu Durumunu Güncelleme
-    // URL: PUT /api/appointments/1/approve
-    // Veya: PUT /api/appointments/1/reject
     @PutMapping("/{appointmentId}/{action}")
     public Appointment updateStatus(@PathVariable Long appointmentId, @PathVariable String action) {
         if (action.equalsIgnoreCase("approve")) {
@@ -105,13 +118,10 @@ public class AppointmentController {
         } else if (action.equalsIgnoreCase("cancel")) {
             return appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.CANCELLED);
         }
-        // Başka bir şey gelirse hata döndür
         throw new IllegalArgumentException("Geçersiz işlem: " + action);
     }
 
-    // --- YENİ EKLENECEK METHODLAR ---
-
-    // 5. Kullanıcının Yaklaşan Randevularını Listeleme (Geçmişi Değil)
+    // 5. Kullanıcının Yaklaşan Randevularını Listeleme
     @GetMapping("/customer/{customerId}/upcoming")
     public List<Appointment> getUpcomingCustomerAppointments(@PathVariable Long customerId) {
         return appointmentService.getUpcomingCustomerAppointments(customerId);
@@ -123,9 +133,7 @@ public class AppointmentController {
         return appointmentService.getUpcomingBusinessAppointments(businessId);
     }
 
-    // 7. BOŞ SAATLERİ GETİRME UÇ NOKTASI (GET İSTEĞİ)
-    // URL: GET
-    // /api/appointments/available-slots?businessId=1&serviceId=1&date=2026-08-15
+    // 7. BOŞ SAATLERİ GETİRME UÇ NOKTASI
     @GetMapping("/available-slots")
     public ResponseEntity<?> getAvailableTimeSlots(
             @RequestParam Long businessId,
@@ -136,9 +144,7 @@ public class AppointmentController {
             List<LocalTime> availableSlots = appointmentService.getAvailableTimeSlots(businessId, serviceId, date);
             return ResponseEntity.ok(availableSlots);
         } catch (RuntimeException e) {
-            // Hata durumunda hata mesajını döndür
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
-
 }

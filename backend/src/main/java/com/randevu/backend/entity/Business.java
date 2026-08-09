@@ -36,4 +36,17 @@ public class Business {
     private LocalTime openTime; // açılış zamanı
     private LocalTime closeTime; // kapanış zamanı
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private BusinessCategory category;
+
+    // Getter ve Setter metotları
+    public BusinessCategory getCategory() {
+        return category;
+    }
+
+    public void setCategory(BusinessCategory category) {
+        this.category = category;
+    }
+
 }
