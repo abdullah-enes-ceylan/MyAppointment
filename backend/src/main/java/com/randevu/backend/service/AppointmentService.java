@@ -15,16 +15,13 @@ import java.util.List;
 public class AppointmentService {
 
     private final AppointmentRepository appointmentRepository;
-    private final UserRepository userRepository;
     private final BusinessRepository businessRepository;
     private final ServiceItemRepository serviceItemRepository;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
-            UserRepository userRepository,
             BusinessRepository businessRepository,
             ServiceItemRepository serviceItemRepository) {
         this.appointmentRepository = appointmentRepository;
-        this.userRepository = userRepository;
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
     }
@@ -112,8 +109,7 @@ public class AppointmentService {
                 .findByBusinessIdAndAppointmentDateBetweenAndStatusIn(businessId, startOfDay, endOfDay,
                         blockingStatuses);
 
-        dailyAppointments.sort(Comparator.nullsLast(Comparator.comparing(Appointment::getAppointmentDate)));
-
+        dailyAppointments.sort(Comparator.nullsLast(Comparator.comparing(a -> a.getAppointmentDate())));
         List<LocalTime> availableSlots = new ArrayList<>();
         LocalDateTime currentPointer = startOfDay;
 
