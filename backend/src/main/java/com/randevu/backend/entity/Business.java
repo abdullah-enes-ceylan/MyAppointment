@@ -1,5 +1,7 @@
 package com.randevu.backend.entity;
 
+import java.time.LocalTime;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -29,4 +31,9 @@ public class Business {
     @ManyToOne
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
+
+    // Business.java dosyasının içine eklenecek
+    private LocalTime openTime; // açılış zamanı
+    private LocalTime closeTime; // kapanış zamanı
+
 }

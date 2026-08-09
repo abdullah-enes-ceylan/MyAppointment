@@ -19,7 +19,10 @@ public class User {
     private Long id;
 
     @Column(nullable = false)
-    private String fullName;
+    private String name;
+
+    @Column(nullable = false)
+    private String surName;
 
     @Column(nullable = false, unique = true)
     private String email;

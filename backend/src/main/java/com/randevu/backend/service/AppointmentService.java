@@ -4,7 +4,11 @@ import com.randevu.backend.entity.*;
 import com.randevu.backend.repository.*;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -93,6 +97,70 @@ public class AppointmentService {
     // 6. Dükkanın Gelecekteki Randevuları
     public List<Appointment> getUpcomingBusinessAppointments(Long businessId) {
         return appointmentRepository.findByBusinessIdAndAppointmentDateAfter(businessId, LocalDateTime.now());
+    }
+
+    // AppointmentService.java içine eklenecek yeni metot
+
+    public List<LocalTime> getAvailableTimeSlots(Long businessId, Long serviceId, LocalDate date) {
+        // 1. Dükkanı ve Hizmeti veritabanından bul
+        Business business = businessRepository.findById(businessId)
+                .orElseThrow(() -> new RuntimeException("Dükkan bulunamadı!"));
+
+        ServiceItem serviceItem = serviceItemRepository.findById(serviceId)
+                .orElseThrow(() -> new RuntimeException("Hizmet bulunamadı!"));
+
+        int duration = serviceItem.getDurationInMinutes(); // Örn: 45 dakika
+
+        // 2. O günün başlangıç ve bitiş zamanlarını ayarla (Dükkanın mesai saatlerine
+        // göre)
+        LocalDateTime startOfDay = date.atTime(business.getOpenTime());
+        LocalDateTime endOfDay = date.atTime(business.getCloseTime());
+
+        // 3. O günkü randevuları getir ve BAŞLANGIÇ SAATİNE GÖRE SIRALA (Linear
+        // Sweep'in ilk kuralı)
+        List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
+        List<Appointment> dailyAppointments = appointmentRepository
+                .findByBusinessIdAndAppointmentDateBetweenAndStatusIn(businessId, startOfDay, endOfDay,
+                        blockingStatuses);
+
+        // Java Stream API ile listeyi zamana göre küçükten büyüğe sıralıyoruz
+        dailyAppointments.sort(Comparator.nullsLast(Comparator.comparing(a -> a.getAppointmentDate())));
+        List<LocalTime> availableSlots = new ArrayList<>();
+        LocalDateTime currentPointer = startOfDay; // İşaretçimizi dükkanın açılış saatine koyduk (Örn: 09:00)
+
+        // İşaretçinin üstüne hizmet süresini eklediğimizde dükkanın kapanış saatini
+        // geçmiyorsa dönmeye devam et
+        while (currentPointer.plusMinutes(duration).isBefore(endOfDay)
+                || currentPointer.plusMinutes(duration).isEqual(endOfDay)) {
+            LocalDateTime proposedEnd = currentPointer.plusMinutes(duration);
+            boolean isOverlapping = false;
+
+            // Bu potansiyel aralık (currentPointer - proposedEnd) mevcut randevularla
+            // çakışıyor mu?
+            for (Appointment app : dailyAppointments) {
+                LocalDateTime appStart = app.getAppointmentDate();
+                LocalDateTime appEnd = appStart.plusMinutes(app.getServiceItem().getDurationInMinutes());
+
+                // Eğer işaretçimizin bitişi mevcut bir randevunun başlangıcından sonraysa ve
+                // işaretçimizin başlangıcı mevcut randevunun bitişinden önceyse çakışma vardır!
+                if (currentPointer.isBefore(appEnd) && proposedEnd.isAfter(appStart)) {
+                    isOverlapping = true;
+                    // TETRİS HAMLESİ: Çakışma varsa, zamanı çöpe atma! İşaretçiyi direkt engelleyen
+                    // randevunun BİTİŞ SAATİNE zıplat.
+                    currentPointer = appEnd;
+                    break; // Döngüden çık, yeni işaretçiyle tekrar kontrol et
+                }
+            }
+
+            // Eğer hiçbir çakışma bulamadıysak, burası harika bir boşluktur!
+            if (!isOverlapping) {
+                availableSlots.add(currentPointer.toLocalTime()); // Boş saati listeye ekle
+                // Sıkı paketleme için işaretçiyi direkt bu hizmetin bitiş saatine kaydır
+                currentPointer = currentPointer.plusMinutes(duration);
+            }
+        }
+
+        return availableSlots;
     }
 
 }

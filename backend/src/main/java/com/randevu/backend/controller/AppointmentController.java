@@ -3,12 +3,18 @@ package com.randevu.backend.controller;
 import com.randevu.backend.entity.Appointment;
 import com.randevu.backend.entity.AppointmentStatus;
 import com.randevu.backend.service.AppointmentService;
+
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 @RestController
+@CrossOrigin(origins = "*")
 @RequestMapping("/api/appointments")
 public class AppointmentController {
 
@@ -115,6 +121,24 @@ public class AppointmentController {
     @GetMapping("/business/{businessId}/upcoming")
     public List<Appointment> getUpcomingBusinessAppointments(@PathVariable Long businessId) {
         return appointmentService.getUpcomingBusinessAppointments(businessId);
+    }
+
+    // 7. BOŞ SAATLERİ GETİRME UÇ NOKTASI (GET İSTEĞİ)
+    // URL: GET
+    // /api/appointments/available-slots?businessId=1&serviceId=1&date=2026-08-15
+    @GetMapping("/available-slots")
+    public ResponseEntity<?> getAvailableTimeSlots(
+            @RequestParam Long businessId,
+            @RequestParam Long serviceId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        try {
+            List<LocalTime> availableSlots = appointmentService.getAvailableTimeSlots(businessId, serviceId, date);
+            return ResponseEntity.ok(availableSlots);
+        } catch (RuntimeException e) {
+            // Hata durumunda hata mesajını döndür
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
     }
 
 }

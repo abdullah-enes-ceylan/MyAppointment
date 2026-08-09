@@ -28,4 +28,11 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             Long businessId,
             LocalDateTime appointmentDate,
             List<AppointmentStatus> statuses);
+
+    List<Appointment> findByBusinessIdAndAppointmentDateBetweenAndStatusIn(
+            Long businessId,
+            LocalDateTime startOfDay,
+            LocalDateTime endOfDay,
+            List<AppointmentStatus> statuses);
+
 }
