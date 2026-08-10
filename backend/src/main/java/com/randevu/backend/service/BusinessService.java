@@ -31,10 +31,7 @@ public class BusinessService {
         return businessRepository.findByOwnerId(owner.getId());
     }
 
-    public Business createBusiness(Long ownerId, Business business) {
-        User owner = userRepository.findById(ownerId)
-                .orElseThrow(() -> new RuntimeException("Dükkan sahibi bulunamadı"));
-
+    public Business createBusiness(User owner, Business business) {
         // User -> BusinessOwner yapıyoruz
         if (owner.getRole() == Role.USER) {
             owner.setRole(Role.BUSINESS_OWNER);

@@ -5,10 +5,14 @@ import com.randevu.backend.entity.AppointmentStatus;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.repository.AppointmentRepository;
+import com.randevu.backend.repository.UserRepository;
 import com.randevu.backend.service.AppointmentService;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -22,21 +26,28 @@ import java.util.List;
 public class AppointmentController {
 
     private final AppointmentService appointmentService;
+    private final UserRepository userRepository;
+    private final AppointmentRepository appointmentRepository;
 
-    public AppointmentController(AppointmentService appointmentService) {
+    public AppointmentController(AppointmentService appointmentService,
+                                 UserRepository userRepository,
+                                 AppointmentRepository appointmentRepository) {
         this.appointmentService = appointmentService;
+        this.userRepository = userRepository;
+        this.appointmentRepository = appointmentRepository;
     }
 
-    // 1. Randevu Oluşturma
+    // 1. Randevu Oluşturma — Token'dan müşteri kimliği alınır
     // URL: POST /api/appointments/create
-    // Body: { "customerId": 1, "businessId": 1, "serviceId": 1, "appointmentDate":
-    // "2024-01-15T14:30:00" }
+    // Body: { "businessId": 1, "serviceId": 1, "appointmentDate": "2024-01-15T14:30:00" }
     @PostMapping("/create")
-    public Appointment createAppointment(@RequestBody AppointmentRequest request) {
+    public ResponseEntity<?> createAppointment(@RequestBody AppointmentRequest request,
+                                               Authentication authentication) {
 
-        // 1. Gelen ID'leri kullanarak referans nesnelerini oluşturuyoruz
-        User customer = new User();
-        customer.setId(request.getCustomerId());
+        // Token'daki email ile gerçek kullanıcıyı bul
+        String email = authentication.getName();
+        User customer = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı."));
 
         Business business = new Business();
         business.setId(request.getBusinessId());
@@ -44,32 +55,21 @@ public class AppointmentController {
         ServiceItem serviceItem = new ServiceItem();
         serviceItem.setId(request.getServiceId());
 
-        // 2. Ana Appointment nesnesini oluşturup içini dolduruyoruz
         Appointment appointment = new Appointment();
         appointment.setCustomer(customer);
         appointment.setBusiness(business);
         appointment.setServiceItem(serviceItem);
         appointment.setAppointmentDate(request.getAppointmentDate());
-        appointment.setStatus(AppointmentStatus.PENDING); // Varsayılan durum: Onay Bekliyor
+        appointment.setStatus(AppointmentStatus.PENDING);
 
-        // 3. Tek parça haline getirdiğimiz nesneyi servise yolluyoruz
-        return appointmentService.createAppointment(appointment);
+        return ResponseEntity.ok(appointmentService.createAppointment(appointment));
     }
 
-    // Yardımcı Request Yapısı
+    // Yardımcı Request Yapısı — customerId kaldırıldı, artık token'dan alınıyor
     static class AppointmentRequest {
-        public Long customerId;
         public Long businessId;
         public Long serviceId;
         public LocalDateTime appointmentDate;
-
-        public Long getCustomerId() {
-            return customerId;
-        }
-
-        public void setCustomerId(Long customerId) {
-            this.customerId = customerId;
-        }
 
         public Long getBusinessId() {
             return businessId;
@@ -102,23 +102,57 @@ public class AppointmentController {
         return appointmentService.getBusinessAppointments(businessId);
     }
 
+    // 2.1 İşletmenin Onay Bekleyen Randevuları — İstek Kutusu (Inbox)
+    @GetMapping("/business/{businessId}/pending")
+    public ResponseEntity<List<Appointment>> getPendingAppointments(@PathVariable Long businessId) {
+        return ResponseEntity.ok(appointmentService.getPendingAppointmentsForBusiness(businessId));
+    }
+
     // 3. Müşterinin Randevularını Listeleme
     @GetMapping("/customer/{customerId}")
     public List<Appointment> getCustomerAppointments(@PathVariable Long customerId) {
         return appointmentService.getCustomerAppointments(customerId);
     }
 
-    // 4. Randevu Durumunu Güncelleme
+    // 4. Randevu Durumunu Güncelleme — Yetki kontrolü eklendi
+    // approve/reject → yalnızca işletme sahibi
+    // cancel → işletme sahibi VEYA randevu sahibi müşteri
     @PutMapping("/{appointmentId}/{action}")
-    public Appointment updateStatus(@PathVariable Long appointmentId, @PathVariable String action) {
-        if (action.equalsIgnoreCase("approve")) {
-            return appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.APPROVED);
-        } else if (action.equalsIgnoreCase("reject")) {
-            return appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.REJECTED);
+    public ResponseEntity<?> updateStatus(@PathVariable Long appointmentId,
+                                          @PathVariable String action,
+                                          Authentication authentication) {
+
+        String email = authentication.getName();
+        User currentUser = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı."));
+
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new RuntimeException("Randevu bulunamadı."));
+
+        boolean isBusinessOwner = appointment.getBusiness().getOwner().getId().equals(currentUser.getId());
+        boolean isCustomer = appointment.getCustomer().getId().equals(currentUser.getId());
+
+        if (action.equalsIgnoreCase("approve") || action.equalsIgnoreCase("reject")) {
+            // Onay ve ret yalnızca işletme sahibinin yetkisinde
+            if (!isBusinessOwner) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Bu işlemi yalnızca işletme sahibi yapabilir.");
+            }
+            AppointmentStatus status = action.equalsIgnoreCase("approve")
+                    ? AppointmentStatus.APPROVED
+                    : AppointmentStatus.REJECTED;
+            return ResponseEntity.ok(appointmentService.updateAppointmentStatus(appointmentId, status));
+
         } else if (action.equalsIgnoreCase("cancel")) {
-            return appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.CANCELLED);
+            // İptal: işletme sahibi veya randevu sahibi müşteri yapabilir
+            if (!isBusinessOwner && !isCustomer) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body("Bu randevuyu iptal etme yetkiniz yok.");
+            }
+            return ResponseEntity.ok(appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.CANCELLED));
         }
-        throw new IllegalArgumentException("Geçersiz işlem: " + action);
+
+        return ResponseEntity.badRequest().body("Geçersiz işlem: " + action);
     }
 
     // 5. Kullanıcının Yaklaşan Randevularını Listeleme

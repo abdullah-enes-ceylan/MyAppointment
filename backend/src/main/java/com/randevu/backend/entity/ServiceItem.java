@@ -2,6 +2,7 @@ package com.randevu.backend.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
 @Table(name = "service_items")
@@ -30,5 +31,6 @@ public class ServiceItem {
 
     @ManyToOne
     @JoinColumn(name = "business_id", nullable = false)
+    @JsonIgnore
     private Business business;
 }

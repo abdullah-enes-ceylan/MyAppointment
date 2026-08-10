@@ -1,6 +1,7 @@
 package com.randevu.backend.entity;
 
 import java.time.LocalTime;
+import java.util.List;
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -48,5 +49,8 @@ public class Business {
     public void setCategory(BusinessCategory category) {
         this.category = category;
     }
+
+    @OneToMany(mappedBy = "business", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    private List<ServiceItem> serviceItems;
 
 }

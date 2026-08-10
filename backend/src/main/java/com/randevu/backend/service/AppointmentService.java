@@ -29,6 +29,16 @@ public class AppointmentService {
     // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
     public Appointment createAppointment(Appointment newAppointment) {
 
+        // Spam tıklama koruması: Aynı dükkan + aynı saat için zaten istek varsa engelle
+        List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
+        boolean alreadyExists = appointmentRepository.existsByBusinessIdAndAppointmentDateAndStatusIn(
+                newAppointment.getBusiness().getId(),
+                newAppointment.getAppointmentDate(),
+                blockingStatuses);
+        if (alreadyExists) {
+            throw new IllegalStateException("Bu saat için zaten bir randevu isteği mevcut!");
+        }
+
         ServiceItem service = serviceItemRepository.findById(newAppointment.getServiceItem().getId())
                 .orElseThrow(() -> new RuntimeException("Hizmet bulunamadı."));
         newAppointment.setServiceItem(service);
@@ -38,7 +48,6 @@ public class AppointmentService {
 
         LocalDateTime startOfDay = newStart.toLocalDate().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
-        List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
 
         List<Appointment> dailyAppointments = appointmentRepository
                 .findByBusinessIdAndAppointmentDateBetweenAndStatusIn(
@@ -59,6 +68,11 @@ public class AppointmentService {
         }
 
         return appointmentRepository.save(newAppointment);
+    }
+
+    // İşletmenin onay bekleyen (PENDING) randevularını getirir — İstek Kutusu (Inbox).
+    public List<Appointment> getPendingAppointmentsForBusiness(Long businessId) {
+        return appointmentRepository.findByBusinessIdAndStatus(businessId, AppointmentStatus.PENDING);
     }
 
     // Belirli bir işletmeye ait tüm randevuları getirir.

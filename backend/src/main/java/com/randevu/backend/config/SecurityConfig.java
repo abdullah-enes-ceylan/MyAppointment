@@ -62,7 +62,8 @@ public class SecurityConfig {
         // Frontend'in çalıştığı portlara izin veriyoruz (Seninki 5174'te çalışıyor loga
         // göre)
         configuration.setAllowedOriginPatterns(
-                List.of("http://localhost:5173", "http://localhost:5174", "http://localhost:3000"));
+                // Port derdinden sonsuza dek kurtulmak için yıldız (*) kullanabilirsin:
+                List.of("http://localhost:*", "http://127.0.0.1:*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true); // Axios için kritik

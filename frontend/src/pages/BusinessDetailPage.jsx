@@ -88,7 +88,6 @@ export default function BusinessDetailPage() {
 
     try {
       await api.post("/api/appointments/create", {
-        customerId: 1, // Test amaçlı sabit değer
         businessId: Number(id),
         serviceId: selectedService.id,
         appointmentDate: `${selectedDate}T${selectedSlot}`,

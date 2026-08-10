@@ -1,9 +1,12 @@
 package com.randevu.backend.controller;
 
 import com.randevu.backend.entity.Business;
+import com.randevu.backend.entity.User;
+import com.randevu.backend.repository.UserRepository;
 import com.randevu.backend.service.BusinessService;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,9 +16,11 @@ import java.util.List;
 public class BusinessController {
 
     private final BusinessService businessService;
+    private final UserRepository userRepository;
 
-    public BusinessController(BusinessService businessService) {
+    public BusinessController(BusinessService businessService, UserRepository userRepository) {
         this.businessService = businessService;
+        this.userRepository = userRepository;
     }
 
     @GetMapping
@@ -28,9 +33,15 @@ public class BusinessController {
         return businessService.getBusinessesByOwner(ownerId);
     }
 
+    // İşletme oluşturma — Token'dan sahip kimliği alınır, ownerId parametresi kaldırıldı
     @PostMapping("/create")
-    public Business createBusiness(@RequestParam Long ownerId, @RequestBody Business business) {
-        return businessService.createBusiness(ownerId, business);
+    public ResponseEntity<?> createBusiness(@RequestBody Business business,
+                                            Authentication authentication) {
+        String email = authentication.getName();
+        User owner = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı."));
+
+        return ResponseEntity.ok(businessService.createBusiness(owner, business));
     }
 
     // Belirtilen kategori adına göre işletmeleri getirir.
