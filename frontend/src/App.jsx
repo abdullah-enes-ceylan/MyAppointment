@@ -5,6 +5,7 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import BusinessDetailPage from "./pages/BusinessDetailPage";
+import PendingAppointments from "./pages/PendingAppointments";
 
 export default function App() {
   return (
@@ -31,6 +32,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <BusinessDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/inbox"
+              element={
+                <ProtectedRoute>
+                  <PendingAppointments />
                 </ProtectedRoute>
               }
             />
