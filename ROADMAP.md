@@ -404,7 +404,7 @@ Adımlar sırayla ve tek tek ilerler. Bir adım bitmeden diğerine geçilmez.
 Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 
 ### Faz 0 — Güvenlik Acil Müdahale
-- [ ] 0.1 Sırların rotasyonu ve dışarı çıkarılması
+- [x] 0.1 Sırların rotasyonu ve dışarı çıkarılması — c797145
 - [ ] 0.2 `RegisterRequest` DTO ile mass assignment'ı kapat
 - [ ] 0.3 Global exception handling ve hata sözleşmesi
 - [ ] 0.4 Method security ve sahiplik kontrolü ⭐
