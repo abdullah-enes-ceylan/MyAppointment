@@ -5,6 +5,7 @@ import com.randevu.backend.entity.User;
 import com.randevu.backend.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,7 +20,15 @@ public class UserController {
         this.userService = userService;
     }
 
-    // Tum kullanicilari getiren API
+    // Tum kullanicilari getiren API — tum kullanicilarin ad/email/telefon
+    // bilgisini dondugu icin sadece ADMIN erisebilir. @PreAuthorize burada
+    // ilk kez kullaniliyor: SecurityConfig'deki @EnableMethodSecurity
+    // olmadan bu anotasyon SESSIZCE yok sayilir, hicbir hata vermez —
+    // yani calistigini gormek icin mutlaka once o anotasyonun eklendiginden
+    // emin olmak lazim. İfade JWT'deki role claim'ini DEGIL, JwtFilter'in
+    // her istekte veritabanindan taze yukledigi UserDetails.getAuthorities()
+    // degerini kontrol eder (bkz. CustomUserDetailsService).
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
     public List<User> getAllUsers() {
         return userService.getAllUsers();

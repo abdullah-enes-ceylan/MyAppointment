@@ -7,8 +7,9 @@ import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.AppointmentRepository;
-import com.randevu.backend.repository.UserRepository;
 import com.randevu.backend.service.AppointmentService;
+import com.randevu.backend.service.CurrentUserService;
+import com.randevu.backend.service.OwnershipGuard;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -26,15 +27,18 @@ import java.util.List;
 public class AppointmentController {
 
     private final AppointmentService appointmentService;
-    private final UserRepository userRepository;
     private final AppointmentRepository appointmentRepository;
+    private final CurrentUserService currentUserService;
+    private final OwnershipGuard ownershipGuard;
 
     public AppointmentController(AppointmentService appointmentService,
-                                 UserRepository userRepository,
-                                 AppointmentRepository appointmentRepository) {
+                                 AppointmentRepository appointmentRepository,
+                                 CurrentUserService currentUserService,
+                                 OwnershipGuard ownershipGuard) {
         this.appointmentService = appointmentService;
-        this.userRepository = userRepository;
         this.appointmentRepository = appointmentRepository;
+        this.currentUserService = currentUserService;
+        this.ownershipGuard = ownershipGuard;
     }
 
     // 1. Randevu Oluşturma — Token'dan müşteri kimliği alınır
@@ -44,10 +48,7 @@ public class AppointmentController {
     public ResponseEntity<?> createAppointment(@RequestBody AppointmentRequest request,
                                                Authentication authentication) {
 
-        // Token'daki email ile gerçek kullanıcıyı bul
-        String email = authentication.getName();
-        User customer = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("Kullanıcı bulunamadı."));
+        User customer = currentUserService.getCurrentUser(authentication);
 
         Business business = new Business();
         business.setId(request.getBusinessId());
@@ -96,39 +97,44 @@ public class AppointmentController {
         }
     }
 
-    // 2. Dükkanın Randevularını Listeleme
+    // 2. Dükkanın Randevularını Listeleme — SADECE o dükkanın sahibi görebilir.
+    // OwnershipGuard olmadan, giriş yapmış HERHANGİ bir kullanıcı businessId'yi
+    // değiştirerek rakip işletmenin müşteri listesini (ad, telefon, randevu
+    // geçmişi) okuyabiliyordu.
     @GetMapping("/business/{businessId}")
-    public List<Appointment> getBusinessAppointments(@PathVariable Long businessId) {
+    public List<Appointment> getBusinessAppointments(@PathVariable Long businessId, Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return appointmentService.getBusinessAppointments(businessId);
     }
 
     // 2.1 İşletmenin Onay Bekleyen Randevuları — İstek Kutusu (Inbox)
     @GetMapping("/business/{businessId}/pending")
-    public ResponseEntity<List<Appointment>> getPendingAppointments(@PathVariable Long businessId) {
+    public ResponseEntity<List<Appointment>> getPendingAppointments(@PathVariable Long businessId, Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return ResponseEntity.ok(appointmentService.getPendingAppointmentsForBusiness(businessId));
     }
 
-    // 3. Müşterinin Randevularını Listeleme
-    @GetMapping("/customer/{customerId}")
-    public List<Appointment> getCustomerAppointments(@PathVariable Long customerId) {
-        return appointmentService.getCustomerAppointments(customerId);
+    // 3. Kendi Randevularımı Listeleme — eskiden /customer/{customerId} idi ve
+    // yolundaki ID herhangi bir sayıyla değiştirilerek başka bir müşterinin
+    // randevu geçmişi okunabiliyordu (IDOR). Artık kimlik path'ten değil,
+    // daima token'dan geliyor — kullanıcı sadece KENDİ randevularını görebilir.
+    @GetMapping("/me")
+    public List<Appointment> getMyAppointments(Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        return appointmentService.getCustomerAppointments(currentUser.getId());
     }
 
     // 4. Randevu Durumunu Güncelleme
     // approve/reject → yalnızca işletme sahibi
     // cancel → işletme sahibi VEYA randevu sahibi müşteri
-    // Yetkisiz erişim artık ResponseEntity.status(FORBIDDEN) ile elle
-    // kurulmuyor, AccessDeniedException fırlatılıyor — GlobalExceptionHandler
-    // bunu yakalayıp 403'e çeviriyor. Faz 0.4'te @PreAuthorize eklendiğinde
-    // Spring'in kendi ürettiği aynı tip exception da AYNI handler'dan geçecek.
     @PutMapping("/{appointmentId}/{action}")
     public ResponseEntity<?> updateStatus(@PathVariable Long appointmentId,
                                           @PathVariable String action,
                                           Authentication authentication) {
 
-        String email = authentication.getName();
-        User currentUser = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("Kullanıcı bulunamadı."));
+        User currentUser = currentUserService.getCurrentUser(authentication);
 
         Appointment appointment = appointmentRepository.findById(appointmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Randevu bulunamadı."));
@@ -157,24 +163,26 @@ public class AppointmentController {
         return ResponseEntity.badRequest().body("Geçersiz işlem: " + action);
     }
 
-    // 5. Kullanıcının Yaklaşan Randevularını Listeleme
-    @GetMapping("/customer/{customerId}/upcoming")
-    public List<Appointment> getUpcomingCustomerAppointments(@PathVariable Long customerId) {
-        return appointmentService.getUpcomingCustomerAppointments(customerId);
+    // 5. Kendi Yaklaşan Randevularımı Listeleme — /customer/{id}/upcoming ile
+    // aynı IDOR sorununu taşıyordu, aynı sebeple /me/upcoming'e taşındı.
+    @GetMapping("/me/upcoming")
+    public List<Appointment> getMyUpcomingAppointments(Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        return appointmentService.getUpcomingCustomerAppointments(currentUser.getId());
     }
 
     // 6. Dükkanın Yaklaşan ve Onay Bekleyen Randevularını Listeleme
     @GetMapping("/business/{businessId}/upcoming")
-    public List<Appointment> getUpcomingBusinessAppointments(@PathVariable Long businessId) {
+    public List<Appointment> getUpcomingBusinessAppointments(@PathVariable Long businessId, Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return appointmentService.getUpcomingBusinessAppointments(businessId);
     }
 
-    // 7. BOŞ SAATLERİ GETİRME UÇ NOKTASI
-    // Eskiden burada bir try/catch vardı ve her RuntimeException'ı 400'e
-    // çeviriyordu — ama "dükkan bulunamadı" kavramsal olarak 404'tür, 400
-    // değil. Artık AppointmentService doğru tipte exception fırlattığı için
-    // (ResourceNotFoundException) bu metot hiçbir şey yakalamıyor, doğru
-    // status kodu GlobalExceptionHandler'dan otomatik geliyor.
+    // 7. BOŞ SAATLERİ GETİRME UÇ NOKTASI — bilerek herkese açık (permitAll).
+    // Randevu almadan önce müşterinin müsait saatleri görebilmesi gerekiyor,
+    // bu yüzden kimlik doğrulaması istemiyoruz; işletmenin kendi hassas verisi
+    // (müşteri listesi vb.) burada dönmüyor, sadece boş saat listesi dönüyor.
     @GetMapping("/available-slots")
     public ResponseEntity<List<LocalTime>> getAvailableTimeSlots(
             @RequestParam Long businessId,

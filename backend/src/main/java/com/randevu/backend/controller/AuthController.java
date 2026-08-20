@@ -14,9 +14,13 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.Map;
 
+// @CrossOrigin("*") buradan kaldırıldı — SecurityConfig'deki global CORS
+// bean'i (corsConfigurationSource) zaten localhost origin'lerine izin
+// veriyor. Bu satır ayrıca "*" + allowCredentials(true) çelişkisi
+// taşıyordu; tarayıcılar bu kombinasyonu CORS spesifikasyonu gereği
+// geçersiz sayar ve isteği reddedebilir.
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin("*") // IDE'nin harika dokunuşu: React (Frontend) engel yemesin diye!
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;

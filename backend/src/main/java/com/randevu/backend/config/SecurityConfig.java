@@ -6,8 +6,10 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -19,19 +21,35 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+// @PreAuthorize gibi metot-seviyesi anotasyonları etkinleştirir. Bu olmadan
+// controller/service metotlarının üstüne @PreAuthorize yazsan bile Spring
+// onu hiç okumaz — sessizce yok sayılır, hiçbir hata da vermez. Bu yüzden
+// bu satırı unutmak, yetkilendirmenin "orada duruyor ama çalışmıyor"
+// şeklinde sessizce kırılmasına yol açan sinsi bir hatadır.
+@EnableMethodSecurity
 public class SecurityConfig {
 
-    private final JwtFilter jwtFilter; // EKSİK 1: Filtreyi içeri alıyoruz
+    private final JwtFilter jwtFilter;
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
 
-    public SecurityConfig(JwtFilter jwtFilter) {
+    public SecurityConfig(JwtFilter jwtFilter, RestAuthenticationEntryPoint restAuthenticationEntryPoint) {
         this.jwtFilter = jwtFilter;
+        this.restAuthenticationEntryPoint = restAuthenticationEntryPoint;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(Customizer.withDefaults()) // YENİ: CORS kilidini açan sihirli satır burası!
+                .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
+                // JWT ile çalışan bir API'nin sunucu tarafında oturum (session)
+                // tutmasına gerek yok — her istek kendi kimliğini token'ında
+                // taşıyor. STATELESS, Spring'in JSESSIONID cookie'si üretmesini
+                // ve session tabanlı SecurityContext saklamayı tamamen kapatır.
+                // Alternatifi (varsayılan IF_REQUIRED) gereksiz sunucu belleği
+                // tüketir ve yatay ölçeklenmeyi (birden fazla sunucu kopyası)
+                // zorlaştırır — her sunucunun kendi session'ı ayrı olur.
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/users/register").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
@@ -39,6 +57,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/businesses/category/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/appointments/available-slots").permitAll()
                         .requestMatchers("/api/**").authenticated())
+                // Token yok/geçersizken artık Spring'in varsayılan
+                // Http403ForbiddenEntryPoint'i yerine kendi 401 üreten
+                // RestAuthenticationEntryPoint'imiz çalışıyor.
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(restAuthenticationEntryPoint))
                 .httpBasic(httpBasic -> httpBasic.disable())
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
@@ -59,14 +81,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Frontend'in çalıştığı portlara izin veriyoruz (Seninki 5174'te çalışıyor loga
-        // göre)
         configuration.setAllowedOriginPatterns(
-                // Port derdinden sonsuza dek kurtulmak için yıldız (*) kullanabilirsin:
                 List.of("http://localhost:*", "http://127.0.0.1:*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setAllowCredentials(true); // Axios için kritik
+        configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
