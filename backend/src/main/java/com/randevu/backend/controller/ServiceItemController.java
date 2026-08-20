@@ -2,8 +2,10 @@ package com.randevu.backend.controller;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.randevu.backend.dto.response.ServiceItemResponse;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.mapper.ServiceItemMapper;
 import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.OwnershipGuard;
 import com.randevu.backend.service.ServiceItemService;
@@ -27,25 +29,29 @@ public class ServiceItemController {
     }
 
     @GetMapping
-    public List<ServiceItem> getAllServiceItems() {
-        return serviceItemService.getAllServiceItems();
+    public List<ServiceItemResponse> getAllServiceItems() {
+        return serviceItemService.getAllServiceItems().stream()
+                .map(ServiceItemMapper::toResponse)
+                .toList();
     }
 
     @GetMapping("/business/{businessId}")
-    public List<ServiceItem> getServiceItemsByBusiness(@PathVariable Long businessId) {
-        return serviceItemService.getServicesByBusiness(businessId);
+    public List<ServiceItemResponse> getServiceItemsByBusiness(@PathVariable Long businessId) {
+        return serviceItemService.getServicesByBusiness(businessId).stream()
+                .map(ServiceItemMapper::toResponse)
+                .toList();
     }
 
     // Yetki kontrolü olmadan, giriş yapmış HERHANGİ bir kullanıcı başka bir
     // işletmeye hizmet ekleyebiliyordu. businessId path'te olduğu için
     // doğrudan OwnershipGuard.assertOwnsBusiness kullanılabiliyor.
     @PostMapping("/create/{businessId}")
-    public ServiceItem createServiceItem(@PathVariable Long businessId,
+    public ServiceItemResponse createServiceItem(@PathVariable Long businessId,
                                           @RequestBody ServiceItem serviceItem,
                                           Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
-        return serviceItemService.createServiceItem(businessId, serviceItem);
+        return ServiceItemMapper.toResponse(serviceItemService.createServiceItem(businessId, serviceItem));
     }
 
     // update/delete uçlarında businessId path'te yok, sadece serviceId var —
@@ -54,12 +60,12 @@ public class ServiceItemController {
     // giriş yapmış herhangi bir müşteri rakip işletmenin fiyatını
     // değiştirebiliyor ya da hizmetini silebiliyordu.
     @PutMapping("/update/{serviceId}")
-    public ServiceItem updateServiceItem(@PathVariable Long serviceId,
+    public ServiceItemResponse updateServiceItem(@PathVariable Long serviceId,
                                           @RequestBody ServiceItem serviceItem,
                                           Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsServiceItem(currentUser.getId(), serviceId);
-        return serviceItemService.updateService(serviceId, serviceItem);
+        return ServiceItemMapper.toResponse(serviceItemService.updateService(serviceId, serviceItem));
     }
 
     @DeleteMapping("/delete/{serviceId}")

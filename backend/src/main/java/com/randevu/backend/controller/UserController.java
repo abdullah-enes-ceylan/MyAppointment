@@ -1,7 +1,9 @@
 package com.randevu.backend.controller;
 
 import com.randevu.backend.dto.request.RegisterRequest;
+import com.randevu.backend.dto.response.UserResponse;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.mapper.UserMapper;
 import com.randevu.backend.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -31,8 +33,10 @@ public class UserController {
     // degerini kontrol eder (bkz. CustomUserDetailsService).
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
-    public List<User> getAllUsers() {
-        return userService.getAllUsers();
+    public List<UserResponse> getAllUsers() {
+        return userService.getAllUsers().stream()
+                .map(UserMapper::toResponse)
+                .toList();
     }
 
     // Yeni kullanici kaydi olusturan API. Email zaten kayitliysa UserService'in
@@ -40,8 +44,8 @@ public class UserController {
     // GlobalExceptionHandler onu 409'a ceviriyor (controller artik hata
     // govdesi uretme isiyle ugrasmiyor, SRP).
     @PostMapping("/register")
-    public ResponseEntity<User> registerUser(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<UserResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
         User createdUser = userService.registerUser(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(UserMapper.toResponse(createdUser));
     }
 }

@@ -1,11 +1,13 @@
 package com.randevu.backend.controller;
 
+import com.randevu.backend.dto.response.AppointmentResponse;
 import com.randevu.backend.entity.Appointment;
 import com.randevu.backend.entity.AppointmentStatus;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.exception.ResourceNotFoundException;
+import com.randevu.backend.mapper.AppointmentMapper;
 import com.randevu.backend.repository.AppointmentRepository;
 import com.randevu.backend.service.AppointmentService;
 import com.randevu.backend.service.CurrentUserService;
@@ -48,7 +50,7 @@ public class AppointmentController {
     // URL: POST /api/appointments/create
     // Body: { "businessId": 1, "serviceId": 1, "appointmentDate": "2024-01-15T14:30:00" }
     @PostMapping("/create")
-    public ResponseEntity<?> createAppointment(@Valid @RequestBody AppointmentRequest request,
+    public ResponseEntity<AppointmentResponse> createAppointment(@Valid @RequestBody AppointmentRequest request,
                                                Authentication authentication) {
 
         User customer = currentUserService.getCurrentUser(authentication);
@@ -66,7 +68,8 @@ public class AppointmentController {
         appointment.setAppointmentDate(request.getAppointmentDate());
         appointment.setStatus(AppointmentStatus.PENDING);
 
-        return ResponseEntity.ok(appointmentService.createAppointment(appointment));
+        Appointment created = appointmentService.createAppointment(appointment);
+        return ResponseEntity.ok(AppointmentMapper.toResponse(created));
     }
 
     // Yardımcı Request Yapısı — customerId kaldırıldı, artık token'dan alınıyor
@@ -114,18 +117,23 @@ public class AppointmentController {
     // değiştirerek rakip işletmenin müşteri listesini (ad, telefon, randevu
     // geçmişi) okuyabiliyordu.
     @GetMapping("/business/{businessId}")
-    public List<Appointment> getBusinessAppointments(@PathVariable Long businessId, Authentication authentication) {
+    public List<AppointmentResponse> getBusinessAppointments(@PathVariable Long businessId, Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
-        return appointmentService.getBusinessAppointments(businessId);
+        return appointmentService.getBusinessAppointments(businessId).stream()
+                .map(AppointmentMapper::toResponse)
+                .toList();
     }
 
     // 2.1 İşletmenin Onay Bekleyen Randevuları — İstek Kutusu (Inbox)
     @GetMapping("/business/{businessId}/pending")
-    public ResponseEntity<List<Appointment>> getPendingAppointments(@PathVariable Long businessId, Authentication authentication) {
+    public ResponseEntity<List<AppointmentResponse>> getPendingAppointments(@PathVariable Long businessId, Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
-        return ResponseEntity.ok(appointmentService.getPendingAppointmentsForBusiness(businessId));
+        List<AppointmentResponse> pending = appointmentService.getPendingAppointmentsForBusiness(businessId).stream()
+                .map(AppointmentMapper::toResponse)
+                .toList();
+        return ResponseEntity.ok(pending);
     }
 
     // 3. Kendi Randevularımı Listeleme — eskiden /customer/{customerId} idi ve
@@ -133,9 +141,11 @@ public class AppointmentController {
     // randevu geçmişi okunabiliyordu (IDOR). Artık kimlik path'ten değil,
     // daima token'dan geliyor — kullanıcı sadece KENDİ randevularını görebilir.
     @GetMapping("/me")
-    public List<Appointment> getMyAppointments(Authentication authentication) {
+    public List<AppointmentResponse> getMyAppointments(Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        return appointmentService.getCustomerAppointments(currentUser.getId());
+        return appointmentService.getCustomerAppointments(currentUser.getId()).stream()
+                .map(AppointmentMapper::toResponse)
+                .toList();
     }
 
     // 4. Randevu Durumunu Güncelleme
@@ -162,14 +172,16 @@ public class AppointmentController {
             AppointmentStatus status = action.equalsIgnoreCase("approve")
                     ? AppointmentStatus.APPROVED
                     : AppointmentStatus.REJECTED;
-            return ResponseEntity.ok(appointmentService.updateAppointmentStatus(appointmentId, status));
+            Appointment updated = appointmentService.updateAppointmentStatus(appointmentId, status);
+            return ResponseEntity.ok(AppointmentMapper.toResponse(updated));
 
         } else if (action.equalsIgnoreCase("cancel")) {
             // İptal: işletme sahibi veya randevu sahibi müşteri yapabilir
             if (!isBusinessOwner && !isCustomer) {
                 throw new AccessDeniedException("Bu randevuyu iptal etme yetkiniz yok.");
             }
-            return ResponseEntity.ok(appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.CANCELLED));
+            Appointment updated = appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.CANCELLED);
+            return ResponseEntity.ok(AppointmentMapper.toResponse(updated));
         }
 
         return ResponseEntity.badRequest().body("Geçersiz işlem: " + action);
@@ -178,17 +190,21 @@ public class AppointmentController {
     // 5. Kendi Yaklaşan Randevularımı Listeleme — /customer/{id}/upcoming ile
     // aynı IDOR sorununu taşıyordu, aynı sebeple /me/upcoming'e taşındı.
     @GetMapping("/me/upcoming")
-    public List<Appointment> getMyUpcomingAppointments(Authentication authentication) {
+    public List<AppointmentResponse> getMyUpcomingAppointments(Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        return appointmentService.getUpcomingCustomerAppointments(currentUser.getId());
+        return appointmentService.getUpcomingCustomerAppointments(currentUser.getId()).stream()
+                .map(AppointmentMapper::toResponse)
+                .toList();
     }
 
     // 6. Dükkanın Yaklaşan ve Onay Bekleyen Randevularını Listeleme
     @GetMapping("/business/{businessId}/upcoming")
-    public List<Appointment> getUpcomingBusinessAppointments(@PathVariable Long businessId, Authentication authentication) {
+    public List<AppointmentResponse> getUpcomingBusinessAppointments(@PathVariable Long businessId, Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
-        return appointmentService.getUpcomingBusinessAppointments(businessId);
+        return appointmentService.getUpcomingBusinessAppointments(businessId).stream()
+                .map(AppointmentMapper::toResponse)
+                .toList();
     }
 
     // 7. BOŞ SAATLERİ GETİRME UÇ NOKTASI — bilerek herkese açık (permitAll).
