@@ -142,6 +142,21 @@ public class AppointmentService {
 
         int duration = serviceItem.getDurationInMinutes();
 
+        // Guard: duration <= 0 olursa asagidaki while dongusunde
+        // currentPointer.plusMinutes(duration) isaretciyi hic ilerletmez
+        // (duration=0) ya da geriye dogru ilerletir (duration<0) — ikisi de
+        // dongunun asla bitmemesine, availableSlots'un sinirsiz buyuyup
+        // sunucuyu OOM'a goturmesine yol acar. Bu endpoint (/available-slots)
+        // permitAll oldugu icin bu, KIMLIK DOGRULAMASI OLMADAN tetiklenebilen
+        // bir DoS acigiydi (ROADMAP K5). Faz 1.5'te ServiceItem'a Bean
+        // Validation eklenince boyle bir kayit veritabanina hic giremeyecek,
+        // ama bu guard olmadan mevcut/gelecekteki bozuk bir kayit tek basina
+        // sunucuyu dusurebilirdi — savunma ikinci bir katman olarak burada
+        // da durmali (defense in depth).
+        if (duration <= 0) {
+            throw new BusinessRuleException("Bu hizmetin süresi geçersiz, müsaitlik hesaplanamaz.");
+        }
+
         LocalDateTime startOfDay = date.atTime(business.getOpenTime());
         LocalDateTime endOfDay = date.atTime(business.getCloseTime());
 
