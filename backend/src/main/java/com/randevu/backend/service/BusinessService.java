@@ -1,10 +1,13 @@
 package com.randevu.backend.service;
 
+import com.randevu.backend.dto.request.BusinessRequest;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.BusinessCategory;
 import com.randevu.backend.entity.Role;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.exception.BusinessRuleException;
 import com.randevu.backend.exception.ResourceNotFoundException;
+import com.randevu.backend.mapper.BusinessMapper;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
@@ -27,6 +30,13 @@ public class BusinessService {
         return businessRepository.findAll();
     }
 
+    // Tekil işletme detayı — eskiden bu uç hiç yoktu, frontend tüm listeyi
+    // (GET /api/businesses) çekip client tarafında id'ye göre filtreliyordu.
+    public Business getBusinessById(Long id) {
+        return businessRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
+    }
+
     public List<Business> getBusinessesByOwner(Long ownerId) {
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dükkan sahibi bulunamadı"));
@@ -41,9 +51,35 @@ public class BusinessService {
     // basarisiz olursa Spring OTOMATIK ROLLBACK yapar, ikisi de geri alinir.
     @Transactional
     public Business createBusiness(User owner, Business business) {
+        validateBusinessHours(business);
         promoteToBusinessOwnerIfNeeded(owner);
         business.setOwner(owner);
         return businessRepository.save(business);
+    }
+
+    // Var olan bir işletmeyi günceller. owner kasıtlı olarak DEĞİŞMİYOR —
+    // bir işletmenin sahibi güncelleme isteğiyle değiştirilemez, bu ayrı
+    // (ve şu an bu projede olmayan) bir "devretme" işlemi olurdu.
+    @Transactional
+    public Business updateBusiness(Long businessId, BusinessRequest request) {
+        Business business = businessRepository.findById(businessId)
+                .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
+
+        BusinessMapper.applyToEntity(request, business);
+        validateBusinessHours(business);
+
+        return businessRepository.save(business);
+    }
+
+    // Açılış saati kapanış saatinden sonra/eşit olursa AvailabilityCalculator
+    // sessizce sıfır slot üretir (çökmez, ama işletme sahibi neden hiç
+    // randevu alamadığını anlayamaz). Hem create hem update'te kontrol
+    // ediliyor ki bu hata en başta, veri kaydedilirken yakalansın.
+    private void validateBusinessHours(Business business) {
+        if (business.getOpenTime() != null && business.getCloseTime() != null
+                && !business.getOpenTime().isBefore(business.getCloseTime())) {
+            throw new BusinessRuleException("Açılış saati kapanış saatinden önce olmalıdır.");
+        }
     }
 
     // Eskiden bu satırlar createBusiness'in İÇİNE gömülüydü — "işletme

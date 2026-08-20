@@ -12,6 +12,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -86,6 +88,21 @@ public class GlobalExceptionHandler {
         log.warn("Veri bütünlüğü ihlali — {} {}: {}", request.getMethod(), request.getRequestURI(),
                 ex.getMostSpecificCause().getMessage());
         return build(HttpStatus.CONFLICT, "Bu işlem mevcut bir kayıtla çakışıyor.", request);
+    }
+
+    // Istenen path'e eslesen HICBIR controller metodu yok -> 404. Iki farkli
+    // exception tipi ayni sonuca goturuyor: NoHandlerFoundException hicbir
+    // handler eslesmediginde, NoResourceFoundException ise (bu projede
+    // GERCEKTE olusan) istek Spring'in varsayilan static resource
+    // handler'ina (/** ile eslesen ResourceHttpRequestHandler) dusup dosya
+    // olarak da bulunamadiginda firliyor. Bu handler olmadan, silinen/
+    // yanlis yazilan bir yola atilan istek catch-all Exception handler'ina
+    // dusup 500 donerdi — oysa bu tamamen istemcinin sucu (var olmayan bir
+    // kaynagi istedi), sunucunun degil. Faz 1.5'te /api/businesses/owner/{id}
+    // kaldirilirken bu fark edildi.
+    @ExceptionHandler({ NoHandlerFoundException.class, NoResourceFoundException.class })
+    public ResponseEntity<ErrorResponse> handleNoHandlerFound(Exception ex, HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, "İstenen adres bulunamadı.", request);
     }
 
     // Son savunma hatti: yukaridaki tiplerin hicbirine uymayan, ongorulmemis

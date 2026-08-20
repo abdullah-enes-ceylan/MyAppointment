@@ -55,6 +55,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/businesses").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/businesses/category/**").permitAll()
+                        // {id:\d+} kısıtı: SADECE sayısal path'lere eşleşir, "/my" gibi
+                        // kimlik gerektiren literal yollarla asla çakışmaz.
+                        .requestMatchers(HttpMethod.GET, "/api/businesses/{id:\\d+}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/appointments/available-slots").permitAll()
                         .requestMatchers("/api/**").authenticated())
                 // Token yok/geçersizken artık Spring'in varsayılan
