@@ -417,7 +417,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 1.2 Katman ihlallerini ve SOLID sorunlarını düzelt — e094701
 - [x] 1.3 `AvailabilityCalculator` ayrıştırması — 841b18b
 - [x] 1.4 Flyway migration + şema sertleştirme — caf4bf8
-- [ ] 1.5 Business CRUD tamamlama
+- [x] 1.5 Business CRUD tamamlama — 69593a7
 - [ ] 1.6 `WorkingHour` entity
 - [ ] 1.7 Frontend: rol farkındalığı ve ortam yapılandırması
 - [ ] 1.8 Frontend: işletme paneli iskeleti
