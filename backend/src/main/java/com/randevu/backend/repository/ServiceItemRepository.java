@@ -10,4 +10,9 @@ import java.util.List;
 public interface ServiceItemRepository extends JpaRepository<ServiceItem, Long> {
     // Bir işletmeye ait hizmetleri getir
     List<ServiceItem> findByBusinessId(Long businessId);
+
+    // Bir işletmeye ait, silinmemiş (aktif) hizmetleri getirir. Müşteriye
+    // randevu için hizmet listesi gösterilirken bu kullanılmalı — soft
+    // delete ile "silinmiş" bir hizmet, bu sorgudan otomatik düşer.
+    List<ServiceItem> findByBusinessIdAndIsActiveTrue(Long businessId);
 }

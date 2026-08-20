@@ -31,8 +31,10 @@ public class ServiceItemService {
         return serviceItemRepository.save(serviceItem);
     }
 
+    // Musteriye gosterilecek liste — silinmis (isActive=false) hizmetler
+    // otomatik disarida kalir, randevu almak icin secilemezler.
     public List<ServiceItem> getServicesByBusiness(Long businessId) {
-        return serviceItemRepository.findByBusinessId(businessId);
+        return serviceItemRepository.findByBusinessIdAndIsActiveTrue(businessId);
     }
 
     public ServiceItem updateService(Long serviceId, ServiceItem serviceItem) {
@@ -48,14 +50,18 @@ public class ServiceItemService {
         return serviceItemRepository.save(existingService);
     }
 
-    // deleteById tek basina var olmayan bir ID icin JPA'nin kendi
-    // EmptyResultDataAccessException'ini firlatirdi — bu da GlobalExceptionHandler'in
-    // catch-all'ina dusup 500 donerdi. Once var mi diye bakip anlamli bir
-    // ResourceNotFoundException (404) firlatmak daha dogru.
+    // Gercek DELETE degil, soft delete: satiri silmek yerine isActive=false
+    // yapiyoruz. Neden: bu hizmete referans veren gecmis randevular
+    // (Appointment.serviceItem, nullable=false FK) var olabilir. Gercek
+    // DELETE denenirse ya DB'nin FK constraint'i patlar (DataIntegrityViolationException,
+    // GlobalExceptionHandler'in catch-all'inda 500'e duser) ya da o randevularin
+    // hizmet bilgisi kaybolur. Soft delete ile hem gecmis kayitlar saglam kalir
+    // hem de hizmet yeni randevular icin artik secilemez hale gelir
+    // (bkz. getServicesByBusiness'teki isActive filtresi).
     public void deleteService(Long serviceId) {
-        if (!serviceItemRepository.existsById(serviceId)) {
-            throw new ResourceNotFoundException("Servis bulunamadı");
-        }
-        serviceItemRepository.deleteById(serviceId);
+        ServiceItem serviceItem = serviceItemRepository.findById(serviceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Servis bulunamadı"));
+        serviceItem.setActive(false);
+        serviceItemRepository.save(serviceItem);
     }
 }

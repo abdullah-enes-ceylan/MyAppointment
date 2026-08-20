@@ -31,19 +31,44 @@ public class AppointmentService {
     // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
     public Appointment createAppointment(Appointment newAppointment) {
 
+        // Eskiden burada businessId hiç doğrulanmıyordu — controller sadece
+        // "new Business(); setId(...)" ile boş bir stub kuruyordu. Olmayan
+        // bir businessId, hizmet ile işletmenin eşleşmediği hallere kadar
+        // gitmeden önce, ilk elden gerçek bir Business yükleyip var olduğunu
+        // doğruluyoruz.
+        Long businessId = newAppointment.getBusiness().getId();
+        Business business = businessRepository.findById(businessId)
+                .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
+
+        ServiceItem service = serviceItemRepository.findById(newAppointment.getServiceItem().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
+
+        // Kritik doğrulama: secilen hizmet gercekten bu isletmeye mi ait?
+        // Bu kontrol olmadan, businessId=1 ve serviceId=999 (baska bir
+        // isletmenin hizmeti) gonderilerek randevu olusturulabiliyordu —
+        // yanlis sureyle cakisma hesabi yapiliyor, yanlis isletmenin
+        // inbox'inda yanlis fiyat/hizmet gorunuyordu.
+        if (!service.getBusiness().getId().equals(businessId)) {
+            throw new BusinessRuleException("Seçilen hizmet bu işletmeye ait değil.");
+        }
+
+        // Soft delete edilmiş (artık sunulmayan) bir hizmete randevu alınamaz.
+        if (!service.isActive()) {
+            throw new ResourceNotFoundException("Hizmet bulunamadı.");
+        }
+
+        newAppointment.setBusiness(business);
+        newAppointment.setServiceItem(service);
+
         // Spam tıklama koruması: Aynı dükkan + aynı saat için zaten istek varsa engelle
         List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
         boolean alreadyExists = appointmentRepository.existsByBusinessIdAndAppointmentDateAndStatusIn(
-                newAppointment.getBusiness().getId(),
+                businessId,
                 newAppointment.getAppointmentDate(),
                 blockingStatuses);
         if (alreadyExists) {
             throw new BusinessRuleException("Bu saat için zaten bir randevu isteği mevcut!");
         }
-
-        ServiceItem service = serviceItemRepository.findById(newAppointment.getServiceItem().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
-        newAppointment.setServiceItem(service);
 
         LocalDateTime newStart = newAppointment.getAppointmentDate();
         LocalDateTime newEnd = newStart.plusMinutes(service.getDurationInMinutes());
@@ -53,7 +78,7 @@ public class AppointmentService {
 
         List<Appointment> dailyAppointments = appointmentRepository
                 .findByBusinessIdAndAppointmentDateBetweenAndStatusIn(
-                        newAppointment.getBusiness().getId(),
+                        businessId,
                         startOfDay,
                         endOfDay,
                         blockingStatuses);
