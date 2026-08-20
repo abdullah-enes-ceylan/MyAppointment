@@ -413,7 +413,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 0.7 Slot algoritması ve yarış koşulu sertleştirme — 9f6074f, e0e67f1
 
 ### Faz 1 — Mimari Temel
-- [ ] 1.1 Response DTO katmanı
+- [x] 1.1 Response DTO katmanı — 85d5379
 - [ ] 1.2 Katman ihlallerini ve SOLID sorunlarını düzelt
 - [ ] 1.3 `AvailabilityCalculator` ayrıştırması
 - [ ] 1.4 Flyway migration + şema sertleştirme
