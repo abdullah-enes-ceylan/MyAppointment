@@ -40,6 +40,13 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!-- Bean Validation: @NotBlank, @Email, @Size, @Future gibi anotasyonlari
+		     etkinlestirir. Bu olmadan @Valid hicbir sey yapmaz, sessizce yok sayilir. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>

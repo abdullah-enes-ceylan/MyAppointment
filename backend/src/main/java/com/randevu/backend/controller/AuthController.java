@@ -2,6 +2,7 @@ package com.randevu.backend.controller;
 
 import com.randevu.backend.config.JwtUtil;
 import com.randevu.backend.dto.LoginRequest;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -37,7 +38,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest loginRequest) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest) {
         try {
             // 1. Şifre Doğru mu?
             authenticationManager.authenticate(

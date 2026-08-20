@@ -11,6 +11,9 @@ import com.randevu.backend.service.AppointmentService;
 import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.OwnershipGuard;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Future;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -45,7 +48,7 @@ public class AppointmentController {
     // URL: POST /api/appointments/create
     // Body: { "businessId": 1, "serviceId": 1, "appointmentDate": "2024-01-15T14:30:00" }
     @PostMapping("/create")
-    public ResponseEntity<?> createAppointment(@RequestBody AppointmentRequest request,
+    public ResponseEntity<?> createAppointment(@Valid @RequestBody AppointmentRequest request,
                                                Authentication authentication) {
 
         User customer = currentUserService.getCurrentUser(authentication);
@@ -68,8 +71,17 @@ public class AppointmentController {
 
     // Yardımcı Request Yapısı — customerId kaldırıldı, artık token'dan alınıyor
     static class AppointmentRequest {
+        @NotNull(message = "İşletme seçilmelidir.")
         public Long businessId;
+
+        @NotNull(message = "Hizmet seçilmelidir.")
         public Long serviceId;
+
+        // @Future: geçmiş bir tarihe randevu oluşturulamaz. Eskiden bu kontrol
+        // hiç yoktu — API'ye doğrudan istek atarak dünkü bir saate "randevu"
+        // oluşturulabiliyordu.
+        @NotNull(message = "Randevu tarihi belirtilmelidir.")
+        @Future(message = "Randevu tarihi geçmişte olamaz.")
         public LocalDateTime appointmentDate;
 
         public Long getBusinessId() {

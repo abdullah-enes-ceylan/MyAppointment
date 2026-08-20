@@ -3,6 +3,7 @@ package com.randevu.backend.controller;
 import com.randevu.backend.dto.request.RegisterRequest;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.service.UserService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -39,7 +40,7 @@ public class UserController {
     // GlobalExceptionHandler onu 409'a ceviriyor (controller artik hata
     // govdesi uretme isiyle ugrasmiyor, SRP).
     @PostMapping("/register")
-    public ResponseEntity<User> registerUser(@RequestBody RegisterRequest request) {
+    public ResponseEntity<User> registerUser(@Valid @RequestBody RegisterRequest request) {
         User createdUser = userService.registerUser(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
     }

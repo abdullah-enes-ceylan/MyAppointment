@@ -1,16 +1,20 @@
 package com.randevu.backend.exception;
 
 import com.randevu.backend.dto.response.ErrorResponse;
+import com.randevu.backend.dto.response.ValidationErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 // Butun controller'lardan yakalanmadan kacan exception'lari TEK noktadan
 // yakalar ve tutarli bir ErrorResponse govdesine cevirir. @RestControllerAdvice,
@@ -43,6 +47,27 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
         return build(HttpStatus.FORBIDDEN, ex.getMessage(), request);
+    }
+
+    // @Valid basarisiz olunca Spring bu exception'i firlatir. Diger handler'lardan
+    // farkli olarak TEK bir mesaj yerine, HANGI alanin NEDEN gecersiz oldugunu
+    // (fieldErrors haritasi) da donuyoruz — frontend bu sayede genel bir hata
+    // yerine ilgili form alaninin altina spesifik mesaj gosterebilir.
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ValidationErrorResponse> handleValidation(MethodArgumentNotValidException ex,
+            HttpServletRequest request) {
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        ex.getBindingResult().getFieldErrors()
+                .forEach(error -> fieldErrors.put(error.getField(), error.getDefaultMessage()));
+
+        ValidationErrorResponse body = new ValidationErrorResponse(
+                Instant.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                "Girdiğiniz bilgilerde hata var.",
+                request.getRequestURI(),
+                fieldErrors);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     // Son savunma hatti: yukaridaki tiplerin hicbirine uymayan, ongorulmemis
