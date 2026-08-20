@@ -408,7 +408,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 0.2 `RegisterRequest` DTO ile mass assignment'ı kapat — d5fa2aa
 - [x] 0.3 Global exception handling ve hata sözleşmesi — af6e78a
 - [x] 0.4 Method security ve sahiplik kontrolü ⭐ — 0695047
-- [ ] 0.5 ServiceItem yetkilendirmesi ve servis/işletme eşleşmesi
+- [x] 0.5 ServiceItem yetkilendirmesi ve servis/işletme eşleşmesi — 065f0ae
 - [ ] 0.6 Bean Validation
 - [ ] 0.7 Slot algoritması ve yarış koşulu sertleştirme
 
