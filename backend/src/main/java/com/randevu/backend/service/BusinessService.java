@@ -41,14 +41,23 @@ public class BusinessService {
     // basarisiz olursa Spring OTOMATIK ROLLBACK yapar, ikisi de geri alinir.
     @Transactional
     public Business createBusiness(User owner, Business business) {
-        // User -> BusinessOwner yapıyoruz
-        if (owner.getRole() == Role.USER) {
-            owner.setRole(Role.BUSINESS_OWNER);
-            userRepository.save(owner);
-        }
-
+        promoteToBusinessOwnerIfNeeded(owner);
         business.setOwner(owner);
         return businessRepository.save(business);
+    }
+
+    // Eskiden bu satırlar createBusiness'in İÇİNE gömülüydü — "işletme
+    // oluştur" diye çağıran bir kod, kullanıcının rolünü de sessizce
+    // değiştirdiğini metot imzasından anlayamazdı (gizli yan etki, SRP
+    // ihlali). Artık isimli, ayrı bir metot: hem createBusiness'i okuyan
+    // kişi ne olduğunu tek bakışta görüyor, hem de bu kural ileride
+    // (örn. bir yönetici panelinden manuel rol yükseltme eklenirse) tek
+    // başına yeniden kullanılabiliyor.
+    private void promoteToBusinessOwnerIfNeeded(User user) {
+        if (user.getRole() == Role.USER) {
+            user.setRole(Role.BUSINESS_OWNER);
+            userRepository.save(user);
+        }
     }
 
     // Gelen metni Enum'a çevirir ve filtreler. Geçersiz kategorilerde boş liste

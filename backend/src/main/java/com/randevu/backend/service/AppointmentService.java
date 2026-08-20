@@ -4,6 +4,7 @@ import com.randevu.backend.entity.*;
 import com.randevu.backend.exception.BusinessRuleException;
 import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.*;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,7 +13,9 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class AppointmentService {
@@ -122,13 +125,78 @@ public class AppointmentService {
         return appointmentRepository.findByCustomerId(customerId);
     }
 
-    // Randevunun durumunu günceller (Örn: PENDING -> APPROVED).
-    public Appointment updateAppointmentStatus(Long appointmentId, AppointmentStatus newStatus) {
+    // Randevu üzerinde işletme sahibi/müşterinin isteyebileceği eylemler.
+    // Eskiden controller'da action bir String'di ("approve"/"reject"/"cancel")
+    // ve equalsIgnoreCase zinciriyle karşılaştırılıyordu — yeni bir eylem
+    // (örn. Faz 2.1'deki NO_SHOW) eklemek, o if/else zincirinin İÇİNİ
+    // KESMEYİ gerektirirdi (OCP ihlali). Enum + switch ile yeni bir eylem
+    // eklemek artık sadece yeni bir sabit + yeni bir case eklemek —
+    // mevcut case'lere dokunulmuyor, derleyici de eksik case'i haber verir.
+    public enum AppointmentAction {
+        APPROVE, REJECT, CANCEL;
+
+        public static AppointmentAction from(String value) {
+            try {
+                return valueOf(value.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new BusinessRuleException("Geçersiz işlem: " + value);
+            }
+        }
+    }
+
+    // Randevunun durumunu, eylemi isteyen kullanıcının yetkisini ve
+    // randevunun MEVCUT durumunu kontrol ederek değiştirir. Eskiden bu
+    // mantığın hem yetki kontrolü hem randevu arama kısmı controller'da
+    // duruyordu (AppointmentController doğrudan AppointmentRepository
+    // kullanıyordu) — controller'ın işi HTTP çevirisi yapmak, veritabanına
+    // erişmek servisin işi (SRP). Ayrıca eskiden randevunun ŞU ANKİ durumu
+    // hiç kontrol edilmiyordu — REJECTED bir randevu tekrar approve
+    // edilebiliyordu; artık her eylemin hangi durumdan başlayabileceği
+    // açıkça tanımlı.
+    @Transactional
+    public Appointment changeStatus(Long appointmentId, AppointmentAction action, Long currentUserId) {
         Appointment appointment = appointmentRepository.findById(appointmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Randevu bulunamadı."));
 
-        appointment.setStatus(newStatus);
+        boolean isBusinessOwner = appointment.getBusiness().getOwner().getId().equals(currentUserId);
+        boolean isCustomer = appointment.getCustomer().getId().equals(currentUserId);
+
+        switch (action) {
+            case APPROVE -> {
+                requireOwner(isBusinessOwner, "Bu işlemi yalnızca işletme sahibi yapabilir.");
+                requireCurrentStatus(appointment, EnumSet.of(AppointmentStatus.PENDING),
+                        "Sadece onay bekleyen randevular onaylanabilir.");
+                appointment.setStatus(AppointmentStatus.APPROVED);
+            }
+            case REJECT -> {
+                requireOwner(isBusinessOwner, "Bu işlemi yalnızca işletme sahibi yapabilir.");
+                requireCurrentStatus(appointment, EnumSet.of(AppointmentStatus.PENDING),
+                        "Sadece onay bekleyen randevular reddedilebilir.");
+                appointment.setStatus(AppointmentStatus.REJECTED);
+            }
+            case CANCEL -> {
+                if (!isBusinessOwner && !isCustomer) {
+                    throw new AccessDeniedException("Bu randevuyu iptal etme yetkiniz yok.");
+                }
+                requireCurrentStatus(appointment, EnumSet.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED),
+                        "Sadece bekleyen veya onaylanmış randevular iptal edilebilir.");
+                appointment.setStatus(AppointmentStatus.CANCELLED);
+            }
+        }
+
         return appointmentRepository.save(appointment);
+    }
+
+    private void requireOwner(boolean isBusinessOwner, String message) {
+        if (!isBusinessOwner) {
+            throw new AccessDeniedException(message);
+        }
+    }
+
+    private void requireCurrentStatus(Appointment appointment, Set<AppointmentStatus> allowed, String message) {
+        if (!allowed.contains(appointment.getStatus())) {
+            throw new BusinessRuleException(message);
+        }
     }
 
     // Müşterinin şu andan sonraki randevularını getirir.

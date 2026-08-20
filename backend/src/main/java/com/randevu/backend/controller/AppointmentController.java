@@ -6,10 +6,9 @@ import com.randevu.backend.entity.AppointmentStatus;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
-import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.mapper.AppointmentMapper;
-import com.randevu.backend.repository.AppointmentRepository;
 import com.randevu.backend.service.AppointmentService;
+import com.randevu.backend.service.AppointmentService.AppointmentAction;
 import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.OwnershipGuard;
 
@@ -18,7 +17,6 @@ import jakarta.validation.constraints.Future;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,16 +30,18 @@ import java.util.List;
 public class AppointmentController {
 
     private final AppointmentService appointmentService;
-    private final AppointmentRepository appointmentRepository;
     private final CurrentUserService currentUserService;
     private final OwnershipGuard ownershipGuard;
 
+    // Not: AppointmentRepository artık burada YOK. Eskiden updateStatus
+    // randevuyu doğrudan repository'den çekiyordu — controller'ın işi HTTP
+    // isteğini/yanıtını çevirmek, veritabanına erişmek servisin işi (SRP).
+    // Bu bağımlılığın kaldırılması, o mantığın AppointmentService.changeStatus'a
+    // taşınmasının doğal bir sonucu.
     public AppointmentController(AppointmentService appointmentService,
-                                 AppointmentRepository appointmentRepository,
                                  CurrentUserService currentUserService,
                                  OwnershipGuard ownershipGuard) {
         this.appointmentService = appointmentService;
-        this.appointmentRepository = appointmentRepository;
         this.currentUserService = currentUserService;
         this.ownershipGuard = ownershipGuard;
     }
@@ -148,43 +148,21 @@ public class AppointmentController {
                 .toList();
     }
 
-    // 4. Randevu Durumunu Güncelleme
-    // approve/reject → yalnızca işletme sahibi
-    // cancel → işletme sahibi VEYA randevu sahibi müşteri
+    // 4. Randevu Durumunu Güncelleme — approve/reject/cancel. Eskiden burada
+    // action bir String'di, yetki kontrolü ve randevu arama burada,
+    // AppointmentRepository'ye doğrudan erişerek yapılıyordu. Artık controller
+    // sadece path'teki string'i enum'a çeviriyor ve servise devrediyor —
+    // yetki kontrolü, durum geçiş kuralları ve veritabanı erişimi tamamen
+    // AppointmentService.changeStatus'ta (bkz. oradaki açıklama).
     @PutMapping("/{appointmentId}/{action}")
-    public ResponseEntity<?> updateStatus(@PathVariable Long appointmentId,
+    public ResponseEntity<AppointmentResponse> updateStatus(@PathVariable Long appointmentId,
                                           @PathVariable String action,
                                           Authentication authentication) {
 
         User currentUser = currentUserService.getCurrentUser(authentication);
-
-        Appointment appointment = appointmentRepository.findById(appointmentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Randevu bulunamadı."));
-
-        boolean isBusinessOwner = appointment.getBusiness().getOwner().getId().equals(currentUser.getId());
-        boolean isCustomer = appointment.getCustomer().getId().equals(currentUser.getId());
-
-        if (action.equalsIgnoreCase("approve") || action.equalsIgnoreCase("reject")) {
-            // Onay ve ret yalnızca işletme sahibinin yetkisinde
-            if (!isBusinessOwner) {
-                throw new AccessDeniedException("Bu işlemi yalnızca işletme sahibi yapabilir.");
-            }
-            AppointmentStatus status = action.equalsIgnoreCase("approve")
-                    ? AppointmentStatus.APPROVED
-                    : AppointmentStatus.REJECTED;
-            Appointment updated = appointmentService.updateAppointmentStatus(appointmentId, status);
-            return ResponseEntity.ok(AppointmentMapper.toResponse(updated));
-
-        } else if (action.equalsIgnoreCase("cancel")) {
-            // İptal: işletme sahibi veya randevu sahibi müşteri yapabilir
-            if (!isBusinessOwner && !isCustomer) {
-                throw new AccessDeniedException("Bu randevuyu iptal etme yetkiniz yok.");
-            }
-            Appointment updated = appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.CANCELLED);
-            return ResponseEntity.ok(AppointmentMapper.toResponse(updated));
-        }
-
-        return ResponseEntity.badRequest().body("Geçersiz işlem: " + action);
+        AppointmentAction parsedAction = AppointmentAction.from(action);
+        Appointment updated = appointmentService.changeStatus(appointmentId, parsedAction, currentUser.getId());
+        return ResponseEntity.ok(AppointmentMapper.toResponse(updated));
     }
 
     // 5. Kendi Yaklaşan Randevularımı Listeleme — /customer/{id}/upcoming ile
