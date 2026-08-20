@@ -405,7 +405,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 
 ### Faz 0 — Güvenlik Acil Müdahale
 - [x] 0.1 Sırların rotasyonu ve dışarı çıkarılması — c797145
-- [ ] 0.2 `RegisterRequest` DTO ile mass assignment'ı kapat
+- [x] 0.2 `RegisterRequest` DTO ile mass assignment'ı kapat — d5fa2aa
 - [ ] 0.3 Global exception handling ve hata sözleşmesi
 - [ ] 0.4 Method security ve sahiplik kontrolü ⭐
 - [ ] 0.5 ServiceItem yetkilendirmesi ve servis/işletme eşleşmesi
