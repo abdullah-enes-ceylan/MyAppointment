@@ -4,6 +4,7 @@ import com.randevu.backend.entity.*;
 import com.randevu.backend.exception.BusinessRuleException;
 import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.*;
+import com.randevu.backend.service.AvailabilityCalculator.BusyInterval;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,8 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -23,13 +22,16 @@ public class AppointmentService {
     private final AppointmentRepository appointmentRepository;
     private final BusinessRepository businessRepository;
     private final ServiceItemRepository serviceItemRepository;
+    private final AvailabilityCalculator availabilityCalculator;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
             BusinessRepository businessRepository,
-            ServiceItemRepository serviceItemRepository) {
+            ServiceItemRepository serviceItemRepository,
+            AvailabilityCalculator availabilityCalculator) {
         this.appointmentRepository = appointmentRepository;
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
+        this.availabilityCalculator = availabilityCalculator;
     }
 
     // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
@@ -210,30 +212,17 @@ public class AppointmentService {
     }
 
     // Belirtilen gün için işletmenin ve hizmetin süresine uygun boş saat
-    // dilimlerini hesaplar.
+    // dilimlerini hesaplar. Bu metodun işi artık sadece veriyi TOPLAMAK
+    // (işletme/hizmet var mı, o günün meşgul aralıkları neler) — asıl
+    // hesaplama AvailabilityCalculator'a devredildi (bkz. o sınıftaki
+    // açıklama: JPA'dan bağımsız, test edilebilir, Faz 2'de personel
+    // bazlı hale gelecek algoritma).
     public List<LocalTime> getAvailableTimeSlots(Long businessId, Long serviceId, LocalDate date) {
         Business business = businessRepository.findById(businessId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dükkan bulunamadı."));
 
         ServiceItem serviceItem = serviceItemRepository.findById(serviceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
-
-        int duration = serviceItem.getDurationInMinutes();
-
-        // Guard: duration <= 0 olursa asagidaki while dongusunde
-        // currentPointer.plusMinutes(duration) isaretciyi hic ilerletmez
-        // (duration=0) ya da geriye dogru ilerletir (duration<0) — ikisi de
-        // dongunun asla bitmemesine, availableSlots'un sinirsiz buyuyup
-        // sunucuyu OOM'a goturmesine yol acar. Bu endpoint (/available-slots)
-        // permitAll oldugu icin bu, KIMLIK DOGRULAMASI OLMADAN tetiklenebilen
-        // bir DoS acigiydi (ROADMAP K5). Faz 1.5'te ServiceItem'a Bean
-        // Validation eklenince boyle bir kayit veritabanina hic giremeyecek,
-        // ama bu guard olmadan mevcut/gelecekteki bozuk bir kayit tek basina
-        // sunucuyu dusurebilirdi — savunma ikinci bir katman olarak burada
-        // da durmali (defense in depth).
-        if (duration <= 0) {
-            throw new BusinessRuleException("Bu hizmetin süresi geçersiz, müsaitlik hesaplanamaz.");
-        }
 
         LocalDateTime startOfDay = date.atTime(business.getOpenTime());
         LocalDateTime endOfDay = date.atTime(business.getCloseTime());
@@ -243,36 +232,13 @@ public class AppointmentService {
                 .findByBusinessIdAndAppointmentDateBetweenAndStatusIn(businessId, startOfDay, endOfDay,
                         blockingStatuses);
 
-        dailyAppointments.sort(Comparator.nullsLast(Comparator.comparing(a -> a.getAppointmentDate())));
-        List<LocalTime> availableSlots = new ArrayList<>();
-        LocalDateTime currentPointer = startOfDay;
+        List<BusyInterval> busyIntervals = dailyAppointments.stream()
+                .map(app -> new BusyInterval(
+                        app.getAppointmentDate(),
+                        app.getAppointmentDate().plusMinutes(app.getServiceItem().getDurationInMinutes())))
+                .toList();
 
-        while (currentPointer.plusMinutes(duration).isBefore(endOfDay)
-                || currentPointer.plusMinutes(duration).isEqual(endOfDay)) {
-
-            LocalDateTime proposedEnd = currentPointer.plusMinutes(duration);
-            boolean isOverlapping = false;
-
-            for (Appointment app : dailyAppointments) {
-                LocalDateTime appStart = app.getAppointmentDate();
-                LocalDateTime appEnd = appStart.plusMinutes(app.getServiceItem().getDurationInMinutes());
-
-                if (currentPointer.isBefore(appEnd) && proposedEnd.isAfter(appStart)) {
-                    isOverlapping = true;
-                    // Çakışma durumunda işaretçiyi mevcut randevunun bitiş zamanına kaydırır.
-                    currentPointer = appEnd;
-                    break;
-                }
-            }
-
-            if (!isOverlapping) {
-                // Uygun boşluk bulunduğunda listeye ekler ve işaretçiyi hizmet süresi kadar
-                // ileri taşır.
-                availableSlots.add(currentPointer.toLocalTime());
-                currentPointer = currentPointer.plusMinutes(duration);
-            }
-        }
-
-        return availableSlots;
+        return availabilityCalculator.calculate(date, business.getOpenTime(), business.getCloseTime(),
+                serviceItem.getDurationInMinutes(), busyIntervals);
     }
 }
