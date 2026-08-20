@@ -1,0 +1,24 @@
+# ============================================================
+#  YEREL GELISTIRME AYARLARI — SABLON
+#
+#  Bu dosyayi "application-dev.properties" adiyla kopyala ve
+#  kendi degerlerini yaz. Gercek dosya .gitignore'da, git'e girmez.
+#
+#    cp application-dev.properties.example application-dev.properties
+#
+#  Yeni bir jwt.secret uretmek icin:
+#    openssl rand -base64 32
+# ============================================================
+
+spring.datasource.url=jdbc:postgresql://localhost:5432/appointment_db
+spring.datasource.username=postgres
+spring.datasource.password=BURAYA_KENDI_POSTGRES_PAROLAN
+
+# Gelistirmede sema her acilista sifirdan kurulur (veri kalici degildir).
+# Faz 1.4'te Flyway devreye girince bu "validate" olacak.
+spring.jpa.hibernate.ddl-auto=create-drop
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+
+# En az 32 byte rastgele deger. Asla elle yazilmis bir cumle olmasin.
+jwt.secret=BURAYA_OPENSSL_ILE_URETTIGIN_SECRET
