@@ -5,6 +5,7 @@ import com.randevu.backend.dto.response.ValidationErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -68,6 +69,23 @@ public class GlobalExceptionHandler {
                 request.getRequestURI(),
                 fieldErrors);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    }
+
+    // Veritabaninin kendi kisitlamasi (unique index, FK vb.) ihlal edildi -> 409.
+    // En somut ornek: AppointmentSlotIndexInitializer'daki kismi unique index.
+    // Iki musteri ayni saate ES ZAMANLI randevu isteginde bulunursa, uygulama
+    // katmanindaki "exists" kontrolu ikisini de gecirebilir (klasik race
+    // condition) — ama ikinci save() cagrisi bu index'i ihlal edip
+    // DataIntegrityViolationException firlatir. Bu handler olmadan istemci
+    // 500 gorurdu; oysa bu aslinda 409'luk, anlamli bir durum ("bu saat az
+    // once dolduruldu"). Gercek SQL/kisitlama detayi sadece logda kalir,
+    // istemciye asla sizmaz.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex,
+            HttpServletRequest request) {
+        log.warn("Veri bütünlüğü ihlali — {} {}: {}", request.getMethod(), request.getRequestURI(),
+                ex.getMostSpecificCause().getMessage());
+        return build(HttpStatus.CONFLICT, "Bu işlem mevcut bir kayıtla çakışıyor.", request);
     }
 
     // Son savunma hatti: yukaridaki tiplerin hicbirine uymayan, ongorulmemis

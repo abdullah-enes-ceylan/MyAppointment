@@ -5,6 +5,7 @@ import com.randevu.backend.exception.BusinessRuleException;
 import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -29,6 +30,15 @@ public class AppointmentService {
     }
 
     // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
+    // @Transactional: tek başına yarış koşulunu ÇÖZMÜYOR (iki eşzamanlı
+    // istek yine aynı anda "exists" kontrolünü geçebilir), ama metodun
+    // ortasında bir hata olursa (örn. save() patlarsa) yarım kalan hiçbir
+    // yan etkinin commit edilmemesini garanti ediyor — atomiklik için şart.
+    // Asıl yarış koşulu garantisi AppointmentSlotIndexInitializer'daki
+    // veritabanı kısıtlamasından geliyor; save() o kısıtlamayı ihlal ederse
+    // burada DataIntegrityViolationException fırlar, GlobalExceptionHandler
+    // bunu 409'a çevirir (bkz. o handler'daki açıklama).
+    @Transactional
     public Appointment createAppointment(Appointment newAppointment) {
 
         // Eskiden burada businessId hiç doğrulanmıyordu — controller sadece
