@@ -410,7 +410,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 0.4 Method security ve sahiplik kontrolü ⭐ — 0695047
 - [x] 0.5 ServiceItem yetkilendirmesi ve servis/işletme eşleşmesi — 065f0ae
 - [x] 0.6 Bean Validation — 90671c9
-- [ ] 0.7 Slot algoritması ve yarış koşulu sertleştirme
+- [x] 0.7 Slot algoritması ve yarış koşulu sertleştirme — 9f6074f, e0e67f1
 
 ### Faz 1 — Mimari Temel
 - [ ] 1.1 Response DTO katmanı
