@@ -5,11 +5,18 @@ import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
 import com.randevu.backend.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalTime;
 
+// @Profile("dev") KRITIK: bu sinif olmadan, prod'da veritabani ilk acildiginda
+// bos oldugu icin (userRepository.count() > 0 kontrolu gecer) sahte Istanbul
+// isletmeleri GERCEK production veritabanina yazilirdi. Eskiden bu sinif
+// hicbir profil kisitlamasi olmadan HER ortamda calisiyordu.
+@Profile("dev")
 @Component
 public class DatabaseSeeder implements CommandLineRunner {
 
@@ -196,12 +203,15 @@ public class DatabaseSeeder implements CommandLineRunner {
                                 .build());
         }
 
+        // Parametre bilerek double: 30 cagri noktasinda "saveService(..., 250, ...)"
+        // gibi duz sayisal literaller kullaniliyor, hepsini BigDecimal.valueOf(250)
+        // yazmaya zorlamak yerine donusum burada, tek yerde yapiliyor.
         private void saveService(String name, String description, double price,
                         int duration, Business business) {
                 serviceItemRepository.save(ServiceItem.builder()
                                 .name(name)
                                 .description(description)
-                                .price(price)
+                                .price(BigDecimal.valueOf(price))
                                 .durationInMinutes(duration)
                                 .business(business)
                                 .build());

@@ -14,9 +14,8 @@ spring.datasource.url=jdbc:postgresql://localhost:5432/appointment_db
 spring.datasource.username=postgres
 spring.datasource.password=BURAYA_KENDI_POSTGRES_PAROLAN
 
-# Gelistirmede sema her acilista sifirdan kurulur (veri kalici degildir).
-# Faz 1.4'te Flyway devreye girince bu "validate" olacak.
-spring.jpa.hibernate.ddl-auto=create-drop
+# Sema Flyway migration'lari (db/migration) tarafindan yonetiliyor.
+spring.jpa.hibernate.ddl-auto=validate
 spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.format_sql=true
 

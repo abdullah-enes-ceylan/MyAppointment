@@ -67,11 +67,22 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+		<!-- Semayi artik Hibernate'in ddl-auto'su degil, elle yazilmis
+		     migration'lar (src/main/resources/db/migration) yonetiyor.
+		     H2 buradan kaldirildi: Faz 3.1'de test stratejisi zaten
+		     Testcontainers ve gercek Postgres olacak (H2, Postgres'ten
+		     farkli davranir), H2'yi fallback olarak tutmanin bir
+		     anlami kalmadi. -->
 		<dependency>
-			<groupId>com.h2database</groupId>
-    		<artifactId>h2</artifactId>
-    		<scope>runtime</scope>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+
 		<!-- 1. Spring Security: Projenin kapısındaki güvenlik görevlisi -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

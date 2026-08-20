@@ -5,6 +5,8 @@ import lombok.*;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "service_items")
 @Getter
@@ -35,8 +37,13 @@ public class ServiceItem {
     @Column(nullable = false)
     private String description;
 
-    @Column(nullable = false)
-    private double price;
+    // double degil BigDecimal: para kayan noktali sayiyla tutulmaz. double
+    // ikili (binary) tabanda calisir, 0.1 gibi ondalik degerleri TAM olarak
+    // temsil edemez (0.1 + 0.2 == 0.30000000000000004 gibi klasik hata) --
+    // fiyat toplama/indirim gibi islemler eklendiginde bu sessizce kurus
+    // farklariyla birikir. BigDecimal ondalik tabanda calisir, kesin.
+    @Column(nullable = false, precision = 10, scale = 2)
+    private BigDecimal price;
 
     @Column(nullable = false)
     private int durationInMinutes;
