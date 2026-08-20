@@ -415,7 +415,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 ### Faz 1 — Mimari Temel
 - [x] 1.1 Response DTO katmanı — 85d5379
 - [x] 1.2 Katman ihlallerini ve SOLID sorunlarını düzelt — e094701
-- [ ] 1.3 `AvailabilityCalculator` ayrıştırması
+- [x] 1.3 `AvailabilityCalculator` ayrıştırması — 841b18b
 - [ ] 1.4 Flyway migration + şema sertleştirme
 - [ ] 1.5 Business CRUD tamamlama
 - [ ] 1.6 `WorkingHour` entity
