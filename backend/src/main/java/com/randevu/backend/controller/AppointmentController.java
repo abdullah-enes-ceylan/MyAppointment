@@ -5,13 +5,14 @@ import com.randevu.backend.entity.AppointmentStatus;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.AppointmentRepository;
 import com.randevu.backend.repository.UserRepository;
 import com.randevu.backend.service.AppointmentService;
 
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +22,6 @@ import java.time.LocalTime;
 import java.util.List;
 
 @RestController
-@CrossOrigin(origins = "*")
 @RequestMapping("/api/appointments")
 public class AppointmentController {
 
@@ -47,7 +47,7 @@ public class AppointmentController {
         // Token'daki email ile gerçek kullanıcıyı bul
         String email = authentication.getName();
         User customer = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı."));
+                .orElseThrow(() -> new ResourceNotFoundException("Kullanıcı bulunamadı."));
 
         Business business = new Business();
         business.setId(request.getBusinessId());
@@ -114,9 +114,13 @@ public class AppointmentController {
         return appointmentService.getCustomerAppointments(customerId);
     }
 
-    // 4. Randevu Durumunu Güncelleme — Yetki kontrolü eklendi
+    // 4. Randevu Durumunu Güncelleme
     // approve/reject → yalnızca işletme sahibi
     // cancel → işletme sahibi VEYA randevu sahibi müşteri
+    // Yetkisiz erişim artık ResponseEntity.status(FORBIDDEN) ile elle
+    // kurulmuyor, AccessDeniedException fırlatılıyor — GlobalExceptionHandler
+    // bunu yakalayıp 403'e çeviriyor. Faz 0.4'te @PreAuthorize eklendiğinde
+    // Spring'in kendi ürettiği aynı tip exception da AYNI handler'dan geçecek.
     @PutMapping("/{appointmentId}/{action}")
     public ResponseEntity<?> updateStatus(@PathVariable Long appointmentId,
                                           @PathVariable String action,
@@ -124,10 +128,10 @@ public class AppointmentController {
 
         String email = authentication.getName();
         User currentUser = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Kullanıcı bulunamadı."));
+                .orElseThrow(() -> new ResourceNotFoundException("Kullanıcı bulunamadı."));
 
         Appointment appointment = appointmentRepository.findById(appointmentId)
-                .orElseThrow(() -> new RuntimeException("Randevu bulunamadı."));
+                .orElseThrow(() -> new ResourceNotFoundException("Randevu bulunamadı."));
 
         boolean isBusinessOwner = appointment.getBusiness().getOwner().getId().equals(currentUser.getId());
         boolean isCustomer = appointment.getCustomer().getId().equals(currentUser.getId());
@@ -135,8 +139,7 @@ public class AppointmentController {
         if (action.equalsIgnoreCase("approve") || action.equalsIgnoreCase("reject")) {
             // Onay ve ret yalnızca işletme sahibinin yetkisinde
             if (!isBusinessOwner) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body("Bu işlemi yalnızca işletme sahibi yapabilir.");
+                throw new AccessDeniedException("Bu işlemi yalnızca işletme sahibi yapabilir.");
             }
             AppointmentStatus status = action.equalsIgnoreCase("approve")
                     ? AppointmentStatus.APPROVED
@@ -146,8 +149,7 @@ public class AppointmentController {
         } else if (action.equalsIgnoreCase("cancel")) {
             // İptal: işletme sahibi veya randevu sahibi müşteri yapabilir
             if (!isBusinessOwner && !isCustomer) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body("Bu randevuyu iptal etme yetkiniz yok.");
+                throw new AccessDeniedException("Bu randevuyu iptal etme yetkiniz yok.");
             }
             return ResponseEntity.ok(appointmentService.updateAppointmentStatus(appointmentId, AppointmentStatus.CANCELLED));
         }
@@ -168,17 +170,18 @@ public class AppointmentController {
     }
 
     // 7. BOŞ SAATLERİ GETİRME UÇ NOKTASI
+    // Eskiden burada bir try/catch vardı ve her RuntimeException'ı 400'e
+    // çeviriyordu — ama "dükkan bulunamadı" kavramsal olarak 404'tür, 400
+    // değil. Artık AppointmentService doğru tipte exception fırlattığı için
+    // (ResourceNotFoundException) bu metot hiçbir şey yakalamıyor, doğru
+    // status kodu GlobalExceptionHandler'dan otomatik geliyor.
     @GetMapping("/available-slots")
-    public ResponseEntity<?> getAvailableTimeSlots(
+    public ResponseEntity<List<LocalTime>> getAvailableTimeSlots(
             @RequestParam Long businessId,
             @RequestParam Long serviceId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
-        try {
-            List<LocalTime> availableSlots = appointmentService.getAvailableTimeSlots(businessId, serviceId, date);
-            return ResponseEntity.ok(availableSlots);
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        List<LocalTime> availableSlots = appointmentService.getAvailableTimeSlots(businessId, serviceId, date);
+        return ResponseEntity.ok(availableSlots);
     }
 }

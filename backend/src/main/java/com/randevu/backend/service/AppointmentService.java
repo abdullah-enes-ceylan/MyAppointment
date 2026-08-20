@@ -1,6 +1,8 @@
 package com.randevu.backend.service;
 
 import com.randevu.backend.entity.*;
+import com.randevu.backend.exception.BusinessRuleException;
+import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.*;
 import org.springframework.stereotype.Service;
 
@@ -36,11 +38,11 @@ public class AppointmentService {
                 newAppointment.getAppointmentDate(),
                 blockingStatuses);
         if (alreadyExists) {
-            throw new IllegalStateException("Bu saat için zaten bir randevu isteği mevcut!");
+            throw new BusinessRuleException("Bu saat için zaten bir randevu isteği mevcut!");
         }
 
         ServiceItem service = serviceItemRepository.findById(newAppointment.getServiceItem().getId())
-                .orElseThrow(() -> new RuntimeException("Hizmet bulunamadı."));
+                .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
         newAppointment.setServiceItem(service);
 
         LocalDateTime newStart = newAppointment.getAppointmentDate();
@@ -64,7 +66,7 @@ public class AppointmentService {
         });
 
         if (isOverlapping) {
-            throw new IllegalStateException("Seçilen saat aralığında başka bir randevu bulunmaktadır.");
+            throw new BusinessRuleException("Seçilen saat aralığında başka bir randevu bulunmaktadır.");
         }
 
         return appointmentRepository.save(newAppointment);
@@ -88,7 +90,7 @@ public class AppointmentService {
     // Randevunun durumunu günceller (Örn: PENDING -> APPROVED).
     public Appointment updateAppointmentStatus(Long appointmentId, AppointmentStatus newStatus) {
         Appointment appointment = appointmentRepository.findById(appointmentId)
-                .orElseThrow(() -> new RuntimeException("Randevu bulunamadı."));
+                .orElseThrow(() -> new ResourceNotFoundException("Randevu bulunamadı."));
 
         appointment.setStatus(newStatus);
         return appointmentRepository.save(appointment);
@@ -108,10 +110,10 @@ public class AppointmentService {
     // dilimlerini hesaplar.
     public List<LocalTime> getAvailableTimeSlots(Long businessId, Long serviceId, LocalDate date) {
         Business business = businessRepository.findById(businessId)
-                .orElseThrow(() -> new RuntimeException("Dükkan bulunamadı."));
+                .orElseThrow(() -> new ResourceNotFoundException("Dükkan bulunamadı."));
 
         ServiceItem serviceItem = serviceItemRepository.findById(serviceId)
-                .orElseThrow(() -> new RuntimeException("Hizmet bulunamadı."));
+                .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
 
         int duration = serviceItem.getDurationInMinutes();
 

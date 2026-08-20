@@ -2,7 +2,6 @@ package com.randevu.backend.controller;
 
 import com.randevu.backend.dto.request.RegisterRequest;
 import com.randevu.backend.entity.User;
-import com.randevu.backend.exception.EmailAlreadyExistsException;
 import com.randevu.backend.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,15 +25,13 @@ public class UserController {
         return userService.getAllUsers();
     }
 
-    // Yeni kullanici kaydi olusturan API. RegisterRequest DTO sayesinde istemci
-    // sadece ad/soyad/email/sifre/telefon gonderebilir — id ve role gonderemez.
+    // Yeni kullanici kaydi olusturan API. Email zaten kayitliysa UserService'in
+    // firlattigi EmailAlreadyExistsException artik burada yakalanmiyor —
+    // GlobalExceptionHandler onu 409'a ceviriyor (controller artik hata
+    // govdesi uretme isiyle ugrasmiyor, SRP).
     @PostMapping("/register")
-    public ResponseEntity<?> registerUser(@RequestBody RegisterRequest request) {
-        try {
-            User createdUser = userService.registerUser(request);
-            return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
-        } catch (EmailAlreadyExistsException e) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
-        }
+    public ResponseEntity<User> registerUser(@RequestBody RegisterRequest request) {
+        User createdUser = userService.registerUser(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
     }
 }

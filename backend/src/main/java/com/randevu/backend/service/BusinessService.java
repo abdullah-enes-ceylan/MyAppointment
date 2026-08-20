@@ -4,9 +4,11 @@ import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.BusinessCategory;
 import com.randevu.backend.entity.Role;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,10 +29,17 @@ public class BusinessService {
 
     public List<Business> getBusinessesByOwner(Long ownerId) {
         User owner = userRepository.findById(ownerId)
-                .orElseThrow(() -> new RuntimeException("Dükkan sahibi bulunamadı"));
+                .orElseThrow(() -> new ResourceNotFoundException("Dükkan sahibi bulunamadı"));
         return businessRepository.findByOwnerId(owner.getId());
     }
 
+    // Bu metot iki ayri kayit yapiyor: once kullanicinin rolunu yukseltiyor,
+    // sonra isletmeyi kaydediyor. @Transactional olmadan, ikinci save() (ornegin
+    // isletme adi/adresi bos oldugu icin) patlarsa, birinci save() ZATEN
+    // COMMIT EDILMIS olur — kullanici isletmesi olmadan BUSINESS_OWNER kalir.
+    // @Transactional, ikisini TEK bir islem (transaction) olarak sarar: biri
+    // basarisiz olursa Spring OTOMATIK ROLLBACK yapar, ikisi de geri alinir.
+    @Transactional
     public Business createBusiness(User owner, Business business) {
         // User -> BusinessOwner yapıyoruz
         if (owner.getRole() == Role.USER) {
