@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../api/axios";
-import Toast from "../components/Toast";
+import api from "../../api/axios";
+import Toast from "../../components/Toast";
 
 function formatDate(dateStr) {
   const date = new Date(dateStr);
@@ -17,19 +16,19 @@ function formatDate(dateStr) {
   return `${day} ${month} ${year} — ${hours}:${minutes}`;
 }
 
-export default function PendingAppointments() {
-  const navigate = useNavigate();
+// Bekleyen randevu talepleri — eskiden PendingAppointments.jsx sayfasıydı,
+// businessId sabit kodluydu (=1). Artık BusinessPanelPage'den seçili
+// işletmenin id'sini prop olarak alıyor.
+export default function InboxTab({ businessId }) {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null);
-  const [actionLoading, setActionLoading] = useState(null); // appointment id being actioned
-
-  const businessId = 1; // Şimdilik statik
+  const [actionLoading, setActionLoading] = useState(null);
 
   useEffect(() => {
-    fetchPending();
-  }, []);
+    if (businessId) fetchPending();
+  }, [businessId]);
 
   async function fetchPending() {
     setLoading(true);
@@ -48,14 +47,13 @@ export default function PendingAppointments() {
     setActionLoading(appointmentId);
     try {
       await api.put(`/api/appointments/${appointmentId}/${action}`);
-      // Başarılı — kartı listeden kaldır
       setAppointments((prev) => prev.filter((a) => a.id !== appointmentId));
       setToast({
         message: action === "approve" ? "✅ Randevu onaylandı!" : "❌ Randevu reddedildi.",
         type: action === "approve" ? "success" : "error",
       });
     } catch (err) {
-      const msg = err.response?.data || "İşlem sırasında bir hata oluştu.";
+      const msg = err.response?.data?.message || err.response?.data || "İşlem sırasında bir hata oluştu.";
       setToast({ message: String(msg), type: "error" });
     } finally {
       setActionLoading(null);
@@ -63,36 +61,11 @@ export default function PendingAppointments() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
+    <div>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
-            <span className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/20">
-              📥
-            </span>
-            İstek Kutusu
-          </h1>
-          <p className="text-slate-400 text-sm mt-1.5">
-            Onay bekleyen randevu talepleri
-          </p>
-        </div>
-        <button
-          onClick={() => navigate("/")}
-          className="text-sm text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Ana Sayfa
-        </button>
-      </div>
-
-      {/* Loading State */}
       {loading && (
-        <div className="flex justify-center py-20">
+        <div className="flex justify-center py-16">
           <div className="flex items-center gap-3 text-slate-400">
             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -103,7 +76,6 @@ export default function PendingAppointments() {
         </div>
       )}
 
-      {/* Error State */}
       {error && !loading && (
         <div className="text-center py-16">
           <p className="text-5xl mb-4">⚠️</p>
@@ -117,9 +89,8 @@ export default function PendingAppointments() {
         </div>
       )}
 
-      {/* Empty State */}
       {!loading && !error && appointments.length === 0 && (
-        <div className="text-center py-20">
+        <div className="text-center py-16">
           <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-5">
             <span className="text-4xl">🎉</span>
           </div>
@@ -128,10 +99,8 @@ export default function PendingAppointments() {
         </div>
       )}
 
-      {/* Appointment Cards */}
       {!loading && !error && appointments.length > 0 && (
         <div className="space-y-4">
-          {/* Badge */}
           <div className="flex items-center gap-2 mb-2">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs font-medium text-amber-400">
               <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
@@ -144,7 +113,6 @@ export default function PendingAppointments() {
               key={apt.id}
               className="group bg-surface/80 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:border-amber-500/20 transition-all duration-300"
             >
-              {/* Card Top — Status Bar */}
               <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 px-5 py-2.5 border-b border-white/5 flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400">
                   <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
@@ -153,10 +121,8 @@ export default function PendingAppointments() {
                 <span className="text-xs text-slate-500">#{apt.id}</span>
               </div>
 
-              {/* Card Body */}
               <div className="p-5">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
-                  {/* Müşteri Bilgisi */}
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Müşteri</p>
                     <p className="text-white font-semibold text-sm">
@@ -167,7 +133,6 @@ export default function PendingAppointments() {
                     </p>
                   </div>
 
-                  {/* Hizmet Bilgisi */}
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Hizmet</p>
                     <p className="text-white font-semibold text-sm">{apt.serviceItem?.name}</p>
@@ -177,7 +142,6 @@ export default function PendingAppointments() {
                     </div>
                   </div>
 
-                  {/* Tarih & Saat */}
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tarih & Saat</p>
                     <p className="text-white font-semibold text-sm">
@@ -186,7 +150,6 @@ export default function PendingAppointments() {
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex gap-3 pt-3 border-t border-white/5">
                   <button
                     onClick={() => handleAction(apt.id, "approve")}

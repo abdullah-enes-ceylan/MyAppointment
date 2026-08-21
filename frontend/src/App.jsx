@@ -7,7 +7,7 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import BusinessDetailPage from "./pages/BusinessDetailPage";
-import PendingAppointments from "./pages/PendingAppointments";
+import BusinessPanelPage from "./pages/panel/BusinessPanelPage";
 
 export default function App() {
   return (
@@ -39,10 +39,10 @@ export default function App() {
                 }
               />
               <Route
-                path="/inbox"
+                path="/panel"
                 element={
                   <RoleProtectedRoute allowedRoles={["BUSINESS_OWNER", "ADMIN"]}>
-                    <PendingAppointments />
+                    <BusinessPanelPage />
                   </RoleProtectedRoute>
                 }
               />
