@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import Toast from "../components/Toast";
+import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -22,14 +24,20 @@ export default function LoginPage() {
 
     try {
       const res = await api.post("/api/auth/login", form);
-      localStorage.setItem("token", res.data.token);
+      // login() (AuthContext) hem localStorage'a yazar hem React state'ini
+      // gunceller — eskiden burada window.location.reload() vardi, artik
+      // Navbar gibi bilesenler sayfa yenilenmeden otomatik guncelleniyor.
+      login(res.data.token);
       setToast({ message: "Giriş başarılı! Yönlendiriliyorsunuz...", type: "success" });
       setTimeout(() => {
         navigate("/");
-        window.location.reload();
       }, 800);
     } catch (err) {
-      const msg = err.response?.data || "Hatalı e-posta veya şifre!";
+      // err.response?.data bazen duz metin (401 — hatali sifre), bazen
+      // yapilandirilmis bir nesne (400 — ValidationErrorResponse). Once
+      // .message'a bak, o yoksa duz veriyi kullan — aksi halde
+      // ValidationErrorResponse dondugunde ekranda "[object Object]" cikardi.
+      const msg = err.response?.data?.message || err.response?.data || "Hatalı e-posta veya şifre!";
       setToast({ message: String(msg), type: "error" });
     } finally {
       setLoading(false);

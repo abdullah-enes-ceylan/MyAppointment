@@ -1,7 +1,10 @@
 import axios from "axios";
 
+// Eskiden http://localhost:8080 sabit kodluydu — deploy'da (frontend ve
+// backend farklı adreslerde çalıştığında) kırılırdı. .env'den okunuyor,
+// VITE_API_URL tanımlı değilse yerel geliştirme varsayılanına düşer.
 const api = axios.create({
-  baseURL: "http://localhost:8080",
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8080",
   headers: {
     "Content-Type": "application/json",
   },
@@ -19,13 +22,20 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor — 401 hatası gelirse oturumu sonlandırır
+// Response Interceptor — 401 ve 403'ü ayrı ele alır.
+// 401 (token yok/geçersiz/süresi dolmuş): oturum artık anlamsız,
+// zorla çıkış yapılır — RestAuthenticationEntryPoint (backend, Faz 0.4)
+// bu durumda gerçekten 401 döndüğü için bu artık güvenilir bir sinyal.
+// 403 (token geçerli ama BU işlem için yetki yok — örn. başka bir
+// işletmenin verisine erişmeye çalışmak) BİLEREK burada ele alınmıyor:
+// kullanıcının oturumu geçerli, onu zorla çıkışa atmak yanlış olur.
+// Sayfa bileşenleri kendi catch bloklarında err.response?.data?.message
+// ile bu hatayı zaten gösteriyor (bkz. BusinessDetailPage, PendingAppointments).
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
       localStorage.removeItem("token");
-      // Login sayfasına yönlendir (tam sayfa yenilemesi ile)
       if (window.location.pathname !== "/login") {
         window.location.href = "/login";
       }

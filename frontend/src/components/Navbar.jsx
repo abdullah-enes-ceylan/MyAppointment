@@ -1,16 +1,23 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
+
+const OWNER_ROLES = ["BUSINESS_OWNER", "ADMIN"];
 
 export default function Navbar() {
   const navigate = useNavigate();
-  const token = localStorage.getItem("token");
+  const { isAuthenticated, user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isOwner = OWNER_ROLES.includes(user?.role);
 
   function handleLogout() {
-    localStorage.removeItem("token");
+    // Eskiden burada window.location.reload() vardi — AuthContext
+    // olmadan React'in localStorage degisikligini fark etmesinin tek
+    // yolu buydu. Artik logout() context state'ini gunceller, tum
+    // bilesenler (bu Navbar dahil) sayfa hic yenilenmeden otomatik
+    // yeniden render olur.
+    logout();
     navigate("/");
-    // Force re-render for navbar state
-    window.location.reload();
   }
 
   return (
@@ -29,13 +36,23 @@ export default function Navbar() {
 
           {/* Desktop Navigation */}
           <div className="hidden sm:flex items-center gap-3">
-            {token ? (
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-xl transition-all duration-200 cursor-pointer"
-              >
-                Çıkış Yap
-              </button>
+            {isAuthenticated ? (
+              <>
+                {isOwner && (
+                  <Link
+                    to="/inbox"
+                    className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+                  >
+                    📥 İstek Kutusu
+                  </Link>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-xl transition-all duration-200 cursor-pointer"
+                >
+                  Çıkış Yap
+                </button>
+              </>
             ) : (
               <>
                 <Link
@@ -72,13 +89,24 @@ export default function Navbar() {
         {/* Mobile Menu */}
         {mobileOpen && (
           <div className="sm:hidden pb-4 pt-2 space-y-2 border-t border-white/5">
-            {token ? (
-              <button
-                onClick={handleLogout}
-                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
-              >
-                Çıkış Yap
-              </button>
+            {isAuthenticated ? (
+              <>
+                {isOwner && (
+                  <Link
+                    to="/inbox"
+                    onClick={() => setMobileOpen(false)}
+                    className="block px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                  >
+                    📥 İstek Kutusu
+                  </Link>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+                >
+                  Çıkış Yap
+                </button>
+              </>
             ) : (
               <>
                 <Link

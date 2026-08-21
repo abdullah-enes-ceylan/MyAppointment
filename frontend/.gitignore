@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Backend'deki application-dev.properties desenine tutarli: .env yerel/
+# ortama ozel deger tasir, git'e girmez. Sablon icin .env.example'a bak.
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
