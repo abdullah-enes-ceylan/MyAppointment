@@ -419,7 +419,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 1.4 Flyway migration + şema sertleştirme — caf4bf8
 - [x] 1.5 Business CRUD tamamlama — 69593a7
 - [x] 1.6 `WorkingHour` entity — 62d7ff1
-- [ ] 1.7 Frontend: rol farkındalığı ve ortam yapılandırması
+- [x] 1.7 Frontend: rol farkındalığı ve ortam yapılandırması — 63b2758
 - [ ] 1.8 Frontend: işletme paneli iskeleti
 - [ ] 1.9 Frontend: müşteri "Randevularım" ekranı
 
