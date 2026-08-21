@@ -38,6 +38,12 @@ export default function Navbar() {
           <div className="hidden sm:flex items-center gap-3">
             {isAuthenticated ? (
               <>
+                <Link
+                  to="/appointments"
+                  className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+                >
+                  📅 Randevularım
+                </Link>
                 {isOwner && (
                   <Link
                     to="/panel"
@@ -91,6 +97,13 @@ export default function Navbar() {
           <div className="sm:hidden pb-4 pt-2 space-y-2 border-t border-white/5">
             {isAuthenticated ? (
               <>
+                <Link
+                  to="/appointments"
+                  onClick={() => setMobileOpen(false)}
+                  className="block px-3 py-2 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  📅 Randevularım
+                </Link>
                 {isOwner && (
                   <Link
                     to="/panel"

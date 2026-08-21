@@ -8,6 +8,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import BusinessDetailPage from "./pages/BusinessDetailPage";
 import BusinessPanelPage from "./pages/panel/BusinessPanelPage";
+import MyAppointmentsPage from "./pages/MyAppointmentsPage";
 
 export default function App() {
   return (
@@ -44,6 +45,14 @@ export default function App() {
                   <RoleProtectedRoute allowedRoles={["BUSINESS_OWNER", "ADMIN"]}>
                     <BusinessPanelPage />
                   </RoleProtectedRoute>
+                }
+              />
+              <Route
+                path="/appointments"
+                element={
+                  <ProtectedRoute>
+                    <MyAppointmentsPage />
+                  </ProtectedRoute>
                 }
               />
             </Routes>
