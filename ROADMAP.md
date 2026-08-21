@@ -421,7 +421,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 1.6 `WorkingHour` entity — 62d7ff1
 - [x] 1.7 Frontend: rol farkındalığı ve ortam yapılandırması — 63b2758
 - [x] 1.8 Frontend: işletme paneli iskeleti — 1720059
-- [ ] 1.9 Frontend: müşteri "Randevularım" ekranı
+- [x] 1.9 Frontend: müşteri "Randevularım" ekranı — 6032c27
 
 ### Faz 2 — Ürün Vizyonunun Tamamlanması
 - [ ] 2.1 Randevu durum makinesi + `COMPLETED`/`NO_SHOW`
