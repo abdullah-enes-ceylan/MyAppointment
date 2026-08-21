@@ -420,7 +420,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 1.5 Business CRUD tamamlama — 69593a7
 - [x] 1.6 `WorkingHour` entity — 62d7ff1
 - [x] 1.7 Frontend: rol farkındalığı ve ortam yapılandırması — 63b2758
-- [ ] 1.8 Frontend: işletme paneli iskeleti
+- [x] 1.8 Frontend: işletme paneli iskeleti — 1720059
 - [ ] 1.9 Frontend: müşteri "Randevularım" ekranı
 
 ### Faz 2 — Ürün Vizyonunun Tamamlanması
