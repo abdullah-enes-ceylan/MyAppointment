@@ -4,12 +4,14 @@ import com.randevu.backend.entity.*;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
 import com.randevu.backend.repository.UserRepository;
+import com.randevu.backend.repository.WorkingHourRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 
 // @Profile("dev") KRITIK: bu sinif olmadan, prod'da veritabani ilk acildiginda
@@ -23,15 +25,18 @@ public class DatabaseSeeder implements CommandLineRunner {
         private final UserRepository userRepository;
         private final BusinessRepository businessRepository;
         private final ServiceItemRepository serviceItemRepository;
+        private final WorkingHourRepository workingHourRepository;
         private final PasswordEncoder passwordEncoder;
 
         public DatabaseSeeder(UserRepository userRepository,
                         BusinessRepository businessRepository,
                         ServiceItemRepository serviceItemRepository,
+                        WorkingHourRepository workingHourRepository,
                         PasswordEncoder passwordEncoder) {
                 this.userRepository = userRepository;
                 this.businessRepository = businessRepository;
                 this.serviceItemRepository = serviceItemRepository;
+                this.workingHourRepository = workingHourRepository;
                 this.passwordEncoder = passwordEncoder;
         }
 
@@ -191,16 +196,39 @@ public class DatabaseSeeder implements CommandLineRunner {
         private Business saveBusiness(String name, String address, String phone,
                         String description, User owner,
                         String open, String close, BusinessCategory category) {
-                return businessRepository.save(Business.builder()
+                LocalTime openTime = LocalTime.parse(open);
+                LocalTime closeTime = LocalTime.parse(close);
+
+                Business business = businessRepository.save(Business.builder()
                                 .name(name)
                                 .address(address)
                                 .phone(phone)
                                 .description(description)
                                 .owner(owner)
-                                .openTime(LocalTime.parse(open))
-                                .closeTime(LocalTime.parse(close))
+                                .openTime(openTime)
+                                .closeTime(closeTime)
                                 .category(category)
                                 .build());
+
+                saveDefaultWorkingHours(business, openTime, closeTime);
+                return business;
+        }
+
+        // Faz 1.6'nin WorkingHour tablosunun GERCEKTEN kullanildigini gostermek
+        // icin her isletmeye haftanin 7 gunu ayni saatlerle olusturuluyor —
+        // kapali gun/ogle molasi gibi ozel durumlar seed verisine bilerek
+        // eklenmedi (demo veriyi gereksiz karmasiklastirirdi); Faz 1.8'in
+        // paneli acildiginda isletme sahibi bunlari kendisi ozellestirecek.
+        private void saveDefaultWorkingHours(Business business, LocalTime openTime, LocalTime closeTime) {
+                for (DayOfWeek day : DayOfWeek.values()) {
+                        workingHourRepository.save(WorkingHour.builder()
+                                        .business(business)
+                                        .dayOfWeek(day)
+                                        .openTime(openTime)
+                                        .closeTime(closeTime)
+                                        .isClosed(false)
+                                        .build());
+                }
         }
 
         // Parametre bilerek double: 30 cagri noktasinda "saveService(..., 250, ...)"

@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -22,15 +23,21 @@ public class AppointmentService {
     private final AppointmentRepository appointmentRepository;
     private final BusinessRepository businessRepository;
     private final ServiceItemRepository serviceItemRepository;
+    private final WorkingHourRepository workingHourRepository;
+    private final BusinessClosureRepository businessClosureRepository;
     private final AvailabilityCalculator availabilityCalculator;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
             BusinessRepository businessRepository,
             ServiceItemRepository serviceItemRepository,
+            WorkingHourRepository workingHourRepository,
+            BusinessClosureRepository businessClosureRepository,
             AvailabilityCalculator availabilityCalculator) {
         this.appointmentRepository = appointmentRepository;
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
+        this.workingHourRepository = workingHourRepository;
+        this.businessClosureRepository = businessClosureRepository;
         this.availabilityCalculator = availabilityCalculator;
     }
 
@@ -75,6 +82,20 @@ public class AppointmentService {
         newAppointment.setBusiness(business);
         newAppointment.setServiceItem(service);
 
+        LocalDateTime newStart = newAppointment.getAppointmentDate();
+        LocalDateTime newEnd = newStart.plusMinutes(service.getDurationInMinutes());
+
+        // Secilen saat gercekten calisma saatleri icinde mi? Bu kontrol
+        // olmadan, /available-slots'ta HIC GORUNMEYEN bir saate (kapali
+        // gun, ozel tatil, mesai disi) /create'e DOGRUDAN istek atilarak
+        // randevu alinabiliyordu — getAvailableTimeSlots'taki kontrolu
+        // atlamak, API'yi dogrudan cagirmak kadar kolaydi.
+        EffectiveHours hours = resolveWorkingHours(businessId, business, newStart.toLocalDate())
+                .orElseThrow(() -> new BusinessRuleException("İşletme bu tarihte kapalı."));
+        if (newStart.toLocalTime().isBefore(hours.openTime()) || newEnd.toLocalTime().isAfter(hours.closeTime())) {
+            throw new BusinessRuleException("Seçilen saat işletmenin çalışma saatleri dışında.");
+        }
+
         // Spam tıklama koruması: Aynı dükkan + aynı saat için zaten istek varsa engelle
         List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
         boolean alreadyExists = appointmentRepository.existsByBusinessIdAndAppointmentDateAndStatusIn(
@@ -84,9 +105,6 @@ public class AppointmentService {
         if (alreadyExists) {
             throw new BusinessRuleException("Bu saat için zaten bir randevu isteği mevcut!");
         }
-
-        LocalDateTime newStart = newAppointment.getAppointmentDate();
-        LocalDateTime newEnd = newStart.plusMinutes(service.getDurationInMinutes());
 
         LocalDateTime startOfDay = newStart.toLocalDate().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
@@ -213,10 +231,10 @@ public class AppointmentService {
 
     // Belirtilen gün için işletmenin ve hizmetin süresine uygun boş saat
     // dilimlerini hesaplar. Bu metodun işi artık sadece veriyi TOPLAMAK
-    // (işletme/hizmet var mı, o günün meşgul aralıkları neler) — asıl
-    // hesaplama AvailabilityCalculator'a devredildi (bkz. o sınıftaki
-    // açıklama: JPA'dan bağımsız, test edilebilir, Faz 2'de personel
-    // bazlı hale gelecek algoritma).
+    // (işletme/hizmet var mı, o gün açık mı, o günün meşgul aralıkları
+    // neler) — asıl hesaplama AvailabilityCalculator'a devredildi (bkz.
+    // o sınıftaki açıklama: JPA'dan bağımsız, test edilebilir, Faz 2'de
+    // personel bazlı hale gelecek algoritma).
     public List<LocalTime> getAvailableTimeSlots(Long businessId, Long serviceId, LocalDate date) {
         Business business = businessRepository.findById(businessId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dükkan bulunamadı."));
@@ -224,8 +242,15 @@ public class AppointmentService {
         ServiceItem serviceItem = serviceItemRepository.findById(serviceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
 
-        LocalDateTime startOfDay = date.atTime(business.getOpenTime());
-        LocalDateTime endOfDay = date.atTime(business.getCloseTime());
+        Optional<EffectiveHours> hours = resolveWorkingHours(businessId, business, date);
+        if (hours.isEmpty()) {
+            // O gun ozel kapanis var ya da WorkingHour'da isClosed=true —
+            // musteriye bos liste donuyoruz (hata degil, sadece "bos" gibi).
+            return List.of();
+        }
+
+        LocalDateTime startOfDay = date.atTime(hours.get().openTime());
+        LocalDateTime endOfDay = date.atTime(hours.get().closeTime());
 
         List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
         List<Appointment> dailyAppointments = appointmentRepository
@@ -238,7 +263,35 @@ public class AppointmentService {
                         app.getAppointmentDate().plusMinutes(app.getServiceItem().getDurationInMinutes())))
                 .toList();
 
-        return availabilityCalculator.calculate(date, business.getOpenTime(), business.getCloseTime(),
+        return availabilityCalculator.calculate(date, hours.get().openTime(), hours.get().closeTime(),
                 serviceItem.getDurationInMinutes(), busyIntervals);
+    }
+
+    private record EffectiveHours(LocalTime openTime, LocalTime closeTime) {
+    }
+
+    // Verilen tarih icin efektif calisma saatlerini dondurur. Optional.empty()
+    // donerse o gun tamamen kapali demektir (ozel kapanis ya da WorkingHour'da
+    // isClosed=true). WorkingHour hic girilmemisse Business'in genel
+    // saatlerine geriye donuk uyumlu sekilde duser (bkz. WorkingHour.java).
+    // Hem getAvailableTimeSlots hem createAppointment AYNI kurali kullanmali
+    // — aksi halde musteri /available-slots'ta hic gorunmeyen bir saate,
+    // /create'e dogrudan istek atarak randevu alabilirdi.
+    private Optional<EffectiveHours> resolveWorkingHours(Long businessId, Business business, LocalDate date) {
+        if (businessClosureRepository.findByBusinessIdAndDate(businessId, date).isPresent()) {
+            return Optional.empty();
+        }
+
+        Optional<WorkingHour> workingHour = workingHourRepository
+                .findByBusinessIdAndDayOfWeek(businessId, date.getDayOfWeek());
+
+        if (workingHour.isPresent()) {
+            WorkingHour wh = workingHour.get();
+            return wh.isClosed()
+                    ? Optional.empty()
+                    : Optional.of(new EffectiveHours(wh.getOpenTime(), wh.getCloseTime()));
+        }
+
+        return Optional.of(new EffectiveHours(business.getOpenTime(), business.getCloseTime()));
     }
 }

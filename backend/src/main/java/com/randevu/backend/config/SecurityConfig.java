@@ -58,6 +58,11 @@ public class SecurityConfig {
                         // {id:\d+} kısıtı: SADECE sayısal path'lere eşleşir, "/my" gibi
                         // kimlik gerektiren literal yollarla asla çakışmaz.
                         .requestMatchers(HttpMethod.GET, "/api/businesses/{id:\\d+}").permitAll()
+                        // Musteri randevu almadan once "bu isletme Pazar acik mi" gibi
+                        // sorular sorabilmeli — calisma saatleri ve kapanislar da
+                        // herkese acik (degistiren PUT/POST/DELETE degil, sadece GET).
+                        .requestMatchers(HttpMethod.GET, "/api/businesses/*/working-hours").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/businesses/*/closures").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/appointments/available-slots").permitAll()
                         .requestMatchers("/api/**").authenticated())
                 // Token yok/geçersizken artık Spring'in varsayılan
