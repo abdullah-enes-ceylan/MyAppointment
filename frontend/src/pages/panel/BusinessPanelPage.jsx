@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import api from "../../api/axios";
 import InboxTab from "./InboxTab";
+import ApprovedTab from "./ApprovedTab";
 import ServicesTab from "./ServicesTab";
 import WorkingHoursTab from "./WorkingHoursTab";
 
 const TABS = [
   { key: "inbox", label: "📥 İstek Kutusu" },
+  { key: "approved", label: "✅ Onaylananlar" },
   { key: "services", label: "✂️ Hizmetler" },
   { key: "hours", label: "🕒 Çalışma Saatleri" },
 ];
@@ -135,6 +137,7 @@ export default function BusinessPanelPage() {
 
       {/* Sekme İçeriği */}
       {activeTab === "inbox" && <InboxTab businessId={selectedBusinessId} />}
+      {activeTab === "approved" && <ApprovedTab businessId={selectedBusinessId} />}
       {activeTab === "services" && <ServicesTab businessId={selectedBusinessId} />}
       {activeTab === "hours" && <WorkingHoursTab businessId={selectedBusinessId} />}
     </div>
