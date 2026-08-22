@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +28,7 @@ public class AppointmentService {
     private final BusinessClosureRepository businessClosureRepository;
     private final AvailabilityCalculator availabilityCalculator;
     private final StaffRepository staffRepository;
+    private final StaffWorkingHourRepository staffWorkingHourRepository;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
             BusinessRepository businessRepository,
@@ -34,7 +36,8 @@ public class AppointmentService {
             WorkingHourRepository workingHourRepository,
             BusinessClosureRepository businessClosureRepository,
             AvailabilityCalculator availabilityCalculator,
-            StaffRepository staffRepository) {
+            StaffRepository staffRepository,
+            StaffWorkingHourRepository staffWorkingHourRepository) {
         this.appointmentRepository = appointmentRepository;
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
@@ -42,6 +45,7 @@ public class AppointmentService {
         this.businessClosureRepository = businessClosureRepository;
         this.availabilityCalculator = availabilityCalculator;
         this.staffRepository = staffRepository;
+        this.staffWorkingHourRepository = staffWorkingHourRepository;
     }
 
     // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
@@ -85,29 +89,6 @@ public class AppointmentService {
         newAppointment.setBusiness(business);
         newAppointment.setServiceItem(service);
 
-        // Faz 2.5: staff opsiyonel. Doluysa GERCEKTEN bu isletmeye ait,
-        // aktif ve secilen hizmeti veren bir personel mi -- ucu de
-        // service/business eslesme kontroluyle ayni gerekce: dogrulanmadan
-        // birakilirsa bir musteri baska bir isletmenin personelini ya da
-        // isten ayrilmis birini secebilirdi.
-        Staff staff = null;
-        if (newAppointment.getStaff() != null) {
-            staff = staffRepository.findById(newAppointment.getStaff().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Personel bulunamadı."));
-            if (!staff.getBusiness().getId().equals(businessId)) {
-                throw new BusinessRuleException("Seçilen personel bu işletmeye ait değil.");
-            }
-            if (!staff.isActive()) {
-                throw new ResourceNotFoundException("Personel bulunamadı.");
-            }
-            boolean staffOffersService = staff.getServices().stream()
-                    .anyMatch(s -> s.getId().equals(service.getId()));
-            if (!staffOffersService) {
-                throw new BusinessRuleException("Seçilen personel bu hizmeti vermiyor.");
-            }
-            newAppointment.setStaff(staff);
-        }
-
         LocalDateTime newStart = newAppointment.getAppointmentDate();
         LocalDateTime newEnd = newStart.plusMinutes(service.getDurationInMinutes());
 
@@ -122,11 +103,55 @@ public class AppointmentService {
             throw new BusinessRuleException("Seçilen saat işletmenin çalışma saatleri dışında.");
         }
 
+        // staff opsiyonel. Doluysa (Faz 2.9 itibariyle: sadece ileride bir
+        // UI staffId gonderirse) GERCEKTEN bu isletmeye ait, aktif ve
+        // secilen hizmeti veren bir personel mi -- ucu de service/business
+        // eslesme kontroluyle ayni gerekce: dogrulanmadan birakilirsa bir
+        // musteri baska bir isletmenin personelini ya da isten ayrilmis
+        // birini secebilirdi.
+        Staff staff = null;
+        if (newAppointment.getStaff() != null) {
+            staff = staffRepository.findById(newAppointment.getStaff().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Personel bulunamadı."));
+            if (!staff.getBusiness().getId().equals(businessId)) {
+                throw new BusinessRuleException("Seçilen personel bu işletmeye ait değil.");
+            }
+            if (!staff.isActive()) {
+                throw new ResourceNotFoundException("Personel bulunamadı.");
+            }
+            if (!staffOffersService(staff, service)) {
+                throw new BusinessRuleException("Seçilen personel bu hizmeti vermiyor.");
+            }
+            newAppointment.setStaff(staff);
+        } else {
+            // Faz 2.9: musteri personel secmiyor/gormuyor (bkz. CLAUDE.md karar
+            // tablosu) -- isletmenin bu hizmeti veren aktif personeli VARSA
+            // gorunmez sekilde en az dolu, musait olana atanir. Boylece
+            // "10 personeli olan isletme bile 1 kisilik kapasite gosteriyor"
+            // bug'i (bkz. ROADMAP 2.9) hem burada hem getAvailableTimeSlots'ta
+            // duzeliyor. Personeli olmayan (ya da bu hizmeti veren personeli
+            // olmayan) isletmeler icin staff null kalir, eski (isletme
+            // capinda) davranis birebir korunur.
+            List<Staff> qualifyingStaff = getQualifyingStaff(businessId, service);
+            if (!qualifyingStaff.isEmpty()) {
+                LocalDateTime dayStart = newStart.toLocalDate().atStartOfDay();
+                LocalDateTime dayEnd = dayStart.plusDays(1).minusNanos(1);
+                staff = autoAssignStaff(qualifyingStaff, business, businessId, newStart.toLocalDate(),
+                        newStart, newEnd, dayStart, dayEnd)
+                        .orElseThrow(() -> new BusinessRuleException("Bu saat için uygun personel bulunamadı."));
+                newAppointment.setStaff(staff);
+            }
+        }
+
         // Spam tıklama koruması + günlük çakışma taraması: personel
-        // atanmışsa personel bazlı, atanmamışsa (eski davranış) işletme
-        // bazlı kontrol edilir. Faz 2.5 öncesi tüm randevular staff=null
-        // olduğu için bu dal hiç değişmemiş davranışla birebir aynı kalıyor
-        // — sadece staff dolu olduğunda YENİ (personel bazlı) yola giriliyor.
+        // atanmışsa (yukarıda ya açıkça ya da Faz 2.9'daki otomatik atamayla
+        // dolmuş olabilir) personel bazlı, atanmamışsa (işletmede bu hizmeti
+        // veren personel hiç yoksa — eski davranış) işletme bazlı kontrol
+        // edilir. Bu, autoAssignStaff'ın kendi kontrolünden SONRA tekrar
+        // yapılıyor gibi görünse de bilerek — save() anına kadar geçen sürede
+        // (ör. eşzamanlı bir başka istek) oluşabilecek yeni bir çakışmayı
+        // yakalayan ikinci bir güvenlik katmanı; asıl garanti yine de DB'deki
+        // partial unique index'te (bkz. V5 migration).
         List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
         LocalDateTime startOfDay = newStart.toLocalDate().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
@@ -308,14 +333,35 @@ public class AppointmentService {
     // dilimlerini hesaplar. Bu metodun işi artık sadece veriyi TOPLAMAK
     // (işletme/hizmet var mı, o gün açık mı, o günün meşgul aralıkları
     // neler) — asıl hesaplama AvailabilityCalculator'a devredildi (bkz.
-    // o sınıftaki açıklama: JPA'dan bağımsız, test edilebilir, Faz 2'de
-    // personel bazlı hale gelecek algoritma).
+    // o sınıftaki açıklama: JPA'dan bağımsız, test edilebilir).
+    //
+    // Faz 2.9: işletmenin bu hizmeti veren aktif personeli VARSA artık
+    // personel bazlı (calculateForStaff, birden fazla personelin BİRLEŞİMİ)
+    // hesaplanıyor -- eskiden burası hep tek-kaynaklı calculate()'ı
+    // kullanıyordu, yani 10 personeli olan bir işletme bile pratikte "1
+    // kişilik kapasite" gösteriyordu (bkz. ROADMAP 2.9'daki bug açıklaması).
+    // Personeli olmayan (ya da bu hizmeti veren personeli olmayan)
+    // işletmeler için davranış birebir korunuyor.
     public List<LocalTime> getAvailableTimeSlots(Long businessId, Long serviceId, LocalDate date) {
         Business business = businessRepository.findById(businessId)
                 .orElseThrow(() -> new ResourceNotFoundException("Dükkan bulunamadı."));
 
         ServiceItem serviceItem = serviceItemRepository.findById(serviceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
+
+        List<Staff> qualifyingStaff = getQualifyingStaff(businessId, serviceItem);
+        if (!qualifyingStaff.isEmpty()) {
+            List<AvailabilityCalculator.StaffAvailability> staffAvailabilities = buildStaffAvailabilities(
+                    business, businessId, date, qualifyingStaff);
+            if (staffAvailabilities.isEmpty()) {
+                // Personel var ama o gun HICBIRI calismiyor (hepsi kapali/izinli).
+                return List.of();
+            }
+            return availabilityCalculator.calculateForStaff(date, serviceItem.getDurationInMinutes(), staffAvailabilities)
+                    .stream()
+                    .map(AvailabilityCalculator.SlotAssignment::time)
+                    .toList();
+        }
 
         Optional<EffectiveHours> hours = resolveWorkingHours(businessId, business, date);
         if (hours.isEmpty()) {
@@ -343,6 +389,114 @@ public class AppointmentService {
     }
 
     private record EffectiveHours(LocalTime openTime, LocalTime closeTime) {
+    }
+
+    // İşletmenin, verilen hizmeti veren aktif personelini döner. Boş liste
+    // dönerse çağıran taraf (getAvailableTimeSlots, createAppointment)
+    // eski (işletme çapında, personelsiz) davranışa düşer.
+    private List<Staff> getQualifyingStaff(Long businessId, ServiceItem service) {
+        return staffRepository.findByBusinessIdAndIsActiveTrue(businessId).stream()
+                .filter(staff -> staffOffersService(staff, service))
+                .toList();
+    }
+
+    private boolean staffOffersService(Staff staff, ServiceItem service) {
+        return staff.getServices().stream().anyMatch(s -> s.getId().equals(service.getId()));
+    }
+
+    // Her personel icin o GUNKU meşgul aralıklarını (randevularını) ve
+    // efektif çalışma saatlerini toplayıp AvailabilityCalculator.StaffAvailability
+    // listesine çevirir. O gün çalışmayan (izinli/kapalı) personel listeye
+    // hiç girmez -- resolveStaffHours Optional.empty() dönerse atlanır.
+    private List<AvailabilityCalculator.StaffAvailability> buildStaffAvailabilities(
+            Business business, Long businessId, LocalDate date, List<Staff> qualifyingStaff) {
+        List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
+        LocalDateTime dayStart = date.atStartOfDay();
+        LocalDateTime dayEnd = dayStart.plusDays(1).minusNanos(1);
+
+        List<AvailabilityCalculator.StaffAvailability> result = new ArrayList<>();
+        for (Staff staff : qualifyingStaff) {
+            resolveStaffHours(staff, business, businessId, date).ifPresent(hours -> {
+                List<Appointment> staffAppointments = appointmentRepository
+                        .findByStaffIdAndAppointmentDateBetweenAndStatusIn(staff.getId(), dayStart, dayEnd, blockingStatuses);
+                List<BusyInterval> busy = staffAppointments.stream()
+                        .map(a -> new BusyInterval(a.getAppointmentDate(),
+                                a.getAppointmentDate().plusMinutes(a.getServiceItem().getDurationInMinutes())))
+                        .toList();
+                result.add(new AvailabilityCalculator.StaffAvailability(staff.getId(), hours.openTime(), hours.closeTime(), busy));
+            });
+        }
+        return result;
+    }
+
+    // Bir personelin belirli bir gündeki efektif çalışma saatlerini döner.
+    // Personelin KENDİ StaffWorkingHour'u varsa o kullanılır; yoksa
+    // (henüz saatleri ayrı ayarlanmamış, yeni eklenmiş personel) işletmenin
+    // genel saatine düşülür (resolveWorkingHours) -- bu sayede yeni eklenen
+    // bir personel, saatleri elle girilmeden hemen rezervasyona açık olur.
+    // İşletme çapında özel kapanış (tatil), personelin kendi saati olsa
+    // bile HER ZAMAN geçerli -- resolveWorkingHours'ın fallback dalında
+    // zaten kontrol ediliyor, personelin kendi saati olduğu daldaysa burada
+    // ayrıca kontrol ediliyor.
+    private Optional<EffectiveHours> resolveStaffHours(Staff staff, Business business, Long businessId, LocalDate date) {
+        Optional<StaffWorkingHour> staffHour = staffWorkingHourRepository
+                .findByStaffIdAndDayOfWeek(staff.getId(), date.getDayOfWeek());
+
+        if (staffHour.isEmpty()) {
+            return resolveWorkingHours(businessId, business, date);
+        }
+
+        if (businessClosureRepository.findByBusinessIdAndDate(businessId, date).isPresent()) {
+            return Optional.empty();
+        }
+
+        StaffWorkingHour swh = staffHour.get();
+        return swh.isClosed()
+                ? Optional.empty()
+                : Optional.of(new EffectiveHours(swh.getOpenTime(), swh.getCloseTime()));
+    }
+
+    // createAppointment'ta musteri hicbir staffId gondermediginde (Faz 2.9
+    // itibariyle su anki TEK client davranisi) cagrilir. Musait olan
+    // personeller arasindan EN AZ DOLU olani secer -- AvailabilityCalculator.
+    // calculateForStaff'taki "fark etmez" atama kuralinin (bkz. o sinif)
+    // tek bir randevu icin, grid'e bagli olmadan (herhangi bir tam saat
+    // icin dogru calisan) versiyonu. Hicbir personel musait degilse
+    // Optional.empty() doner -- cagiran taraf bunu 409'a cevirir.
+    private Optional<Staff> autoAssignStaff(List<Staff> qualifyingStaff, Business business, Long businessId,
+            LocalDate date, LocalDateTime newStart, LocalDateTime newEnd,
+            LocalDateTime dayStart, LocalDateTime dayEnd) {
+        List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
+
+        Staff best = null;
+        int bestBusyCount = Integer.MAX_VALUE;
+
+        for (Staff staff : qualifyingStaff) {
+            Optional<EffectiveHours> staffHours = resolveStaffHours(staff, business, businessId, date);
+            if (staffHours.isEmpty()) {
+                continue;
+            }
+            EffectiveHours h = staffHours.get();
+            if (newStart.toLocalTime().isBefore(h.openTime()) || newEnd.toLocalTime().isAfter(h.closeTime())) {
+                continue;
+            }
+
+            List<Appointment> staffAppointments = appointmentRepository
+                    .findByStaffIdAndAppointmentDateBetweenAndStatusIn(staff.getId(), dayStart, dayEnd, blockingStatuses);
+
+            boolean free = staffAppointments.stream().noneMatch(existing -> {
+                LocalDateTime existingStart = existing.getAppointmentDate();
+                LocalDateTime existingEnd = existingStart.plusMinutes(existing.getServiceItem().getDurationInMinutes());
+                return newStart.isBefore(existingEnd) && newEnd.isAfter(existingStart);
+            });
+
+            if (free && staffAppointments.size() < bestBusyCount) {
+                best = staff;
+                bestBusyCount = staffAppointments.size();
+            }
+        }
+
+        return Optional.ofNullable(best);
     }
 
     // Verilen tarih icin efektif calisma saatlerini dondurur. Optional.empty()
