@@ -2,9 +2,11 @@ package com.randevu.backend.service;
 
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
+import com.randevu.backend.entity.Staff;
 import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
+import com.randevu.backend.repository.StaffRepository;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
@@ -21,10 +23,13 @@ public class OwnershipGuard {
 
     private final BusinessRepository businessRepository;
     private final ServiceItemRepository serviceItemRepository;
+    private final StaffRepository staffRepository;
 
-    public OwnershipGuard(BusinessRepository businessRepository, ServiceItemRepository serviceItemRepository) {
+    public OwnershipGuard(BusinessRepository businessRepository, ServiceItemRepository serviceItemRepository,
+            StaffRepository staffRepository) {
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
+        this.staffRepository = staffRepository;
     }
 
     // businessId'nin gerçekten userId'ye ait olduğunu doğrular.
@@ -47,5 +52,14 @@ public class OwnershipGuard {
                 .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
 
         assertOwnsBusiness(userId, serviceItem.getBusiness().getId());
+    }
+
+    // Personel update/delete/working-hours uçlarında businessId doğrudan
+    // URL'de yok — assertOwnsServiceItem ile aynı desen.
+    public void assertOwnsStaff(Long userId, Long staffId) {
+        Staff staff = staffRepository.findById(staffId)
+                .orElseThrow(() -> new ResourceNotFoundException("Personel bulunamadı."));
+
+        assertOwnsBusiness(userId, staff.getBusiness().getId());
     }
 }
