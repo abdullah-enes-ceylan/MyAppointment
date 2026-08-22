@@ -3,12 +3,14 @@ import api from "../../api/axios";
 import InboxTab from "./InboxTab";
 import ApprovedTab from "./ApprovedTab";
 import ServicesTab from "./ServicesTab";
+import StaffTab from "./StaffTab";
 import WorkingHoursTab from "./WorkingHoursTab";
 
 const TABS = [
   { key: "inbox", label: "📥 İstek Kutusu" },
   { key: "approved", label: "✅ Onaylananlar" },
   { key: "services", label: "✂️ Hizmetler" },
+  { key: "staff", label: "👥 Personel" },
   { key: "hours", label: "🕒 Çalışma Saatleri" },
 ];
 
@@ -139,6 +141,7 @@ export default function BusinessPanelPage() {
       {activeTab === "inbox" && <InboxTab businessId={selectedBusinessId} />}
       {activeTab === "approved" && <ApprovedTab businessId={selectedBusinessId} />}
       {activeTab === "services" && <ServicesTab businessId={selectedBusinessId} />}
+      {activeTab === "staff" && <StaffTab businessId={selectedBusinessId} />}
       {activeTab === "hours" && <WorkingHoursTab businessId={selectedBusinessId} />}
     </div>
   );
