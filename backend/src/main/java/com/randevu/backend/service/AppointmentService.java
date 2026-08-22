@@ -221,6 +221,34 @@ public class AppointmentService {
         return appointmentRepository.save(appointment);
     }
 
+    // Suresi gecmis (appointmentDate + hizmet suresi < su an) ve hala
+    // APPROVED durumunda kalan randevulari COMPLETED'a cevirir. Sistem
+    // tarafindan (Faz 2.2'deki @Scheduled job'dan) cagrilir -- changeStatus'un
+    // aksine bir "currentUserId" yok, cunku bu bir kullanicinin degil,
+    // zamanin tetikledigi bir gecis. Bu yuzden AppointmentAction'a COMPLETE
+    // diye bir eylem EKLENMEDI: o enum sadece kullanicinin PUT
+    // /{id}/{action} ile tetikleyebilecegi eylemler icin (bkz. o enum'un
+    // uzerindeki aciklama) -- musterinin ya da isletme sahibinin "tamamla"
+    // butonuna basmasi anlamli degil, tamamlanma sadece zaman gecmesiyle olur.
+    //
+    // Idempotentlik: sorgu her calistiginda sadece HALA APPROVED olan
+    // randevulari getirir. Bir randevu bir kere COMPLETED olduktan sonra
+    // bir sonraki calismada bu sorguya hic girmez -- ayri bir "son calisma
+    // zamani" takibi gerekmiyor, restart'ta da guvenli.
+    @Transactional
+    public int completeElapsedAppointments() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Appointment> elapsed = appointmentRepository.findByStatus(AppointmentStatus.APPROVED).stream()
+                .filter(a -> a.getAppointmentDate()
+                        .plusMinutes(a.getServiceItem().getDurationInMinutes())
+                        .isBefore(now))
+                .toList();
+
+        elapsed.forEach(a -> a.setStatus(AppointmentStatus.COMPLETED));
+        appointmentRepository.saveAll(elapsed);
+        return elapsed.size();
+    }
+
     private void requireOwner(boolean isBusinessOwner, String message) {
         if (!isBusinessOwner) {
             throw new AccessDeniedException(message);
