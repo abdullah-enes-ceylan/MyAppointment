@@ -10,7 +10,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 // Bir gündeki boş randevu saatlerini hesaplayan saf algoritma. Bilerek JPA
 // entity'lerine (Appointment, Business, ServiceItem) hiç bağımlı değil —
@@ -18,11 +20,11 @@ import java.util.List;
 // somut faydası var:
 //   1. Birim testi yazmak için Hibernate/Spring context'i ayağa kaldırmaya
 //      hiç gerek yok — sadece bu sınıfı "new" ile kurup çağırmak yeterli.
-//   2. Faz 2'de bu algoritma personel bazlı çalışacak: çağıran taraf
-//      (AppointmentService veya sonrasında personel-bazlı bir servis)
-//      hangi randevuların "meşgul" sayılacağına karar verip listeyi
-//      BusyInterval olarak buraya veriyor — bu sınıfın kendisi hiç
-//      değişmeden hem tek-işletme hem personel-bazlı senaryoda çalışabilir.
+//   2. Faz 2.4'te personel bazlı hesaplama eklendi (calculateForStaff):
+//      çağıran taraf hangi randevuların "meşgul" sayılacağına karar verip
+//      listeyi BusyInterval olarak buraya veriyor. Tek-personel calculate()
+//      metoduna dokunulmadı — henüz personel kullanmayan işletmeler için
+//      (Faz 2.5'e kadar tüm işletmeler için) davranış aynen korunuyor.
 @Service
 public class AvailabilityCalculator {
 
@@ -79,6 +81,83 @@ public class AvailabilityCalculator {
             if (!overlapsAny) {
                 availableSlots.add(slotStart.toLocalTime());
             }
+
+            currentPointer = currentPointer.plusMinutes(granularity);
+        }
+
+        return availableSlots;
+    }
+
+    // Faz 2.4: personel bazlı müsaitlik. Tek bir personelin çalışma
+    // saatleri + meşgul aralıkları — calculate()'daki (openTime, closeTime,
+    // busyIntervals) üçlüsünün "kimin" olduğunu da taşıyan hali. staffId
+    // bilerek Long (entity değil) — bu sınıf hâlâ JPA'dan bağımsız kalmalı
+    // (bkz. sınıf üstündeki açıklama).
+    public record StaffAvailability(Long staffId, LocalTime openTime, LocalTime closeTime,
+            List<BusyInterval> busyIntervals) {
+    }
+
+    // Bir ızgara noktasında hangi personelin atandığını taşır. "Fark etmez"
+    // seçeneği (müşteri belirli bir personel istemiyor) tam olarak bu:
+    // çağıran taraf staffId'yi göstermek zorunda değil, sadece o saatin
+    // MÜSAİT olduğunu bilmek yeterli — ama randevu gerçekten oluşturulurken
+    // hangi personele yazılacağını bilmek gerekiyor, o yüzden burada taşınıyor.
+    public record SlotAssignment(LocalTime time, Long assignedStaffId) {
+    }
+
+    // Birden fazla personelin OLASI saatlerinin BİRLEŞİMİNİ (union) hesaplar
+    // — bir saat en az bir personel müsaitse sonuca girer. Her ızgara
+    // noktasında, o saatte müsait olan personeller arasından EN AZ DOLU
+    // olanı (busyIntervals sayısı en düşük) seçilir ("Fark etmez" seçeneğinin
+    // atama kuralı — bkz. ROADMAP 2.4). calculate()'ın aksine tek bir sabit
+    // (openTime, closeTime) çifti yerine her personelin KENDİ saatleri
+    // kullanılıyor; ızgara, TÜM personellerin çalışma saatlerinin
+    // birleşimini (en erken açılış - en geç kapanış) kapsıyor, aksi halde
+    // sadece öğleden sonra çalışan bir personelin sabah saatleri hiç
+    // değerlendirilmezdi.
+    //
+    // Bu metod henüz gerçek veriye (Appointment, Staff) bağlı DEĞİL —
+    // çağıran taraf (Faz 2.5'te AppointmentService) her personelin o
+    // günkü randevularını BusyInterval'a çevirip buraya veriyor. Bu adımın
+    // (2.4) kapsamı sadece algoritmanın kendisi; DB'ye bağlanması ve
+    // "personel hiç yoksa ne olur" sorusunun cevabı 2.5'te.
+    public List<SlotAssignment> calculateForStaff(LocalDate date, int serviceDurationMinutes,
+            List<StaffAvailability> staffAvailabilities) {
+
+        if (serviceDurationMinutes <= 0) {
+            throw new BusinessRuleException("Bu hizmetin süresi geçersiz, müsaitlik hesaplanamaz.");
+        }
+        if (staffAvailabilities.isEmpty()) {
+            return List.of();
+        }
+
+        int granularity = effectiveGranularity();
+
+        LocalTime earliestOpen = staffAvailabilities.stream()
+                .map(StaffAvailability::openTime).min(Comparator.naturalOrder()).orElseThrow();
+        LocalTime latestClose = staffAvailabilities.stream()
+                .map(StaffAvailability::closeTime).max(Comparator.naturalOrder()).orElseThrow();
+
+        LocalDateTime startOfDay = date.atTime(earliestOpen);
+        LocalDateTime endOfDay = date.atTime(latestClose);
+
+        List<SlotAssignment> availableSlots = new ArrayList<>();
+        LocalDateTime currentPointer = startOfDay;
+
+        while (!currentPointer.plusMinutes(serviceDurationMinutes).isAfter(endOfDay)) {
+            final LocalDateTime slotStart = currentPointer;
+            final LocalDateTime proposedEnd = currentPointer.plusMinutes(serviceDurationMinutes);
+            final LocalTime slotStartTime = slotStart.toLocalTime();
+            final LocalTime proposedEndTime = proposedEnd.toLocalTime();
+
+            Optional<StaffAvailability> leastBusyFreeStaff = staffAvailabilities.stream()
+                    .filter(staff -> !slotStartTime.isBefore(staff.openTime())
+                            && !proposedEndTime.isAfter(staff.closeTime()))
+                    .filter(staff -> staff.busyIntervals().stream()
+                            .noneMatch(busy -> slotStart.isBefore(busy.end()) && proposedEnd.isAfter(busy.start())))
+                    .min(Comparator.comparingInt(staff -> staff.busyIntervals().size()));
+
+            leastBusyFreeStaff.ifPresent(staff -> availableSlots.add(new SlotAssignment(slotStartTime, staff.staffId())));
 
             currentPointer = currentPointer.plusMinutes(granularity);
         }
