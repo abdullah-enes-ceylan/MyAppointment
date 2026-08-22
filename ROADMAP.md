@@ -427,7 +427,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 2.1 Randevu durum makinesi + `COMPLETED`/`NO_SHOW` — 868a9cd
 - [x] 2.2 Otomatik tamamlama scheduled job — 048b41e
 - [x] 2.3 `Staff` entity ve personel CRUD — f2f617e
-- [ ] 2.4 Slot algoritmasının personel bazlı hale getirilmesi
+- [x] 2.4 Slot algoritmasının personel bazlı hale getirilmesi — b606b09
 - [ ] 2.5 `Appointment.staff` ve çakışma kontrolünün personel bazlı olması
 - [ ] 2.6 `Review` entity ve "sadece gitmiş kişi yorum yapar" garantisi ⭐
 - [ ] 2.7 İşletme puan ortalaması
