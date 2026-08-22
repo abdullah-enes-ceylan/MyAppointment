@@ -7,6 +7,7 @@ import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.mapper.BusinessMapper;
 import com.randevu.backend.service.BusinessService;
+import com.randevu.backend.service.BusinessService.RatingStats;
 import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.OwnershipGuard;
 
@@ -39,7 +40,7 @@ public class BusinessController {
     @GetMapping
     public List<BusinessDetailResponse> getAllBusinesses() {
         return businessService.getAllBusinesses().stream()
-                .map(BusinessMapper::toDetailResponse)
+                .map(this::toDetailResponseWithRating)
                 .toList();
     }
 
@@ -53,7 +54,7 @@ public class BusinessController {
     // önce müşterinin işletme detayını görebilmesi gerekiyor.
     @GetMapping("/{id:\\d+}")
     public BusinessDetailResponse getBusinessById(@PathVariable Long id) {
-        return BusinessMapper.toDetailResponse(businessService.getBusinessById(id));
+        return toDetailResponseWithRating(businessService.getBusinessById(id));
     }
 
     // YENİ: kendi işletmelerim. Eskiden /owner/{ownerId} idi — path'teki
@@ -65,7 +66,7 @@ public class BusinessController {
     public List<BusinessResponse> getMyBusinesses(Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         return businessService.getBusinessesByOwner(currentUser.getId()).stream()
-                .map(BusinessMapper::toResponse)
+                .map(this::toResponseWithRating)
                 .toList();
     }
 
@@ -77,7 +78,7 @@ public class BusinessController {
                                             Authentication authentication) {
         User owner = currentUserService.getCurrentUser(authentication);
         Business created = businessService.createBusiness(owner, BusinessMapper.toEntity(request));
-        return ResponseEntity.ok(BusinessMapper.toResponse(created));
+        return ResponseEntity.ok(toResponseWithRating(created));
     }
 
     // YENİ: işletme güncelleme, sahiplik kontrollü. OwnershipGuard olmadan,
@@ -90,16 +91,29 @@ public class BusinessController {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         Business updated = businessService.updateBusiness(businessId, request);
-        return BusinessMapper.toResponse(updated);
+        return toResponseWithRating(updated);
     }
 
     // Belirtilen kategori adına göre işletmeleri getirir.
     @GetMapping("/category/{categoryName}")
     public ResponseEntity<List<BusinessDetailResponse>> getBusinessesByCategory(@PathVariable String categoryName) {
         List<BusinessDetailResponse> businesses = businessService.getBusinessesByCategory(categoryName).stream()
-                .map(BusinessMapper::toDetailResponse)
+                .map(this::toDetailResponseWithRating)
                 .toList();
         return ResponseEntity.ok(businesses);
+    }
+
+    // Faz 2.7: her işletme yanıtına puan ortalaması + yorum sayısı ekliyor.
+    // İş listesi başına bir sorgu (N+1) — bilerek: 5-10 işletmelik beta
+    // ölçeğinde önemsiz, erken optimizasyon yapmıyoruz (bkz. ROADMAP 2.7).
+    private BusinessResponse toResponseWithRating(Business business) {
+        RatingStats stats = businessService.getRatingStats(business.getId());
+        return BusinessMapper.toResponse(business, stats.averageRating(), stats.reviewCount());
+    }
+
+    private BusinessDetailResponse toDetailResponseWithRating(Business business) {
+        RatingStats stats = businessService.getRatingStats(business.getId());
+        return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount());
     }
 
 }

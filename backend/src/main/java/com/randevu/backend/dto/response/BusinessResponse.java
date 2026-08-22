@@ -15,5 +15,9 @@ public record BusinessResponse(
         String description,
         LocalTime openTime,
         LocalTime closeTime,
-        BusinessCategory category) {
+        BusinessCategory category,
+        // Faz 2.7 — hiç yorum yoksa null (SQL AVG() boş küme için null döner,
+        // "puan yok" ile "puan 0" birbirine karışmasın diye 0 değil null).
+        Double averageRating,
+        long reviewCount) {
 }

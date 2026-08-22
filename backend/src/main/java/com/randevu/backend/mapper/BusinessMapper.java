@@ -11,7 +11,11 @@ public final class BusinessMapper {
     private BusinessMapper() {
     }
 
-    public static BusinessResponse toResponse(Business business) {
+    // averageRating/reviewCount BİLEREK parametre — bu sınıf diğer
+    // mapper'lar gibi durumsuz (stateless) kalmalı, ReviewRepository'ye
+    // kendi erişip sorgu atmamalı (SRP: mapper veri DÖNÜŞTÜRÜR, veri
+    // TOPLAMAZ). Puanı hesaplayıp buraya veren taraf BusinessService.
+    public static BusinessResponse toResponse(Business business, Double averageRating, long reviewCount) {
         return new BusinessResponse(
                 business.getId(),
                 business.getName(),
@@ -20,7 +24,9 @@ public final class BusinessMapper {
                 business.getDescription(),
                 business.getOpenTime(),
                 business.getCloseTime(),
-                business.getCategory());
+                business.getCategory(),
+                averageRating,
+                reviewCount);
     }
 
     // business.getServiceItems() TÜM hizmetleri (soft-delete edilmişler
@@ -28,7 +34,7 @@ public final class BusinessMapper {
     // dönen bu detay görünümünde, silinmiş bir hizmetin görünüp seçilebilir
     // gibi durması yanlış olur — ServiceItemService.getServicesByBusiness'teki
     // aynı kuralı burada da uyguluyoruz.
-    public static BusinessDetailResponse toDetailResponse(Business business) {
+    public static BusinessDetailResponse toDetailResponse(Business business, Double averageRating, long reviewCount) {
         return new BusinessDetailResponse(
                 business.getId(),
                 business.getName(),
@@ -41,7 +47,9 @@ public final class BusinessMapper {
                 business.getServiceItems().stream()
                         .filter(ServiceItem::isActive)
                         .map(ServiceItemMapper::toResponse)
-                        .toList());
+                        .toList(),
+                averageRating,
+                reviewCount);
     }
 
     // Yeni işletme oluştururken kullanılıyor. owner ve id burada BİLEREK

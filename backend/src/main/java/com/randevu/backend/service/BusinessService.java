@@ -9,6 +9,8 @@ import com.randevu.backend.exception.BusinessRuleException;
 import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.mapper.BusinessMapper;
 import com.randevu.backend.repository.BusinessRepository;
+import com.randevu.backend.repository.ReviewRepository;
+import com.randevu.backend.repository.ReviewStatsProjection;
 import com.randevu.backend.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,10 +22,27 @@ import java.util.List;
 public class BusinessService {
     private final BusinessRepository businessRepository;
     private final UserRepository userRepository;
+    private final ReviewRepository reviewRepository;
 
-    public BusinessService(BusinessRepository businessRepository, UserRepository userRepository) {
+    public BusinessService(BusinessRepository businessRepository, UserRepository userRepository,
+            ReviewRepository reviewRepository) {
         this.businessRepository = businessRepository;
         this.userRepository = userRepository;
+        this.reviewRepository = reviewRepository;
+    }
+
+    // Faz 2.7: puan ortalaması + yorum sayısı. ReviewStatsProjection'ı
+    // (Spring Data'nın kendi arayüz tipi) doğrudan controller'a sızdırmamak
+    // için burada bu küçük, bu sınıfa özel record'a çevriliyor —
+    // AppointmentAction'ın AppointmentService içinde public nested enum
+    // olması gibi aynı desen.
+    public record RatingStats(Double averageRating, long reviewCount) {
+    }
+
+    public RatingStats getRatingStats(Long businessId) {
+        ReviewStatsProjection stats = reviewRepository.getStatsForBusiness(businessId);
+        long count = stats.getReviewCount() != null ? stats.getReviewCount() : 0;
+        return new RatingStats(stats.getAverageRating(), count);
     }
 
     public List<Business> getAllBusinesses() {

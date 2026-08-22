@@ -18,5 +18,8 @@ public record BusinessDetailResponse(
         LocalTime openTime,
         LocalTime closeTime,
         BusinessCategory category,
-        List<ServiceItemResponse> serviceItems) {
+        List<ServiceItemResponse> serviceItems,
+        // Faz 2.7 — bkz. BusinessResponse'daki açıklama.
+        Double averageRating,
+        long reviewCount) {
 }
