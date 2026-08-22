@@ -77,6 +77,7 @@ Bu kararlar tartışılıp verildi; yeniden açmadan önce sor.
 |---|---|
 | Tenant modeli | Bir sahip **N işletme** yönetebilir. `businessId` **asla JWT'ye gömülmez**; her istekte sahiplik DB'den doğrulanır. |
 | Personel/kapasite | Faz 2'de tam `Staff` modeli. "Aynı saate 2 kişi" ihtiyacının çözümü budur, basit kapasite alanı değil. |
+| Personel seçimi (müşteri) | **(2026-08-23)** Müşteri randevu alırken personel seçmez/görmez. Sistem "en az dolu personele ata" kuralıyla görünmez şekilde atar. Gerekçe: küçük işletmede müşteri personeli denemeden değerlendiremez, işletme de dengesiz yoğunluk/favoritizm istemez. Product ihtiyacı çıkarsa ayrı adım olarak eklenir — bkz. ROADMAP 2.9. |
 | Bildirim kanalı | **Karar ertelendi.** Faz 3'te kanal-bağımsız `NotificationPort` soyutlaması kurulur; kanal seçilince tek adapter eklenir. |
 | Para tipi | `BigDecimal(10,2)` — `double` değil. |
 | Zaman | `LocalDateTime` + `Europe/Istanbul`. Sunucu TZ'si UTC'ye sabitlenir. |

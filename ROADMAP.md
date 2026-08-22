@@ -261,8 +261,24 @@ XSS'e karşı çıktı kaçışı.
 - Adresten koordinat üretimi: beta'da 5-10 işletme için **elle giriş** yeterli (harita üzerinden pin);
   geocoding API'si sonra
 
-### Frontend (Faz 2)
-- **2.9** Randevu akışına personel seçimi adımı `[AI]`
+### 2.9 — Kapasitenin gerçekten çalışması: personel bazlı slot hesaplama + panelde personel yönetimi `[BE]` `[AI]`
+**Kritik bug:** Faz 2.4/2.5'te personel bazlı çakışma kontrolü ve `calculateForStaff` kuruldu, ama
+`AppointmentService.getAvailableTimeSlots` hâlâ eski tek-kaynaklı `calculate()`'ı kullanıyor — 10
+personeli olan bir işletme bile pratikte "1 kişilik kapasite" gösteriyor, aynı saatte sadece 1
+randevu görünüyor. Personel eklemenin asıl faydası (paralel kapasite) şu an fiilen çalışmıyor.
+
+**Karar (2026-08-23):** Müşteri tarafında personel seçimi/görünürlüğü YOK — atama tamamen görünmez,
+"en az dolu personele ata" kuralı sunucu tarafında sessizce çalışır. İleride product ihtiyacı
+çıkarsa ayrı bir adım olarak eklenir (bkz. CLAUDE.md karar tablosu).
+
+- Backend: `getAvailableTimeSlots`, işletmenin aktif personeli varsa `calculateForStaff`'a yönlenir;
+  personel yoksa (mevcut/eski davranış) `calculate()`'a düşmeye devam eder — geriye dönük tam uyumlu
+- Backend: `createAppointment`, personel seçimi göndermeyen bir istekte (bugünkü tek client davranışı)
+  müsaitse otomatik en az dolu personele atar
+- Frontend: panele "Personel" sekmesi (ServicesTab ile aynı desen) — ekle/çıkar (soft delete),
+  hangi hizmetleri verdiğini işaretle. Faz 2.3'ün backend'i zaten hazır, sadece ekran eksik.
+
+### Frontend (Faz 2, devamı)
 - **2.10** Yorum/puan bırakma ekranı + işletme kartlarında ve detayında yıldız gösterimi `[AI]`
 - **2.11** Tarayıcı konum izni + "yakınımdakiler" sıralaması, izin reddedilirse şehir seçimine düşüş `[AI]`
 
@@ -432,7 +448,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 2.6 `Review` entity ve "sadece gitmiş kişi yorum yapar" garantisi ⭐ — 201e748
 - [x] 2.7 İşletme puan ortalaması — 9c100c2
 - [ ] 2.8 Konuma göre yakın işletme listeleme
-- [ ] 2.9 Frontend: personel seçimi
+- [ ] 2.9 Backend: personel bazlı slot hesaplama (görünmez) + panelde personel yönetimi
 - [ ] 2.10 Frontend: yorum/puan ekranı
 - [ ] 2.11 Frontend: konum izni ve "yakınımdakiler"
 
