@@ -425,7 +425,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 
 ### Faz 2 — Ürün Vizyonunun Tamamlanması
 - [x] 2.1 Randevu durum makinesi + `COMPLETED`/`NO_SHOW` — 868a9cd
-- [ ] 2.2 Otomatik tamamlama scheduled job
+- [x] 2.2 Otomatik tamamlama scheduled job — 048b41e
 - [ ] 2.3 `Staff` entity ve personel CRUD
 - [ ] 2.4 Slot algoritmasının personel bazlı hale getirilmesi
 - [ ] 2.5 `Appointment.staff` ve çakışma kontrolünün personel bazlı olması
