@@ -430,7 +430,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 2.4 Slot algoritmasının personel bazlı hale getirilmesi — b606b09
 - [x] 2.5 `Appointment.staff` ve çakışma kontrolünün personel bazlı olması — e77998b
 - [x] 2.6 `Review` entity ve "sadece gitmiş kişi yorum yapar" garantisi ⭐ — 201e748
-- [ ] 2.7 İşletme puan ortalaması
+- [x] 2.7 İşletme puan ortalaması — 9c100c2
 - [ ] 2.8 Konuma göre yakın işletme listeleme
 - [ ] 2.9 Frontend: personel seçimi
 - [ ] 2.10 Frontend: yorum/puan ekranı
