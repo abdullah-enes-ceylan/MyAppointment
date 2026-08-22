@@ -1,6 +1,8 @@
 package com.randevu.backend.dto.request;
 
 import com.randevu.backend.entity.BusinessCategory;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -37,4 +39,15 @@ public class BusinessRequest {
 
     @NotNull(message = "Kategori seçilmelidir.")
     private BusinessCategory category;
+
+    // Faz 2.8: bilerek @NotNull DEĞİL -- işletme sahibi konumunu panelde
+    // ayrı bir adımda (harita üzerinden) girer, işletme oluştururken/temel
+    // bilgileri güncellerken zorunlu değil.
+    @DecimalMin(value = "-90", message = "Enlem -90 ile 90 arasında olmalıdır.")
+    @DecimalMax(value = "90", message = "Enlem -90 ile 90 arasında olmalıdır.")
+    private Double latitude;
+
+    @DecimalMin(value = "-180", message = "Boylam -180 ile 180 arasında olmalıdır.")
+    @DecimalMax(value = "180", message = "Boylam -180 ile 180 arasında olmalıdır.")
+    private Double longitude;
 }

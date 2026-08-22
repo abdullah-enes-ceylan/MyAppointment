@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/users/register").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/businesses").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/businesses/nearby").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/businesses/category/**").permitAll()
                         // {id:\d+} kısıtı: SADECE sayısal path'lere eşleşir, "/my" gibi
                         // kimlik gerektiren literal yollarla asla çakışmaz.

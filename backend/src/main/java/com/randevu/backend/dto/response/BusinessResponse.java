@@ -19,5 +19,8 @@ public record BusinessResponse(
         // Faz 2.7 — hiç yorum yoksa null (SQL AVG() boş küme için null döner,
         // "puan yok" ile "puan 0" birbirine karışmasın diye 0 değil null).
         Double averageRating,
-        long reviewCount) {
+        long reviewCount,
+        // Faz 2.8 — işletme konumunu henüz girmemişse null.
+        Double latitude,
+        Double longitude) {
 }

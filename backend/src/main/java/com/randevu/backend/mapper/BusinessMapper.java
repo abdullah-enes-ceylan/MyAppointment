@@ -26,7 +26,9 @@ public final class BusinessMapper {
                 business.getCloseTime(),
                 business.getCategory(),
                 averageRating,
-                reviewCount);
+                reviewCount,
+                business.getLatitude(),
+                business.getLongitude());
     }
 
     // business.getServiceItems() TÜM hizmetleri (soft-delete edilmişler
@@ -49,7 +51,9 @@ public final class BusinessMapper {
                         .map(ServiceItemMapper::toResponse)
                         .toList(),
                 averageRating,
-                reviewCount);
+                reviewCount,
+                business.getLatitude(),
+                business.getLongitude());
     }
 
     // Yeni işletme oluştururken kullanılıyor. owner ve id burada BİLEREK
@@ -66,6 +70,8 @@ public final class BusinessMapper {
                 .openTime(request.getOpenTime())
                 .closeTime(request.getCloseTime())
                 .category(request.getCategory())
+                .latitude(request.getLatitude())
+                .longitude(request.getLongitude())
                 .build();
     }
 
@@ -81,5 +87,7 @@ public final class BusinessMapper {
         business.setOpenTime(request.getOpenTime());
         business.setCloseTime(request.getCloseTime());
         business.setCategory(request.getCategory());
+        business.setLatitude(request.getLatitude());
+        business.setLongitude(request.getLongitude());
     }
 }

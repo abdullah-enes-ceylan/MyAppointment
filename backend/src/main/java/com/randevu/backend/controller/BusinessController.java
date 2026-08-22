@@ -3,12 +3,15 @@ package com.randevu.backend.controller;
 import com.randevu.backend.dto.request.BusinessRequest;
 import com.randevu.backend.dto.response.BusinessDetailResponse;
 import com.randevu.backend.dto.response.BusinessResponse;
+import com.randevu.backend.dto.response.NearbyBusinessResponse;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.mapper.BusinessMapper;
 import com.randevu.backend.service.BusinessService;
 import com.randevu.backend.service.BusinessService.RatingStats;
 import com.randevu.backend.service.CurrentUserService;
+import com.randevu.backend.service.LocationService;
+import com.randevu.backend.service.LocationService.NearbyBusiness;
 import com.randevu.backend.service.OwnershipGuard;
 
 import jakarta.validation.Valid;
@@ -25,12 +28,14 @@ public class BusinessController {
     private final BusinessService businessService;
     private final CurrentUserService currentUserService;
     private final OwnershipGuard ownershipGuard;
+    private final LocationService locationService;
 
     public BusinessController(BusinessService businessService, CurrentUserService currentUserService,
-                               OwnershipGuard ownershipGuard) {
+                               OwnershipGuard ownershipGuard, LocationService locationService) {
         this.businessService = businessService;
         this.currentUserService = currentUserService;
         this.ownershipGuard = ownershipGuard;
+        this.locationService = locationService;
     }
 
     // BusinessDetailResponse dönüyor (hizmetler gömülü) — frontend şu an
@@ -92,6 +97,30 @@ public class BusinessController {
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         Business updated = businessService.updateBusiness(businessId, request);
         return toResponseWithRating(updated);
+    }
+
+    // Faz 2.8: konuma göre yakın işletme listeleme. /api/businesses ile
+    // aynı sebeple herkese açık (permitAll, bkz. SecurityConfig) — müşteri
+    // "yakınımdakiler" özelliğini kullanmak için giriş yapmış olmak
+    // zorunda değil. lat/lng zorunlu (tarayıcının Geolocation API'sinden
+    // ya da manuel şehir seçiminden gelir, bkz. Faz 2.11); radiusKm ve
+    // sayfalama parametreleri makul varsayılanlarla opsiyonel.
+    @GetMapping("/nearby")
+    public List<NearbyBusinessResponse> getNearbyBusinesses(
+            @RequestParam double lat,
+            @RequestParam double lng,
+            @RequestParam(defaultValue = "10") double radiusKm,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+
+        List<NearbyBusiness> nearby = locationService.findNearby(lat, lng, radiusKm);
+
+        int fromIndex = Math.min(page * size, nearby.size());
+        int toIndex = Math.min(fromIndex + size, nearby.size());
+
+        return nearby.subList(fromIndex, toIndex).stream()
+                .map(nb -> new NearbyBusinessResponse(toResponseWithRating(nb.business()), nb.distanceKm()))
+                .toList();
     }
 
     // Belirtilen kategori adına göre işletmeleri getirir.

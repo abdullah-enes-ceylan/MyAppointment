@@ -21,5 +21,8 @@ public record BusinessDetailResponse(
         List<ServiceItemResponse> serviceItems,
         // Faz 2.7 — bkz. BusinessResponse'daki açıklama.
         Double averageRating,
-        long reviewCount) {
+        long reviewCount,
+        // Faz 2.8 — işletme konumunu henüz girmemişse null.
+        Double latitude,
+        Double longitude) {
 }
