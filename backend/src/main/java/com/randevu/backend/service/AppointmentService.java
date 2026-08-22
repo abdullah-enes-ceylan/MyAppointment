@@ -153,7 +153,7 @@ public class AppointmentService {
     // eklemek artık sadece yeni bir sabit + yeni bir case eklemek —
     // mevcut case'lere dokunulmuyor, derleyici de eksik case'i haber verir.
     public enum AppointmentAction {
-        APPROVE, REJECT, CANCEL;
+        APPROVE, REJECT, CANCEL, NO_SHOW;
 
         public static AppointmentAction from(String value) {
             try {
@@ -201,6 +201,20 @@ public class AppointmentService {
                 requireCurrentStatus(appointment, EnumSet.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED),
                         "Sadece bekleyen veya onaylanmış randevular iptal edilebilir.");
                 appointment.setStatus(AppointmentStatus.CANCELLED);
+            }
+            // Musteri gelmedi. Sadece isletme sahibi isaretleyebilir (musterinin
+            // kendi kendine "gelmedim" demesi anlamsiz, ayrica Faz 2.6'daki
+            // yorum garantisinin bir parcasi: NO_SHOW olan bir randevuya yorum
+            // yapilamayacak -- bu yuzden bu isaretlemenin sadece isletme
+            // tarafindan, gercekten olani yansitarak yapilmasi onemli).
+            // Sadece APPROVED'dan gecerli: PENDING bir randevuya musteri zaten
+            // gelmiş olamaz (henuz onaylanmamis), COMPLETED/REJECTED/CANCELLED
+            // zaten terminal durumlar.
+            case NO_SHOW -> {
+                requireOwner(isBusinessOwner, "Bu işlemi yalnızca işletme sahibi yapabilir.");
+                requireCurrentStatus(appointment, EnumSet.of(AppointmentStatus.APPROVED),
+                        "Sadece onaylanmış randevular 'gelmedi' olarak işaretlenebilir.");
+                appointment.setStatus(AppointmentStatus.NO_SHOW);
             }
         }
 

@@ -22,6 +22,7 @@ const STATUS_CONFIG = {
   REJECTED: { label: "Reddedildi", icon: "❌", classes: "bg-red-500/10 border-red-500/20 text-red-400" },
   CANCELLED: { label: "İptal Edildi", icon: "🚫", classes: "bg-slate-500/10 border-slate-500/20 text-slate-400" },
   COMPLETED: { label: "Tamamlandı", icon: "🎉", classes: "bg-teal-500/10 border-teal-500/20 text-teal-400" },
+  NO_SHOW: { label: "Gelinmedi", icon: "🚷", classes: "bg-orange-500/10 border-orange-500/20 text-orange-400" },
 };
 
 // Randevu iptali sadece PENDING/APPROVED durumundaki randevular için
