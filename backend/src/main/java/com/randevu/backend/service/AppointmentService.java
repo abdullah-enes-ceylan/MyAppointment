@@ -26,19 +26,22 @@ public class AppointmentService {
     private final WorkingHourRepository workingHourRepository;
     private final BusinessClosureRepository businessClosureRepository;
     private final AvailabilityCalculator availabilityCalculator;
+    private final StaffRepository staffRepository;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
             BusinessRepository businessRepository,
             ServiceItemRepository serviceItemRepository,
             WorkingHourRepository workingHourRepository,
             BusinessClosureRepository businessClosureRepository,
-            AvailabilityCalculator availabilityCalculator) {
+            AvailabilityCalculator availabilityCalculator,
+            StaffRepository staffRepository) {
         this.appointmentRepository = appointmentRepository;
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
         this.workingHourRepository = workingHourRepository;
         this.businessClosureRepository = businessClosureRepository;
         this.availabilityCalculator = availabilityCalculator;
+        this.staffRepository = staffRepository;
     }
 
     // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
@@ -82,6 +85,29 @@ public class AppointmentService {
         newAppointment.setBusiness(business);
         newAppointment.setServiceItem(service);
 
+        // Faz 2.5: staff opsiyonel. Doluysa GERCEKTEN bu isletmeye ait,
+        // aktif ve secilen hizmeti veren bir personel mi -- ucu de
+        // service/business eslesme kontroluyle ayni gerekce: dogrulanmadan
+        // birakilirsa bir musteri baska bir isletmenin personelini ya da
+        // isten ayrilmis birini secebilirdi.
+        Staff staff = null;
+        if (newAppointment.getStaff() != null) {
+            staff = staffRepository.findById(newAppointment.getStaff().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Personel bulunamadı."));
+            if (!staff.getBusiness().getId().equals(businessId)) {
+                throw new BusinessRuleException("Seçilen personel bu işletmeye ait değil.");
+            }
+            if (!staff.isActive()) {
+                throw new ResourceNotFoundException("Personel bulunamadı.");
+            }
+            boolean staffOffersService = staff.getServices().stream()
+                    .anyMatch(s -> s.getId().equals(service.getId()));
+            if (!staffOffersService) {
+                throw new BusinessRuleException("Seçilen personel bu hizmeti vermiyor.");
+            }
+            newAppointment.setStaff(staff);
+        }
+
         LocalDateTime newStart = newAppointment.getAppointmentDate();
         LocalDateTime newEnd = newStart.plusMinutes(service.getDurationInMinutes());
 
@@ -96,25 +122,32 @@ public class AppointmentService {
             throw new BusinessRuleException("Seçilen saat işletmenin çalışma saatleri dışında.");
         }
 
-        // Spam tıklama koruması: Aynı dükkan + aynı saat için zaten istek varsa engelle
+        // Spam tıklama koruması + günlük çakışma taraması: personel
+        // atanmışsa personel bazlı, atanmamışsa (eski davranış) işletme
+        // bazlı kontrol edilir. Faz 2.5 öncesi tüm randevular staff=null
+        // olduğu için bu dal hiç değişmemiş davranışla birebir aynı kalıyor
+        // — sadece staff dolu olduğunda YENİ (personel bazlı) yola giriliyor.
         List<AppointmentStatus> blockingStatuses = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
-        boolean alreadyExists = appointmentRepository.existsByBusinessIdAndAppointmentDateAndStatusIn(
-                businessId,
-                newAppointment.getAppointmentDate(),
-                blockingStatuses);
-        if (alreadyExists) {
-            throw new BusinessRuleException("Bu saat için zaten bir randevu isteği mevcut!");
-        }
-
         LocalDateTime startOfDay = newStart.toLocalDate().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
 
-        List<Appointment> dailyAppointments = appointmentRepository
-                .findByBusinessIdAndAppointmentDateBetweenAndStatusIn(
-                        businessId,
-                        startOfDay,
-                        endOfDay,
-                        blockingStatuses);
+        boolean alreadyExists;
+        List<Appointment> dailyAppointments;
+        if (staff != null) {
+            alreadyExists = appointmentRepository.existsByStaffIdAndAppointmentDateAndStatusIn(
+                    staff.getId(), newAppointment.getAppointmentDate(), blockingStatuses);
+            dailyAppointments = appointmentRepository.findByStaffIdAndAppointmentDateBetweenAndStatusIn(
+                    staff.getId(), startOfDay, endOfDay, blockingStatuses);
+        } else {
+            alreadyExists = appointmentRepository.existsByBusinessIdAndAppointmentDateAndStatusIn(
+                    businessId, newAppointment.getAppointmentDate(), blockingStatuses);
+            dailyAppointments = appointmentRepository.findByBusinessIdAndAppointmentDateBetweenAndStatusIn(
+                    businessId, startOfDay, endOfDay, blockingStatuses);
+        }
+
+        if (alreadyExists) {
+            throw new BusinessRuleException("Bu saat için zaten bir randevu isteği mevcut!");
+        }
 
         boolean isOverlapping = dailyAppointments.stream().anyMatch(existing -> {
             LocalDateTime existingStart = existing.getAppointmentDate();

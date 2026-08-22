@@ -5,6 +5,7 @@ import com.randevu.backend.entity.Appointment;
 import com.randevu.backend.entity.AppointmentStatus;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
+import com.randevu.backend.entity.Staff;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.mapper.AppointmentMapper;
 import com.randevu.backend.service.AppointmentService;
@@ -68,6 +69,17 @@ public class AppointmentController {
         appointment.setAppointmentDate(request.getAppointmentDate());
         appointment.setStatus(AppointmentStatus.PENDING);
 
+        // Faz 2.5: staffId opsiyonel -- frontend'de henuz personel secim
+        // ekrani yok (Faz 2.9), bu yuzden simdilik hep null gelecek ve
+        // AppointmentService eski (isletme capinda) cakisma kontrolune
+        // duser. Alan API'de simdiden var ki Faz 2.9 geldiginde controller'a
+        // dokunmaya gerek kalmasin.
+        if (request.getStaffId() != null) {
+            Staff staff = new Staff();
+            staff.setId(request.getStaffId());
+            appointment.setStaff(staff);
+        }
+
         Appointment created = appointmentService.createAppointment(appointment);
         return ResponseEntity.ok(AppointmentMapper.toResponse(created));
     }
@@ -86,6 +98,10 @@ public class AppointmentController {
         @NotNull(message = "Randevu tarihi belirtilmelidir.")
         @Future(message = "Randevu tarihi geçmişte olamaz.")
         public LocalDateTime appointmentDate;
+
+        // Bilerek @NotNull DEĞİL — personel sistemi kullanmayan bir işletmede
+        // (ya da müşteri "fark etmez" dediğinde) hiç gönderilmez.
+        public Long staffId;
 
         public Long getBusinessId() {
             return businessId;
@@ -109,6 +125,14 @@ public class AppointmentController {
 
         public void setAppointmentDate(LocalDateTime appointmentDate) {
             this.appointmentDate = appointmentDate;
+        }
+
+        public Long getStaffId() {
+            return staffId;
+        }
+
+        public void setStaffId(Long staffId) {
+            this.staffId = staffId;
         }
     }
 

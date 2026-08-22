@@ -3,7 +3,9 @@ package com.randevu.backend.mapper;
 import com.randevu.backend.dto.response.AppointmentResponse;
 import com.randevu.backend.dto.response.BusinessSummary;
 import com.randevu.backend.dto.response.CustomerSummary;
+import com.randevu.backend.dto.response.StaffSummary;
 import com.randevu.backend.entity.Appointment;
+import com.randevu.backend.entity.Staff;
 import com.randevu.backend.entity.User;
 
 public final class AppointmentMapper {
@@ -18,7 +20,12 @@ public final class AppointmentMapper {
                 appointment.getStatus(),
                 new BusinessSummary(appointment.getBusiness().getId(), appointment.getBusiness().getName()),
                 ServiceItemMapper.toResponse(appointment.getServiceItem()),
-                toCustomerSummary(appointment.getCustomer()));
+                toCustomerSummary(appointment.getCustomer()),
+                toStaffSummary(appointment.getStaff()));
+    }
+
+    private static StaffSummary toStaffSummary(Staff staff) {
+        return staff == null ? null : new StaffSummary(staff.getId(), staff.getName());
     }
 
     private static CustomerSummary toCustomerSummary(User customer) {

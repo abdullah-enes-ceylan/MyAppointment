@@ -15,5 +15,8 @@ public record AppointmentResponse(
         AppointmentStatus status,
         BusinessSummary business,
         ServiceItemResponse serviceItem,
-        CustomerSummary customer) {
+        CustomerSummary customer,
+        // Faz 2.5 — null olabilir: personel atanmadan oluşturulan randevular
+        // için (bkz. StaffSummary'deki açıklama).
+        StaffSummary staff) {
 }

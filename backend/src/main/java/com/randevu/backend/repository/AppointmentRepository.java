@@ -37,4 +37,18 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             LocalDateTime endOfDay,
             List<AppointmentStatus> statuses);
 
+    // Faz 2.5: staffId dolu bir randevunun cakisma kontrolu artik personel
+    // bazli -- yukaridaki business bazli sorgularla ayni amaca hizmet
+    // ediyor, sadece filtre business_id yerine staff_id.
+    boolean existsByStaffIdAndAppointmentDateAndStatusIn(
+            Long staffId,
+            LocalDateTime appointmentDate,
+            List<AppointmentStatus> statuses);
+
+    List<Appointment> findByStaffIdAndAppointmentDateBetweenAndStatusIn(
+            Long staffId,
+            LocalDateTime startOfDay,
+            LocalDateTime endOfDay,
+            List<AppointmentStatus> statuses);
+
 }
