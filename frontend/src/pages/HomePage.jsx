@@ -14,6 +14,21 @@ const CATEGORIES = [
   { key: "TATTOO_STUDIO", label: "Dövme Stüdyosu", icon: "🖋️" },
 ];
 
+// Faz 2.11: tarayıcı konum izni reddedilirse/desteklenmezse düşülen
+// sabit şehir listesi. Koordinatlar şehir merkezine yakın bir nokta --
+// GPS kadar hassas değil ama "şehir çapında yakınımdakiler" için yeterli
+// (bkz. aşağıdaki CITY_RADIUS_KM, GPS'ten daha geniş bir yarıçap kullanıyor).
+const CITIES = [
+  { name: "İstanbul", lat: 41.0082, lng: 28.9784 },
+  { name: "Ankara", lat: 39.9334, lng: 32.8597 },
+  { name: "İzmir", lat: 38.4237, lng: 27.1428 },
+  { name: "Bursa", lat: 40.1826, lng: 29.0665 },
+  { name: "Antalya", lat: 36.8969, lng: 30.7133 },
+];
+
+const GPS_RADIUS_KM = 20;
+const CITY_RADIUS_KM = 50;
+
 function getCategoryLabel(key) {
   const cat = CATEGORIES.find((c) => c.key === key);
   return cat ? cat.label : key;
@@ -29,6 +44,10 @@ export default function HomePage() {
   const [businesses, setBusinesses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("ALL");
+  const [nearbyMode, setNearbyMode] = useState(false);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [showCityPicker, setShowCityPicker] = useState(false);
+  const [locationError, setLocationError] = useState(null);
 
   useEffect(() => {
     fetchBusinesses();
@@ -47,6 +66,7 @@ export default function HomePage() {
   }
 
   async function filterByCategory(categoryKey) {
+    setNearbyMode(false);
     setActiveCategory(categoryKey);
     setLoading(true);
 
@@ -65,6 +85,54 @@ export default function HomePage() {
     }
   }
 
+  // /api/businesses/nearby, {business, distanceKm} sarmalı içinde dönüyor
+  // (bkz. NearbyBusinessResponse) -- kart render kodunun DEĞİŞMEDEN kalması
+  // için business alanı düzleştirilip distanceKm onun üstüne ekleniyor,
+  // böylece "biz.name", "biz.distanceKm" gibi tek seviyeli erişim korunuyor.
+  async function fetchNearby(lat, lng, radiusKm) {
+    setNearbyLoading(true);
+    setLocationError(null);
+    try {
+      const res = await api.get("/api/businesses/nearby", { params: { lat, lng, radiusKm } });
+      const flattened = res.data.map((item) => ({ ...item.business, distanceKm: item.distanceKm }));
+      setBusinesses(flattened);
+      setNearbyMode(true);
+      setShowCityPicker(false);
+    } catch (err) {
+      setLocationError("Yakınımdakiler yüklenirken hata oluştu.");
+    } finally {
+      setNearbyLoading(false);
+      setLoading(false);
+    }
+  }
+
+  function handleNearbyClick() {
+    setLoading(true);
+    setLocationError(null);
+
+    if (!navigator.geolocation) {
+      setShowCityPicker(true);
+      setLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        fetchNearby(position.coords.latitude, position.coords.longitude, GPS_RADIUS_KM);
+      },
+      () => {
+        // İzin reddedildi ya da konum alınamadı -- şehir seçimine düş.
+        setShowCityPicker(true);
+        setLoading(false);
+      },
+      { timeout: 8000 }
+    );
+  }
+
+  function handleCitySelect(city) {
+    fetchNearby(city.lat, city.lng, CITY_RADIUS_KM);
+  }
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
       {/* Hero Section */}
@@ -77,7 +145,58 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Category Filters */}
+      {/* Nearby Button */}
+      <div className="flex justify-center mb-4">
+        <button
+          onClick={handleNearbyClick}
+          disabled={nearbyLoading}
+          className={`px-5 py-2.5 text-sm font-semibold rounded-xl transition-all duration-200 cursor-pointer disabled:opacity-50 ${
+            nearbyMode
+              ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/20"
+              : "bg-surface border border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+          }`}
+        >
+          {nearbyLoading ? "📍 Konum alınıyor..." : "📍 Yakınımdakiler"}
+        </button>
+      </div>
+
+      {/* City Picker Fallback — konum izni reddedilirse/desteklenmezse */}
+      {showCityPicker && (
+        <div className="max-w-md mx-auto mb-6 bg-surface/80 border border-amber-500/20 rounded-2xl p-5 text-center">
+          <p className="text-sm text-slate-300 mb-3">
+            Konum izni alınamadı. Şehrinizi seçerek o çevredeki işletmeleri görebilirsiniz.
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center">
+            {CITIES.map((city) => (
+              <button
+                key={city.name}
+                onClick={() => handleCitySelect(city)}
+                className="px-3 py-1.5 text-xs font-medium bg-bg-light border border-white/10 rounded-lg text-slate-300 hover:text-white hover:border-amber-500/30 transition-all cursor-pointer"
+              >
+                {city.name}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowCityPicker(false)}
+            className="mt-3 text-xs text-slate-500 hover:text-slate-300 cursor-pointer"
+          >
+            Vazgeç
+          </button>
+        </div>
+      )}
+
+      {locationError && (
+        <p className="text-center text-sm text-red-400 mb-4">{locationError}</p>
+      )}
+
+      {/* Category Filters — nearbyMode'dayken de HER ZAMAN görünür kalır:
+          aksi halde kullanıcı "Yakınımdakiler" moduna girdikten sonra
+          kategori listesine dönecek bir çıkış yolu bulamazdı. Herhangi
+          bir kategoriye tıklamak filterByCategory içinde nearbyMode'u
+          zaten false yapıyor. nearbyMode'dayken hiçbir buton "aktif"
+          görünmüyor (activeCategory ile eşleşme aranmıyor) -- o an aktif
+          olan filtre kategori değil, konum. */}
       <div className="mb-8">
         <div className="flex flex-wrap gap-2 justify-center">
           {CATEGORIES.map((cat) => (
@@ -85,7 +204,7 @@ export default function HomePage() {
               key={cat.key}
               onClick={() => filterByCategory(cat.key)}
               className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 cursor-pointer ${
-                activeCategory === cat.key
+                !nearbyMode && activeCategory === cat.key
                   ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/20"
                   : "bg-surface border border-white/10 text-slate-300 hover:text-white hover:border-white/20"
               }`}
@@ -111,7 +230,9 @@ export default function HomePage() {
       ) : businesses.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-5xl mb-4">🔍</p>
-          <p className="text-slate-400 text-lg">Bu kategoride işletme bulunamadı.</p>
+          <p className="text-slate-400 text-lg">
+            {nearbyMode ? "Yakınınızda işletme bulunamadı." : "Bu kategoride işletme bulunamadı."}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -121,11 +242,16 @@ export default function HomePage() {
               className="group bg-surface/80 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:border-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/5 transition-all duration-300"
             >
               {/* Card Header — Category Badge */}
-              <div className="bg-gradient-to-r from-emerald-600/10 to-teal-600/10 px-5 py-3 border-b border-white/5">
+              <div className="bg-gradient-to-r from-emerald-600/10 to-teal-600/10 px-5 py-3 border-b border-white/5 flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400">
                   <span>{getCategoryIcon(biz.category)}</span>
                   {getCategoryLabel(biz.category)}
                 </span>
+                {biz.distanceKm != null && (
+                  <span className="text-xs font-medium text-amber-400">
+                    📏 {biz.distanceKm.toFixed(1)} km
+                  </span>
+                )}
               </div>
 
               {/* Card Body */}
