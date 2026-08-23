@@ -449,7 +449,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 2.7 İşletme puan ortalaması — 9c100c2
 - [x] 2.8 Konuma göre yakın işletme listeleme — def31d5, 33a6433
 - [x] 2.9 Backend: personel bazlı slot hesaplama (görünmez) + panelde personel yönetimi — f0357e4, be73a7e
-- [ ] 2.10 Frontend: yorum/puan ekranı
+- [x] 2.10 Frontend: yorum/puan ekranı — 8ccc3af
 - [ ] 2.11 Frontend: konum izni ve "yakınımdakiler"
 
 ### Faz 3 — Üretime Hazırlık
