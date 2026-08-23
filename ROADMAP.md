@@ -450,7 +450,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 2.8 Konuma göre yakın işletme listeleme — def31d5, 33a6433
 - [x] 2.9 Backend: personel bazlı slot hesaplama (görünmez) + panelde personel yönetimi — f0357e4, be73a7e
 - [x] 2.10 Frontend: yorum/puan ekranı — 8ccc3af
-- [ ] 2.11 Frontend: konum izni ve "yakınımdakiler"
+- [x] 2.11 Frontend: konum izni ve "yakınımdakiler" — fcd0c75
 
 ### Faz 3 — Üretime Hazırlık
 - [ ] 3.1 Test altyapısı ve algoritma testleri
