@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import StarRating from "../components/StarRating";
 
 const CATEGORIES = [
   { key: "ALL", label: "Tümü", icon: "🏢" },
@@ -132,6 +133,17 @@ export default function HomePage() {
                 <h3 className="text-lg font-semibold text-white group-hover:text-emerald-400 transition-colors">
                   {biz.name}
                 </h3>
+
+                {biz.reviewCount > 0 ? (
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <StarRating value={biz.averageRating} size="text-sm" />
+                    <span className="text-slate-400 text-xs">
+                      {biz.averageRating.toFixed(1)} ({biz.reviewCount})
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">Henüz yorum yok</p>
+                )}
 
                 {biz.address && (
                   <div className="flex items-start gap-2 text-sm text-slate-400">

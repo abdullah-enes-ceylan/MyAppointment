@@ -12,6 +12,7 @@ import com.randevu.backend.service.AppointmentService;
 import com.randevu.backend.service.AppointmentService.AppointmentAction;
 import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.OwnershipGuard;
+import com.randevu.backend.service.ReviewService;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
@@ -33,6 +34,7 @@ public class AppointmentController {
     private final AppointmentService appointmentService;
     private final CurrentUserService currentUserService;
     private final OwnershipGuard ownershipGuard;
+    private final ReviewService reviewService;
 
     // Not: AppointmentRepository artık burada YOK. Eskiden updateStatus
     // randevuyu doğrudan repository'den çekiyordu — controller'ın işi HTTP
@@ -41,10 +43,12 @@ public class AppointmentController {
     // taşınmasının doğal bir sonucu.
     public AppointmentController(AppointmentService appointmentService,
                                  CurrentUserService currentUserService,
-                                 OwnershipGuard ownershipGuard) {
+                                 OwnershipGuard ownershipGuard,
+                                 ReviewService reviewService) {
         this.appointmentService = appointmentService;
         this.currentUserService = currentUserService;
         this.ownershipGuard = ownershipGuard;
+        this.reviewService = reviewService;
     }
 
     // 1. Randevu Oluşturma — Token'dan müşteri kimliği alınır
@@ -167,8 +171,12 @@ public class AppointmentController {
     @GetMapping("/me")
     public List<AppointmentResponse> getMyAppointments(Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
+        // Faz 2.10: hasReview burada gercekten hesaplaniyor (musteri
+        // kendi randevularina bakiyor, "yorum yap" butonunun gorunup
+        // gorunmeyecegini bilmesi gerekiyor) -- randevu basina bir sorgu
+        // (N+1), bir musterinin randevu sayisi kucuk oldugu icin onemsiz.
         return appointmentService.getCustomerAppointments(currentUser.getId()).stream()
-                .map(AppointmentMapper::toResponse)
+                .map(apt -> AppointmentMapper.toResponse(apt, reviewService.hasReview(apt.getId())))
                 .toList();
     }
 

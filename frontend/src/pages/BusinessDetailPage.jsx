@@ -3,6 +3,16 @@ import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import Toast from "../components/Toast";
 import LocationPicker from "../components/LocationPicker";
+import StarRating from "../components/StarRating";
+
+function formatReviewDate(dateStr) {
+  const date = new Date(dateStr);
+  const months = [
+    "Oca", "Şub", "Mar", "Nis", "May", "Haz",
+    "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara",
+  ];
+  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
 
 function formatTime(timeStr) {
   // "09:45:00" → "09:45"
@@ -17,6 +27,8 @@ export default function BusinessDetailPage() {
 
   const [business, setBusiness] = useState(null);
   const [services, setServices] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
   const [selectedService, setSelectedService] = useState(null);
   const [selectedDate, setSelectedDate] = useState("");
   const [slots, setSlots] = useState([]);
@@ -48,6 +60,23 @@ export default function BusinessDetailPage() {
       }
     }
     fetchBusiness();
+  }, [id]);
+
+  // Yorumları çek
+  useEffect(() => {
+    async function fetchReviews() {
+      setReviewsLoading(true);
+      try {
+        const res = await api.get(`/api/reviews/business/${id}`);
+        setReviews(res.data);
+      } catch (err) {
+        // Sessizce yut -- yorumlar sayfanin ana islevi (randevu alma) icin
+        // kritik degil, ayri bir hata toast'i gereksiz gurultu olurdu.
+      } finally {
+        setReviewsLoading(false);
+      }
+    }
+    fetchReviews();
   }, [id]);
 
   // Boş saatleri getir
@@ -159,6 +188,16 @@ export default function BusinessDetailPage() {
       <div className="bg-surface/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden mb-6">
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5">
           <h1 className="text-2xl font-bold text-white">{business.name}</h1>
+          {business.reviewCount > 0 ? (
+            <div className="flex items-center gap-1.5 mt-1.5">
+              <StarRating value={business.averageRating} size="text-sm" />
+              <span className="text-emerald-100 text-sm">
+                {business.averageRating.toFixed(1)} ({business.reviewCount} değerlendirme)
+              </span>
+            </div>
+          ) : (
+            <p className="text-emerald-100/70 text-sm mt-1.5 italic">Henüz değerlendirme yok</p>
+          )}
           <div className="flex flex-wrap gap-4 mt-2 text-emerald-100 text-sm">
             {business.address && (
               <span className="flex items-center gap-1.5">📍 {business.address}</span>
@@ -333,6 +372,48 @@ export default function BusinessDetailPage() {
               >
                 {bookingLoading ? "Oluşturuluyor..." : "✅ Randevuyu Onayla"}
               </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Reviews Card */}
+      <div className="bg-surface/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden mt-6">
+        <div className="px-6 py-4 border-b border-white/5">
+          <h2 className="text-lg font-semibold text-white">⭐ Değerlendirmeler</h2>
+        </div>
+
+        <div className="p-6">
+          {reviewsLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="flex items-center gap-3 text-slate-400 text-sm">
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Yükleniyor...
+              </div>
+            </div>
+          ) : reviews.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-4">
+              Bu işletme için henüz değerlendirme yapılmamış.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {reviews.map((review) => (
+                <div key={review.id} className="border-b border-white/5 last:border-0 pb-4 last:pb-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-white">
+                      {review.reviewer.name} {review.reviewer.surName?.charAt(0)}.
+                    </span>
+                    <span className="text-xs text-slate-500">{formatReviewDate(review.createdAt)}</span>
+                  </div>
+                  <StarRating value={review.rating} size="text-xs" />
+                  {review.comment && (
+                    <p className="text-sm text-slate-400 mt-1.5">{review.comment}</p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

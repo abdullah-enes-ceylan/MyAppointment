@@ -88,4 +88,12 @@ public class ReviewService {
     public List<Review> getReviewsForBusiness(Long businessId) {
         return reviewRepository.findByAppointment_Business_IdOrderByCreatedAtDesc(businessId);
     }
+
+    // Faz 2.10: musterinin "Randevularim" ekraninda "Yorum Yap" butonunun
+    // hangi randevularda gosterilecegini belirlemek icin -- zaten yorumu
+    // olan bir randevuda buton hic gorunmemeli (aksi halde tiklayinca
+    // createReview'daki 4. kontrolden 409 donerdi, kotu kullanici deneyimi).
+    public boolean hasReview(Long appointmentId) {
+        return reviewRepository.findByAppointmentId(appointmentId).isPresent();
+    }
 }

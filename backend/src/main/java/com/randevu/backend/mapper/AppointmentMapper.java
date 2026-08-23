@@ -13,7 +13,18 @@ public final class AppointmentMapper {
     private AppointmentMapper() {
     }
 
+    // hasReview=false ile sabit -- cagiran taraf bu bilgiyi onemsemiyorsa
+    // (bkz. asagidaki overload) her randevu icin ekstra bir ReviewRepository
+    // sorgusu yapmaya gerek yok.
     public static AppointmentResponse toResponse(Appointment appointment) {
+        return toResponse(appointment, false);
+    }
+
+    // Faz 2.10: hasReview BILEREK parametre -- bu sinif diger mapper'lar
+    // gibi durumsuz kalmali, ReviewRepository'ye kendi erisip sorgu
+    // atmamali (SRP, bkz. BusinessMapper'daki ayni gerekce). Puani
+    // hesaplayip buraya veren taraf AppointmentController.getMyAppointments.
+    public static AppointmentResponse toResponse(Appointment appointment, boolean hasReview) {
         return new AppointmentResponse(
                 appointment.getId(),
                 appointment.getAppointmentDate(),
@@ -21,7 +32,8 @@ public final class AppointmentMapper {
                 new BusinessSummary(appointment.getBusiness().getId(), appointment.getBusiness().getName()),
                 ServiceItemMapper.toResponse(appointment.getServiceItem()),
                 toCustomerSummary(appointment.getCustomer()),
-                toStaffSummary(appointment.getStaff()));
+                toStaffSummary(appointment.getStaff()),
+                hasReview);
     }
 
     private static StaffSummary toStaffSummary(Staff staff) {

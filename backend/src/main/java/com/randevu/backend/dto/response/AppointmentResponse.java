@@ -18,5 +18,10 @@ public record AppointmentResponse(
         CustomerSummary customer,
         // Faz 2.5 — null olabilir: personel atanmadan oluşturulan randevular
         // için (bkz. StaffSummary'deki açıklama).
-        StaffSummary staff) {
+        StaffSummary staff,
+        // Faz 2.10 — sadece /appointments/me'de anlamlı ve gerçekten
+        // hesaplanıyor (bkz. AppointmentMapper). Diğer uçlarda (işletme
+        // sahibinin inbox/onaylananlar ekranları) hep false döner — o
+        // ekranlar bu alanı hiç kullanmıyor, gereksiz sorgu yapılmasın diye.
+        boolean hasReview) {
 }

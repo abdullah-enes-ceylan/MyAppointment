@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../api/axios";
 import Toast from "../components/Toast";
+import StarRating from "../components/StarRating";
 
 function formatDate(dateStr) {
   const date = new Date(dateStr);
@@ -39,8 +40,68 @@ function StatusBadge({ status }) {
   );
 }
 
-function AppointmentCard({ apt, onCancel, cancelLoading }) {
+// Sadece COMPLETED randevularda gösterilir -- backend zaten bunu ZORUNLU
+// kılıyor (ReviewService.createReview, status != COMPLETED ise 409),
+// bu sadece UX: yanlış durumdaki bir randevuda tıklanıp hata almasın.
+function ReviewForm({ appointmentId, onSubmitted, onCancel }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api.post("/api/reviews/create", { appointmentId, rating, comment: comment || null });
+      onSubmitted();
+    } catch (err) {
+      setError(String(err.response?.data?.message || err.response?.data || "Yorum gönderilirken hata oluştu."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-slate-300">Puanınız:</span>
+        <StarRating value={rating} onChange={setRating} interactive size="text-2xl" />
+      </div>
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        maxLength={1000}
+        rows={3}
+        placeholder="Deneyiminizi paylaşın (opsiyonel)"
+        className="w-full px-3 py-2 bg-bg-light border border-white/10 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
+      />
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <div className="flex gap-3">
+        <button
+          type="submit"
+          disabled={saving}
+          className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+        >
+          {saving ? "Gönderiliyor..." : "Yorumu Gönder"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white border border-white/10 rounded-xl disabled:opacity-50 transition-all cursor-pointer"
+        >
+          Vazgeç
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function AppointmentCard({ apt, onCancel, cancelLoading, onReviewSubmitted }) {
   const [confirming, setConfirming] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
   return (
     <div className="bg-surface/80 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden">
@@ -101,6 +162,28 @@ function AppointmentCard({ apt, onCancel, cancelLoading }) {
             )}
           </div>
         )}
+
+        {apt.status === "COMPLETED" && !apt.hasReview && (
+          <div className="pt-3 border-t border-white/5">
+            {!reviewing ? (
+              <button
+                onClick={() => setReviewing(true)}
+                className="w-full sm:w-auto px-4 py-2 text-sm font-semibold text-amber-400 hover:text-white bg-amber-500/10 hover:bg-amber-600 border border-amber-500/20 hover:border-amber-600 rounded-xl transition-all duration-300 cursor-pointer"
+              >
+                ⭐ Yorum Yap
+              </button>
+            ) : (
+              <ReviewForm
+                appointmentId={apt.id}
+                onCancel={() => setReviewing(false)}
+                onSubmitted={() => {
+                  setReviewing(false);
+                  onReviewSubmitted(apt.id);
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -132,6 +215,13 @@ export default function MyAppointmentsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleReviewSubmitted(appointmentId) {
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? { ...a, hasReview: true } : a))
+    );
+    setToast({ message: "⭐ Yorumunuz kaydedildi, teşekkürler!", type: "success" });
   }
 
   async function handleCancel(appointmentId) {
@@ -213,7 +303,13 @@ export default function MyAppointmentsPage() {
             ) : (
               <div className="space-y-4">
                 {upcoming.map((apt) => (
-                  <AppointmentCard key={apt.id} apt={apt} onCancel={handleCancel} cancelLoading={cancelLoading} />
+                  <AppointmentCard
+                    key={apt.id}
+                    apt={apt}
+                    onCancel={handleCancel}
+                    cancelLoading={cancelLoading}
+                    onReviewSubmitted={handleReviewSubmitted}
+                  />
                 ))}
               </div>
             )}
@@ -229,7 +325,13 @@ export default function MyAppointmentsPage() {
             ) : (
               <div className="space-y-4">
                 {past.map((apt) => (
-                  <AppointmentCard key={apt.id} apt={apt} onCancel={handleCancel} cancelLoading={cancelLoading} />
+                  <AppointmentCard
+                    key={apt.id}
+                    apt={apt}
+                    onCancel={handleCancel}
+                    cancelLoading={cancelLoading}
+                    onReviewSubmitted={handleReviewSubmitted}
+                  />
                 ))}
               </div>
             )}
