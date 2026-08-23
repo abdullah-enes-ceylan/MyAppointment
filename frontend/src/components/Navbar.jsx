@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import logoIcon from "../assets/logo-icon.png";
 
 const OWNER_ROLES = ["BUSINESS_OWNER", "ADMIN"];
 
@@ -26,9 +27,11 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20 group-hover:shadow-emerald-500/40 transition-shadow">
-              <span className="text-white text-sm font-bold">R</span>
-            </div>
+            <img
+              src={logoIcon}
+              alt="Randevum"
+              className="w-9 h-9 object-contain transition-transform group-hover:scale-105"
+            />
             <span className="text-lg font-bold text-white tracking-tight">
               Randevum
             </span>
