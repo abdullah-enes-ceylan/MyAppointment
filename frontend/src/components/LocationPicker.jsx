@@ -34,10 +34,15 @@ function ClickHandler({ onSelect }) {
 
 // Harita kütüphanesine bağımlı TEK bileşen -- ileride Leaflet yerine
 // başka bir servise (ör. Google Maps) geçilmek istenirse SADECE bu
-// dosya değişir, onu kullanan LocationTab.jsx hiç değişmeden kalır
-// (bkz. CLAUDE.md karar tablosu, 2026-08-23: "Leaflet, beta için;
-// gerekirse sonra değiştirilir").
-export default function LocationPicker({ latitude, longitude, onChange }) {
+// dosya değişir, onu kullanan yerler (LocationTab, BusinessDetailPage)
+// hiç değişmeden kalır (bkz. CLAUDE.md karar tablosu, 2026-08-23:
+// "Leaflet, beta için; gerekirse sonra değiştirilir").
+//
+// readOnly=true: müşterinin işletme detayında GÖRDÜĞÜ, tıklanamayan
+// hali (bkz. BusinessDetailPage) -- ClickHandler hiç render edilmiyor,
+// onChange bu modda gerekmiyor. readOnly=false (varsayılan): işletme
+// sahibinin panelde konum SEÇTİĞİ hali (bkz. LocationTab).
+export default function LocationPicker({ latitude, longitude, onChange, readOnly = false, height = 320 }) {
   const [position, setPosition] = useState(
     latitude != null && longitude != null ? [latitude, longitude] : null
   );
@@ -52,13 +57,13 @@ export default function LocationPicker({ latitude, longitude, onChange }) {
       <MapContainer
         center={position ?? ISTANBUL_CENTER}
         zoom={position ? 15 : 11}
-        style={{ height: "320px", width: "100%" }}
+        style={{ height: `${height}px`, width: "100%" }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> katkıda bulunanlar'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <ClickHandler onSelect={handleSelect} />
+        {!readOnly && <ClickHandler onSelect={handleSelect} />}
         {position && <Marker position={position} />}
       </MapContainer>
     </div>

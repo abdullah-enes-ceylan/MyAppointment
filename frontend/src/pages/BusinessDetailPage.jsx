@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import Toast from "../components/Toast";
+import LocationPicker from "../components/LocationPicker";
 
 function formatTime(timeStr) {
   // "09:45:00" → "09:45"
@@ -176,6 +177,14 @@ export default function BusinessDetailPage() {
         {business.description && (
           <div className="px-6 py-4 border-b border-white/5">
             <p className="text-sm text-slate-400">{business.description}</p>
+          </div>
+        )}
+
+        {/* Konum — işletme sahibi henüz konum girmemişse (Faz 2.8) hiç
+            gösterilmiyor, boş bir harita göstermenin anlamı yok. */}
+        {business.latitude != null && business.longitude != null && (
+          <div className="px-6 py-4">
+            <LocationPicker latitude={business.latitude} longitude={business.longitude} readOnly height={180} />
           </div>
         )}
       </div>
