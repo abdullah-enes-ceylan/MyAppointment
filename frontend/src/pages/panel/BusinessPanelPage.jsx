@@ -6,6 +6,7 @@ import ServicesTab from "./ServicesTab";
 import StaffTab from "./StaffTab";
 import WorkingHoursTab from "./WorkingHoursTab";
 import LocationTab from "./LocationTab";
+import InfoTab from "./InfoTab";
 
 const TABS = [
   { key: "inbox", label: "📥 İstek Kutusu" },
@@ -14,6 +15,7 @@ const TABS = [
   { key: "staff", label: "👥 Personel" },
   { key: "hours", label: "🕒 Çalışma Saatleri" },
   { key: "location", label: "📍 Konum" },
+  { key: "info", label: "🏢 Bilgiler" },
 ];
 
 export default function BusinessPanelPage() {
@@ -146,6 +148,7 @@ export default function BusinessPanelPage() {
       {activeTab === "staff" && <StaffTab businessId={selectedBusinessId} />}
       {activeTab === "hours" && <WorkingHoursTab businessId={selectedBusinessId} />}
       {activeTab === "location" && <LocationTab businessId={selectedBusinessId} />}
+      {activeTab === "info" && <InfoTab businessId={selectedBusinessId} />}
     </div>
   );
 }

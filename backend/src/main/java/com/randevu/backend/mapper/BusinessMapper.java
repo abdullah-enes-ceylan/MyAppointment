@@ -25,10 +25,12 @@ public final class BusinessMapper {
                 business.getOpenTime(),
                 business.getCloseTime(),
                 business.getCategory(),
+                business.getServedGender(),
                 averageRating,
                 reviewCount,
                 business.getLatitude(),
-                business.getLongitude());
+                business.getLongitude(),
+                business.isVerified());
     }
 
     // business.getServiceItems() TÜM hizmetleri (soft-delete edilmişler
@@ -46,6 +48,7 @@ public final class BusinessMapper {
                 business.getOpenTime(),
                 business.getCloseTime(),
                 business.getCategory(),
+                business.getServedGender(),
                 business.getServiceItems().stream()
                         .filter(ServiceItem::isActive)
                         .map(ServiceItemMapper::toResponse)
@@ -53,7 +56,8 @@ public final class BusinessMapper {
                 averageRating,
                 reviewCount,
                 business.getLatitude(),
-                business.getLongitude());
+                business.getLongitude(),
+                business.isVerified());
     }
 
     // Yeni işletme oluştururken kullanılıyor. owner ve id burada BİLEREK
@@ -70,6 +74,7 @@ public final class BusinessMapper {
                 .openTime(request.getOpenTime())
                 .closeTime(request.getCloseTime())
                 .category(request.getCategory())
+                .servedGender(request.getServedGender())
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
                 .build();
@@ -87,6 +92,7 @@ public final class BusinessMapper {
         business.setOpenTime(request.getOpenTime());
         business.setCloseTime(request.getCloseTime());
         business.setCategory(request.getCategory());
+        business.setServedGender(request.getServedGender());
         business.setLatitude(request.getLatitude());
         business.setLongitude(request.getLongitude());
     }

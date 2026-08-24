@@ -2,9 +2,12 @@
 
 @theme {
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --color-primary: #10b981;
-  --color-primary-dark: #059669;
-  --color-primary-light: #34d399;
+  /* Faz redesign: marka rengi logoyla uyumlu lacivert oldu (eskisi
+     zümrüt yeşiliydi). Şu an sadece Navbar + HomePage bu paletle
+     yeniden çizildi; diğer sayfalar kademeli geçecek. */
+  --color-primary: #2563eb;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-light: #60a5fa;
   --color-surface: #1e293b;
   --color-surface-light: #334155;
   --color-bg: #0f172a;
@@ -16,17 +19,29 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Custom scrollbar for dark theme */
+/* Scrollbar — açık temaya göre (eskiden koyu temaya göreydi, yeni
+   tasarımda beyaz zemin üstünde koyu bir şerit olarak duruyordu). */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #f1f5f9;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 4px;
+  background: #cbd5e1;
+  border-radius: 5px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #94a3b8;
+}
+
+/* Kategori sekme çubuğu mobilde yatay kayıyor ama kaydırma çubuğu
+   görünmesin -- parmakla kaydırılan bir şeritte çubuk gereksiz gürültü. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

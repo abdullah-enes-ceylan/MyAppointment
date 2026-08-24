@@ -47,6 +47,11 @@ export default function LocationTab({ businessId }) {
         openTime: business.openTime,
         closeTime: business.closeTime,
         category: business.category,
+        // servedGender de geçmek ZORUNDA: applyToEntity tüm alanları
+        // request'ten kopyalıyor, buradan göndermezsek işletmenin hizmet
+        // grubu her konum kaydında sıfırlanırdı (ayrıca @NotNull olduğu
+        // için istek 400 dönerdi).
+        servedGender: business.servedGender,
         latitude: pendingLocation[0],
         longitude: pendingLocation[1],
       });

@@ -1,6 +1,7 @@
 package com.randevu.backend.dto.request;
 
 import com.randevu.backend.entity.BusinessCategory;
+import com.randevu.backend.entity.ServedGender;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -39,6 +40,13 @@ public class BusinessRequest {
 
     @NotNull(message = "Kategori seçilmelidir.")
     private BusinessCategory category;
+
+    // @NotNull: kategori kadar belirleyici bir bilgi, boş bırakılıp
+    // sessizce varsayılana düşmemeli -- işletme sahibi bilinçli seçsin.
+    // (DB tarafındaki DEFAULT 'UNISEX' sadece V10'daki mevcut satırları
+    // doldurmak için, yeni kayıtlar bu alandan geliyor.)
+    @NotNull(message = "Kime hizmet verdiğiniz belirtilmelidir.")
+    private ServedGender servedGender;
 
     // Faz 2.8: bilerek @NotNull DEĞİL -- işletme sahibi konumunu panelde
     // ayrı bir adımda (harita üzerinden) girer, işletme oluştururken/temel

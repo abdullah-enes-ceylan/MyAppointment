@@ -4,6 +4,7 @@ import api from "../api/axios";
 import Toast from "../components/Toast";
 import LocationPicker from "../components/LocationPicker";
 import StarRating from "../components/StarRating";
+import { useAuth } from "../context/AuthContext";
 
 function formatReviewDate(dateStr) {
   const date = new Date(dateStr);
@@ -24,8 +25,10 @@ function formatTime(timeStr) {
 export default function BusinessDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
   const [business, setBusiness] = useState(null);
+  const [isFavorited, setIsFavorited] = useState(false);
   const [services, setServices] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
@@ -78,6 +81,34 @@ export default function BusinessDetailPage() {
     }
     fetchReviews();
   }, [id]);
+
+  // Favori durumu -- ayrı bir "var mı" ucu yok, /me listesinde arıyoruz.
+  // Tek bir detay sayfası yüklemesi için kabul edilebilir, HomePage'deki
+  // gibi toplu bir liste değil.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setIsFavorited(false);
+      return;
+    }
+    api
+      .get("/api/favorites/me")
+      .then((res) => setIsFavorited(res.data.some((b) => b.id === Number(id))))
+      .catch(() => {});
+  }, [id, isAuthenticated]);
+
+  async function toggleFavorite() {
+    const wasFavorited = isFavorited;
+    setIsFavorited(!wasFavorited);
+    try {
+      if (wasFavorited) {
+        await api.delete(`/api/favorites/${id}`);
+      } else {
+        await api.post(`/api/favorites/${id}`);
+      }
+    } catch {
+      setIsFavorited(wasFavorited);
+    }
+  }
 
   // Boş saatleri getir
   async function fetchSlots() {
@@ -187,7 +218,18 @@ export default function BusinessDetailPage() {
       {/* Business Info Card */}
       <div className="bg-surface/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden mb-6">
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5">
-          <h1 className="text-2xl font-bold text-white">{business.name}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="text-2xl font-bold text-white">{business.name}</h1>
+            {isAuthenticated && (
+              <button
+                onClick={toggleFavorite}
+                title={isFavorited ? "Favorilerden çıkar" : "Favorilere ekle"}
+                className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-base bg-black/15 hover:bg-black/25 transition-colors cursor-pointer"
+              >
+                {isFavorited ? "❤️" : "🤍"}
+              </button>
+            )}
+          </div>
           {business.reviewCount > 0 ? (
             <div className="flex items-center gap-1.5 mt-1.5">
               <StarRating value={business.averageRating} size="text-sm" />

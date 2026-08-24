@@ -5,6 +5,6 @@ public enum AppointmentStatus {
     APPROVED, // Onaylandı
     REJECTED, // İşletme reddetti
     CANCELLED, // Müşteri veya işletme iptal etti
-    COMPLETED, // Randevu gerçekleşti ve bitti (Faz 2.2'deki otomatik job ile)
+    COMPLETED, // Randevu gerçekleşti ve bitti
     NO_SHOW // Onaylandı ama müşteri gelmedi — işletme sahibi manuel işaretler
 }

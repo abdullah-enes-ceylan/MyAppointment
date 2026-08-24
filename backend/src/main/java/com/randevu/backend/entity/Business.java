@@ -44,9 +44,26 @@ public class Business {
     private Double latitude;
     private Double longitude;
 
+    // Onaylı işletme rozeti. Owner kendi kendini onaylayamaz -- BusinessRequest'e
+    // BİLEREK eklenmedi, sadece DB/seed üzerinden set edilir (bkz. V8 migration).
+    // @Builder.Default sart: aksi halde builder() ile olusturulan nesnede bu alan
+    // her zaman false olurdu, ServiceItem.isActive'teki ayni gerekce (bkz. o dosya).
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean verified = false;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private BusinessCategory category;
+
+    // Kategoriden ayrı bir eksen: kategori "ne hizmeti", bu "kime".
+    // Gerekçesi ServedGender enum'ında. @Builder.Default olmadan
+    // builder() ile oluşturulan nesnede null kalırdı (Business.verified
+    // ve ServiceItem.isActive'deki aynı Lombok tuzağı).
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "served_gender", nullable = false)
+    private ServedGender servedGender = ServedGender.UNISEX;
 
     // Getter ve Setter metotları
     public BusinessCategory getCategory() {

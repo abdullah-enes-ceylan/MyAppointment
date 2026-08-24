@@ -1,6 +1,7 @@
 package com.randevu.backend.dto.response;
 
 import com.randevu.backend.entity.BusinessCategory;
+import com.randevu.backend.entity.ServedGender;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -18,11 +19,15 @@ public record BusinessDetailResponse(
         LocalTime openTime,
         LocalTime closeTime,
         BusinessCategory category,
+        // Kategoriden ayrı: kategori "ne hizmeti", bu "kime" (bkz. ServedGender).
+        ServedGender servedGender,
         List<ServiceItemResponse> serviceItems,
         // Faz 2.7 — bkz. BusinessResponse'daki açıklama.
         Double averageRating,
         long reviewCount,
         // Faz 2.8 — işletme konumunu henüz girmemişse null.
         Double latitude,
-        Double longitude) {
+        Double longitude,
+        // Onaylı işletme rozeti — sadece admin/seed tarafından set edilir.
+        boolean verified) {
 }
