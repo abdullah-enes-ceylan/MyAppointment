@@ -51,4 +51,17 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             LocalDateTime endOfDay,
             List<AppointmentStatus> statuses);
 
+    // Profil ekranindaki ozet sayilar icin. Listeyi cekip size() almak
+    // yerine COUNT sorgusu -- satirlarin kendisi hic lazim degil, sadece
+    // adedi (100 randevusu olan bir kullanicida 100 satiri Java'ya tasiyip
+    // atmanin anlami yok).
+    long countByCustomerId(Long customerId);
+
+    long countByCustomerIdAndStatus(Long customerId, AppointmentStatus status);
+
+    long countByCustomerIdAndAppointmentDateAfterAndStatusIn(
+            Long customerId,
+            LocalDateTime after,
+            List<AppointmentStatus> statuses);
+
 }

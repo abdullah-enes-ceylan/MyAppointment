@@ -31,4 +31,10 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     @Query("SELECT AVG(r.rating) as averageRating, COUNT(r) as reviewCount "
             + "FROM Review r WHERE r.appointment.business.id = :businessId")
     ReviewStatsProjection getStatsForBusiness(@Param("businessId") Long businessId);
+
+    // Profil ekranindaki "yaptigim yorum sayisi". Yukaridaki isletme bazli
+    // sorgunun aynasi: orada Appointment.business, burada Appointment.customer
+    // uzerinden -- Review'in Business'e de User'a da dogrudan FK'si yok, ikisi
+    // de Appointment uzerinden JOIN'leniyor (bkz. Review entity'sindeki aciklama).
+    long countByAppointment_Customer_Id(Long customerId);
 }
