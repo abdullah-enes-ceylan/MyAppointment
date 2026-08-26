@@ -2,7 +2,6 @@ package com.randevu.backend.controller;
 
 import com.randevu.backend.dto.response.AppointmentResponse;
 import com.randevu.backend.entity.Appointment;
-import com.randevu.backend.entity.AppointmentStatus;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.Staff;
@@ -70,8 +69,10 @@ public class AppointmentController {
         appointment.setCustomer(customer);
         appointment.setBusiness(business);
         appointment.setServiceItem(serviceItem);
+        // status BİLEREK burada atanmıyor: randevunun hangi durumda doğduğu
+        // bir iş kuralı, AppointmentService'te belirleniyor (bkz. oradaki
+        // açıklama). Controller'ın işi HTTP isteğini nesneye çevirmek.
         appointment.setAppointmentDate(request.getAppointmentDate());
-        appointment.setStatus(AppointmentStatus.PENDING);
 
         // Faz 2.5: staffId opsiyonel -- frontend'de henuz personel secim
         // ekrani yok (Faz 2.9), bu yuzden simdilik hep null gelecek ve

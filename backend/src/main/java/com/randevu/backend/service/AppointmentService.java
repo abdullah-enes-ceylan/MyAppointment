@@ -89,6 +89,15 @@ public class AppointmentService {
         newAppointment.setBusiness(business);
         newAppointment.setServiceItem(service);
 
+        // Randevunun hangi durumda DOĞDUĞU bir iş kuralı, HTTP çevirisi değil.
+        // Eskiden controller'da atanıyordu (AppointmentController.createAppointment)
+        // ama orası bu kararı verebilecek bilgiye sahip değil: controller elinde
+        // sadece "new Business(); setId(...)" şeklinde bir stub tutuyor, gerçek
+        // Business'ı hiç yüklemiyor. Dolayısıyla işletmeye bağlı herhangi bir
+        // kuralı (ör. ileride eklenebilecek "otomatik onay" seçeneği) okuyamazdı.
+        // Gerçek Business burada, yukarıda yükleniyor -- karar da buraya ait.
+        newAppointment.setStatus(AppointmentStatus.PENDING);
+
         LocalDateTime newStart = newAppointment.getAppointmentDate();
         LocalDateTime newEnd = newStart.plusMinutes(service.getDurationInMinutes());
 
