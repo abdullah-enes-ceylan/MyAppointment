@@ -1,9 +1,10 @@
 package com.randevu.backend.controller;
 
+import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import com.randevu.backend.dto.request.ServiceItemRequest;
 import com.randevu.backend.dto.response.ServiceItemResponse;
-import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.mapper.ServiceItemMapper;
 import com.randevu.backend.service.CurrentUserService;
@@ -28,12 +29,11 @@ public class ServiceItemController {
         this.ownershipGuard = ownershipGuard;
     }
 
-    @GetMapping
-    public List<ServiceItemResponse> getAllServiceItems() {
-        return serviceItemService.getAllServiceItems().stream()
-                .map(ServiceItemMapper::toResponse)
-                .toList();
-    }
+    // GET /api/service-items (hepsini dok) KALDIRILDI: butun isletmelerin
+    // butun hizmet ve fiyat listesini tek cagrida veriyordu ve cagirani
+    // yoktu -- frontend, testler, koleksiyon dosyalari tarandi, hicbiri
+    // kullanmiyordu. Ihtiyac dogarsa geri eklemek birkac satir; gereksiz
+    // API yuzeyini acik tutmanin ise bedeli var.
 
     @GetMapping("/business/{businessId}")
     public List<ServiceItemResponse> getServiceItemsByBusiness(@PathVariable Long businessId) {
@@ -47,11 +47,11 @@ public class ServiceItemController {
     // doğrudan OwnershipGuard.assertOwnsBusiness kullanılabiliyor.
     @PostMapping("/create/{businessId}")
     public ServiceItemResponse createServiceItem(@PathVariable Long businessId,
-                                          @RequestBody ServiceItem serviceItem,
+                                          @Valid @RequestBody ServiceItemRequest request,
                                           Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
-        return ServiceItemMapper.toResponse(serviceItemService.createServiceItem(businessId, serviceItem));
+        return ServiceItemMapper.toResponse(serviceItemService.createServiceItem(businessId, request));
     }
 
     // update/delete uçlarında businessId path'te yok, sadece serviceId var —
@@ -61,11 +61,11 @@ public class ServiceItemController {
     // değiştirebiliyor ya da hizmetini silebiliyordu.
     @PutMapping("/update/{serviceId}")
     public ServiceItemResponse updateServiceItem(@PathVariable Long serviceId,
-                                          @RequestBody ServiceItem serviceItem,
+                                          @Valid @RequestBody ServiceItemRequest request,
                                           Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsServiceItem(currentUser.getId(), serviceId);
-        return ServiceItemMapper.toResponse(serviceItemService.updateService(serviceId, serviceItem));
+        return ServiceItemMapper.toResponse(serviceItemService.updateService(serviceId, request));
     }
 
     @DeleteMapping("/delete/{serviceId}")
