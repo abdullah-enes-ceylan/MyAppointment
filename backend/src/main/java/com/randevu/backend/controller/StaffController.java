@@ -39,8 +39,16 @@ public class StaffController {
         this.ownershipGuard = ownershipGuard;
     }
 
+    // Sahiplik kontrolu SONRADAN eklendi: bu uc daha once giris yapmis
+    // HERKESE aciкti. Musteri personeli zaten gormuyor/secmiyor (CLAUDE.md
+    // karar tablosu), yani ucun herkese acik olmasinin bir karsiligi yoktu;
+    // buna karsilik rakip bir isletme calisan adlarini okuyabiliyordu.
+    // Calisan adi isletmenin degil, CALISANIN kisisel verisi.
     @GetMapping("/business/{businessId}")
-    public List<StaffResponse> getStaffByBusiness(@PathVariable Long businessId) {
+    public List<StaffResponse> getStaffByBusiness(@PathVariable Long businessId,
+            Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return staffService.getStaffByBusiness(businessId).stream()
                 .map(StaffMapper::toResponse)
                 .toList();
@@ -72,8 +80,13 @@ public class StaffController {
         staffService.deleteStaff(staffId);
     }
 
+    // Ayni sekilde sonradan korumaya alindi -- ve bu digerinden daha
+    // hassas: bir calisanin haftalik mesai programi dogrudan kisisel veri.
     @GetMapping("/{staffId}/working-hours")
-    public List<StaffWorkingHourResponse> getWorkingHours(@PathVariable Long staffId) {
+    public List<StaffWorkingHourResponse> getWorkingHours(@PathVariable Long staffId,
+            Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsStaff(currentUser.getId(), staffId);
         return staffService.getWorkingHours(staffId).stream()
                 .map(StaffWorkingHourMapper::toResponse)
                 .toList();
