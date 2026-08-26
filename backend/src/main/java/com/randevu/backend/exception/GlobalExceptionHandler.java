@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -103,6 +104,24 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({ NoHandlerFoundException.class, NoResourceFoundException.class })
     public ResponseEntity<ErrorResponse> handleNoHandlerFound(Exception ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, "İstenen adres bulunamadı.", request);
+    }
+
+    // Istek govdesi hic okunamadi -> 400. Jackson JSON'i parse edemediginde
+    // (bozuk sozdizimi, gecersiz UTF-8 byte'i, beklenen tipe uymayan deger,
+    // hatta bos govde) Spring bu exception'i firlatir. NoResourceFoundException
+    // ile ayni mantik: bu tamamen ISTEMCININ sucu, sunucunun degil — o yuzden
+    // 500 degil 400 donmeli. Ayrica 500 donmek hata izlemeyi de kirletir:
+    // uzerine aksiyon alinamayacak "sunucu hatasi" alarmlari uretir.
+    // Parser'in ham mesajini ISTEMCIYE VERMIYORUZ; icinde govdenin bir parcasi
+    // (yani kullanici verisi/PII) ve ic sinif isimleri gecebiliyor. Detay
+    // DataIntegrityViolationException'daki gibi sadece warn seviyesinde logda
+    // kalir; istemci genel bir mesaj gorur.
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex,
+            HttpServletRequest request) {
+        log.warn("Okunamayan istek gövdesi — {} {}: {}", request.getMethod(), request.getRequestURI(),
+                ex.getMostSpecificCause().getMessage());
+        return build(HttpStatus.BAD_REQUEST, "İstek gövdesi okunamadı.", request);
     }
 
     // Son savunma hatti: yukaridaki tiplerin hicbirine uymayan, ongorulmemis
