@@ -2,18 +2,13 @@ package com.randevu.backend.controller;
 
 import com.randevu.backend.config.JwtUtil;
 import com.randevu.backend.dto.LoginRequest;
+import com.randevu.backend.dto.response.LoginResponse;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.HashMap;
-import java.util.Map;
 
 // @CrossOrigin("*") buradan kaldırıldı — SecurityConfig'deki global CORS
 // bean'i (corsConfigurationSource) zaten localhost origin'lerine izin
@@ -37,28 +32,19 @@ public class AuthController {
         this.jwtUtil = jwtUtil;
     }
 
+    // try/catch KALDIRILDI: BadCredentialsException artik
+    // GlobalExceptionHandler'da yakalanip 401 + standart ErrorResponse'a
+    // ceviriliyor (bkz. oradaki aciklama). Eskiden burada yakalanip govdeye
+    // duz string yaziliyordu ve API'nin tek "farkli sekilli" yaniti buydu.
+    // Controller artik sadece HTTP cevirisi yapiyor, hata govdesi uretmiyor.
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest loginRequest) {
-        try {
-            // 1. Şifre Doğru mu?
-            authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
-        } catch (BadCredentialsException e) {
-            // Yanlışsa uygulamanın çökmesini engeller, temiz bir 401 hatası döner
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Hatalı email veya şifre!");
-        }
+    public LoginResponse login(@Valid @RequestBody LoginRequest loginRequest) {
+        // Sifre dogru mu? Yanlissa BadCredentialsException firlar ve buradan
+        // disari cikar -- yakalamiyoruz, handler'in isi.
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
 
-        // 2. Doğruysa Kullanıcıyı Bul
-        final UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getEmail());
-
-        // 3. Bileti (JWT) Bas
-        final String jwt = jwtUtil.generateToken(userDetails);
-
-        // 4. Bileti Frontend'e Yolla (Ekstra AuthResponse dosyası açmamıza gerek
-        // kalmadan)
-        Map<String, String> response = new HashMap<>();
-        response.put("token", jwt);
-
-        return ResponseEntity.ok(response);
+        UserDetails userDetails = userDetailsService.loadUserByUsername(loginRequest.getEmail());
+        return new LoginResponse(jwtUtil.generateToken(userDetails));
     }
 }

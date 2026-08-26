@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -104,6 +105,23 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({ NoHandlerFoundException.class, NoResourceFoundException.class })
     public ResponseEntity<ErrorResponse> handleNoHandlerFound(Exception ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, "İstenen adres bulunamadı.", request);
+    }
+
+    // Hatali e-posta/sifre -> 401. Eskiden AuthController bunu kendi
+    // try/catch'iyle yakalayip govdeye DUZ STRING yaziyordu; API'nin geri
+    // kalani ErrorResponse donerken login tek basina farkli bir sekil
+    // uretiyordu. Bunun somut bedeli frontend'e yansimisti: LoginPage
+    // "bazen duz metin, bazen nesne" diye iki bicimi birden ele almak
+    // zorunda kaliyordu.
+    //
+    // Mesaj BILEREK genel: "bu e-posta kayitli degil" ile "sifre yanlis"i
+    // ayirmak, saldirgana hangi e-postalarin sistemde oldugunu tek tek
+    // dogrulatir (kullanici numaralandirma). Hangi alanin yanlis oldugunu
+    // asla soylemiyoruz.
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, "Hatalı e-posta veya şifre.", request);
     }
 
     // Istek govdesi hic okunamadi -> 400. Jackson JSON'i parse edemediginde
