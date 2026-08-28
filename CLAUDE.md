@@ -53,9 +53,10 @@ olgunlaştırılacak, sonrasında aylık abonelik modeline geçilecek.
 **Veritabanı & güvenlik:** PostgreSQL, Spring Security, JWT tabanlı kimlik doğrulama,
 rol bazlı yetkilendirme (RBAC), BCrypt ile parola hashleme.
 
-**Frontend:** React 19 + Vite + Tailwind CSS 4. Koyu tema üzerine zümrüt yeşili ve kehribar/turuncu
-vurgular. Axios ile API haberleşmesi, protected route yapısı, JWT'deki role göre reaktif
-navigasyon menüsü.
+**Frontend:** React 19 + Vite + Tailwind CSS 4. **Açık tema, lacivert (`#161b33`) marka rengi**
+(eski koyu tema + zümrüt yeşili bırakıldı — müşteri ekranları yeniden tasarlandı; işletme
+paneli sekmeleri hâlâ eski koyu temada, kademeli geçecek). Axios ile API haberleşmesi,
+protected route yapısı, JWT'deki role göre reaktif navigasyon, mobilde alt sekme çubuğu.
 
 ### Komutlar
 
@@ -80,9 +81,14 @@ Bu kararlar tartışılıp verildi; yeniden açmadan önce sor.
 | Personel seçimi (müşteri) | **(2026-08-23)** Müşteri randevu alırken personel seçmez/görmez. Sistem "en az dolu personele ata" kuralıyla görünmez şekilde atar. Gerekçe: küçük işletmede müşteri personeli denemeden değerlendiremez, işletme de dengesiz yoğunluk/favoritizm istemez. Product ihtiyacı çıkarsa ayrı adım olarak eklenir — bkz. ROADMAP 2.9. |
 | Bildirim kanalı | **Karar ertelendi.** Faz 3'te kanal-bağımsız `NotificationPort` soyutlaması kurulur; kanal seçilince tek adapter eklenir. |
 | Para tipi | `BigDecimal(10,2)` — `double` değil. |
-| Zaman | `LocalDateTime` + `Europe/Istanbul`. Sunucu TZ'si UTC'ye sabitlenir. |
+| Zaman | `LocalDateTime` + `Europe/Istanbul`. **Tek saat kaynağı: `TimeConfig`'teki `Clock` bean'i.** Kodda çıplak `LocalDateTime.now()` / `Instant.now()` **yasak** — hepsi enjekte edilen `Clock`'tan geçer. Gerekçe: tüm zaman kolonları `timestamp without time zone`, yani DB hiçbir dönüşüm yapmıyor; o değerin hangi dilimi ifade ettiğine dair tek otorite uygulama. |
 | Konum sorgusu | Bounding box ön filtresi + Haversine. PostGIS değil (ucuz hosting'de bakım yükü). |
 | Puan ortalaması | Önce aggregate sorgu; denormalizasyon ancak ölçek gerektirince. |
+| Kategori vs. hizmet grubu | **(2026-08-28)** `BARBER` kategorisi **kaldırıldı** (V10). "Berber" ile "Kuaför" aynı düzlemde değildi — berber sadece erkeğe hizmet veren bir kuaför. Kategori "ne hizmeti", `ServedGender` (ERKEK/KADIN/UNISEX) "kime" sorusunu cevaplıyor. Filtrede "Erkek" seçilince UNISEX işletmeler **de** çıkar. |
+| Randevu istek mi, direkt mi | **(2026-08-28)** Varsayılan **istek modu** (İstek Kutusu) kalıyor — beta'da asıl risk benimsenme, esnafa "sen onaylamadan hiçbir şey olmaz" diyebilmek önemli. İşletme başına **"otomatik onay" anahtarı** eklenecek (henüz yapılmadı); onay adımının değeri zamanla azalıyor. |
+| Talep zaman aşımı | **(2026-08-28)** `düşme anı = randevu saati − min(sabitPay, pencere × oran)`, varsayılan 1 saat / %10. Tek formül, sınırda sıçrama yok. Sadece sabit pay olsa 30 dk sonrasına alınan randevu **doğduğu anda** düşerdi; sadece oran olsa keyfi saatler çıkar ve tek cümleyle anlatılamazdı. Kayıt **silinmiyor**, `EXPIRED` oluyor (müşteriye mesaj gösterilebilsin + uyuşmazlıkta kanıt). `REJECTED` kullanılmıyor: "işletme reddetti" yanlış bilgi olurdu. |
+| Randevu ufku / talep sınırı | **(2026-08-28)** En fazla **90 gün** ileriye randevu (öncesinde hiç sınır yoktu). Aynı işletmede en fazla **3 açık `PENDING`** talep — işletme bazında, çünkü saldırı "bir işletmenin takvimini doldurmak"; genel sınır normal kullanıcıyı cezalandırırdı. `APPROVED` sayılmaz (düzenli müşteri bir sonraki randevusunu alabilmeli). Tek hesabı sınırlar, çoklu hesabı değil (o Faz 3.5). |
+| İş kuralı sayıları | **Asla koda gömülmez.** `application.properties` + tipli `@ConfigurationProperties` (bkz. `AppointmentPolicyProperties`). Geçersiz değerde exception değil, güvenli varsayılana düşüp uyarı loglanır (`AvailabilityCalculator.effectiveGranularity` deseni). |
 
 ---
 
@@ -133,25 +139,61 @@ Tahmin edip ilerleme.
 ### 8. Türkçe konuş
 Samimi ve doğrudan bir dil. Gereksiz övgü ve dolgu cümle yok.
 
+### 9. İddia etme, doğrula
+"Kod okudum, çalışıyor görünüyor" bir doğrulama değil. Bir davranış iddia edilecekse
+gösterilir: curl ile uç nokta, `psql` ile veri, tarayıcıda gerçek akış. Güvenlik
+düzeltmelerinde açık önce sömürülür, sonra kapatılır, sonra aynı saldırının geçmediği
+gösterilir. Varsayımın doğru çıkması, doğrulamayı gereksiz kılmaz — bu oturumda "EXPIRED
+randevuya yorum yapılamıyor, otomatik" varsayımı doğruydu ama test edilene kadar sadece
+varsayımdı.
+
+Test verisi **her zaman temizlenir**; veritabanında iz bırakılmaz.
+
+### 10. Kendi hatanı söyle
+Yanlış bir şey iddia ettiysen düzelt ve neden yanıldığını söyle. Bu oturumda birkaç kez
+oldu: "create ve update ikisi de açık" (update zaten güvenliydi), "satır polling yüzünden
+kayboldu" (aslında test regex'i yanlış butona tıklamıştı). Yanlış teşhisi sessizce
+düzeltmek, sonraki oturumu aynı yanlışa götürür.
+
 ---
 
-## Mevcut Durum ve Bilinen Kritik Sorunlar
+## Mevcut Durum
 
-Kod tabanı denetlendi. Uçtan uca akış çalışıyor (kayıt → login → kategori → hizmet → slot →
-randevu → inbox → onay/ret) ancak **authorization katmanı neredeyse yok**.
+**Faz 0 ve Faz 1 tamamlandı, Faz 2 tamamlandı.** Yukarıda bir zamanlar listelenen 10 kritik
+açığın hepsi kapatıldı (DTO katmanı, `OwnershipGuard`, `GlobalExceptionHandler`, Bean
+Validation, Flyway, yarış koşulu için partial unique index, sırların git'ten çıkarılması).
+Şu an Faz 3 öncesi ek sertleştirme ve ürün olgunlaştırma yapılıyor.
 
-Faz 0 tamamlanana kadar aşağıdakiler açık sayılır — üstüne yeni özellik yazma:
+**Migration seviyesi: V11.** Prod **henüz deploy edilmedi** (Dockerfile/compose yok), tek
+veritabanı yerel geliştirme ortamı — şema değişiklikleri hâlâ ucuz.
 
-1. `POST /api/users/register` ham entity alıyor → `role: "ADMIN"` veya `id` göndererek
-   yetkisiz admin olunabiliyor / mevcut hesap ezilebiliyor
-2. `businessId` bazlı tüm uçlarda sahiplik kontrolü yok → kiracılar arası veri sızıntısı
-3. `ServiceItemController` create/update/delete tamamen korumasız
-4. Servis/işletme eşleşmesi doğrulanmıyor
-5. `durationInMinutes == 0` → slot hesabında sonsuz döngü (kimlik doğrulamasız DoS)
-6. `GET /api/businesses` (permitAll) işletme sahibinin email/telefonunu sızdırıyor
-7. Sırlar (`jwt.secret`, DB parolası) git'te takipli
-8. Randevu oluşturmada yarış koşulu — `@Transactional` yok, DB constraint yok
-9. Hiç input validation, hiç exception handler yok
-10. `ddl-auto=create-drop` — her restart'ta veritabanı siliniyor
+### Bu aşamada eklenenler (git geçmişinde detaylı gerekçeleriyle)
 
-Detaylı analiz ve çözüm sırası: [ROADMAP.md](ROADMAP.md)
+- Favoriler, profil paneli (bilgi/şifre/özet), arayüz yeniden tasarımı (açık tema + lacivert)
+- `ServedGender` modeli (BARBER kaldırıldı), onaylı işletme rozeti
+- **Tek saat kaynağı** (`Clock` bean + TZ sabitleme) — ayrı commit, `TimeConfigTest` ile korunuyor
+- **Talep zaman aşımı**: `AppointmentExpiryPolicy` (saf sınıf, `Clock` almaz — `now` parametre),
+  `EXPIRED` durumu, `AppointmentLifecycleScheduler`, randevu ufku, açık talep sınırı
+- Güvenlik: hizmet uçlarında kiracılar arası ele geçirme açığı (canlı sömürüldü ve kapatıldı),
+  personel uçlarına sahiplik, login hata yönetimi handler'a taşındı
+
+### Bilinen açık işler
+
+| Konu | Durum |
+|---|---|
+| `MyAppointmentsPage`: `EXPIRED` rozeti + `expiresAt` gösterimi | **Yapılmadı** — backend hazır, `expiresAt` API'den geliyor |
+| `InboxTab`'de son tarih gösterimi | **Yapılmadı** (canlı yenileme yapıldı) |
+| İşletme başına "otomatik onay" anahtarı | Karar verildi, yazılmadı (~45 dk) |
+| `/me/upcoming` ile profil "yaklaşan" sayısı tutarsız | `CANCELLED`/`NO_SHOW` sayıyor; ayrı görev olarak açıldı |
+| `favorites.created_at`'te `DEFAULT now()` | Kullanılmıyor ama şemada duruyor; ayrı küçük migration ile temizlenecek |
+| İl/ilçe ile manuel konum seçimi | Tasarım konuşuldu (`city`/`district` alanları), yazılmadı |
+| İşletme fotoğrafı | Altyapı yok; kartlarda kategori ikonlu stilize kapak var |
+
+### Doğrulama beklentisi
+
+Bu projede **"kod okudum, doğru görünüyor" yeterli sayılmıyor.** Bir davranış iddia
+edilecekse canlı doğrulanır: curl ile uç noktalar, `psql` ile veri, tarayıcıda gerçek akış.
+Güvenlik düzeltmelerinde açık önce **sömürülüp** sonra kapatıldığı gösterilir. Test verisi
+her zaman temizlenir.
+
+Yol haritası ve faz planı: [ROADMAP.md](ROADMAP.md)
