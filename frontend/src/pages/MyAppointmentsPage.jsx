@@ -24,6 +24,9 @@ const STATUS_CONFIG = {
   CANCELLED: { label: "İptal Edildi", icon: "🚫", classes: "bg-slate-500/10 border-slate-500/20 text-slate-400" },
   COMPLETED: { label: "Tamamlandı", icon: "🎉", classes: "bg-teal-500/10 border-teal-500/20 text-teal-400" },
   NO_SHOW: { label: "Gelinmedi", icon: "🚷", classes: "bg-orange-500/10 border-orange-500/20 text-orange-400" },
+  // REJECTED'dan bilerek farklı renk: burada işletme talebi reddetmedi,
+  // süresinde yanıtlamadı (bkz. backend AppointmentStatus.EXPIRED yorumu).
+  EXPIRED: { label: "Zaman Aşımına Uğradı", icon: "⏰", classes: "bg-purple-500/10 border-purple-500/20 text-purple-400" },
 };
 
 // Randevu iptali sadece PENDING/APPROVED durumundaki randevular için
@@ -129,6 +132,13 @@ function AppointmentCard({ apt, onCancel, cancelLoading, onReviewSubmitted }) {
           <div className="space-y-1.5">
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tarih & Saat</p>
             <p className="text-white font-semibold text-sm">📅 {formatDate(apt.appointmentDate)}</p>
+            {/* expiresAt sadece PENDING'de dolu geliyor (backend AppointmentService.expiresAt) --
+                formülü burada tekrar üretmiyoruz, sunucudan geldiği gibi gösteriyoruz. */}
+            {apt.status === "PENDING" && apt.expiresAt && (
+              <p className="text-[11px] text-amber-400/80">
+                ⏰ {formatDate(apt.expiresAt)}'e kadar yanıtlanmazsa düşer
+              </p>
+            )}
           </div>
         </div>
 
