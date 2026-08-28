@@ -178,6 +178,14 @@ export default function InboxTab({ businessId }) {
                     <p className="text-white font-semibold text-sm">
                       📅 {formatDate(apt.appointmentDate)}
                     </p>
+                    {/* Bu uctan donen talepler zaten hep PENDING, yani expiresAt her zaman dolu
+                        geliyor (bkz. backend AppointmentService.expiresAt) -- formulu burada
+                        tekrar uretmiyoruz, sunucudan geldigi gibi gosteriyoruz. */}
+                    {apt.expiresAt && (
+                      <p className="text-[11px] text-amber-400/80">
+                        ⏰ Son yanıt: {formatDate(apt.expiresAt)}
+                      </p>
+                    )}
                   </div>
                 </div>
 
