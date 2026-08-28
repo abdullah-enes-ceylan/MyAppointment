@@ -48,4 +48,12 @@ public class Appointment {
     @JoinColumn(name = "staff_id", nullable = true)
     private Staff staff;
 
+    // Talebin oluşturulma anı. Zaman aşımı kuralı "randevu saati − talep anı"
+    // penceresine dayanıyor (bkz. AppointmentExpiryPolicy), bu bilgi olmadan
+    // hesaplanamıyordu. Değer DAİMA uygulamadan gelir — V11'de sütunun
+    // DEFAULT'u bilerek kaldırıldı ki Postgres'in saati ile uygulamanın saati
+    // aynı kolonu beslemesin (bkz. o migration'daki açıklama).
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+
 }

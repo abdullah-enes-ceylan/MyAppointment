@@ -59,6 +59,10 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     long countByCustomerIdAndStatus(Long customerId, AppointmentStatus status);
 
+    // Acik talep sinirinin sayimi: bir musterinin AYNI ISLETMEDEKI
+    // cevaplanmamis talepleri (bkz. AppointmentService.createAppointment).
+    int countByCustomerIdAndBusinessIdAndStatus(Long customerId, Long businessId, AppointmentStatus status);
+
     long countByCustomerIdAndAppointmentDateAfterAndStatusIn(
             Long customerId,
             LocalDateTime after,

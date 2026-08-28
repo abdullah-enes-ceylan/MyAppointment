@@ -23,5 +23,18 @@ public record AppointmentResponse(
         // hesaplanıyor (bkz. AppointmentMapper). Diğer uçlarda (işletme
         // sahibinin inbox/onaylananlar ekranları) hep false döner — o
         // ekranlar bu alanı hiç kullanmıyor, gereksiz sorgu yapılmasın diye.
-        boolean hasReview) {
+        boolean hasReview,
+        // Cevaplanmayan bir talebin ne zaman düşeceği. Sadece PENDING
+        // randevularda dolu, diğerlerinde null.
+        //
+        // Sunucuda hesaplanıp gönderiliyor ki kural TEK YERDE kalsın --
+        // frontend formülü yeniden uygulamaya kalkarsa iki taraf sessizce
+        // birbirinden ayrılabilir (bkz. AppointmentExpiryPolicy).
+        //
+        // Saat dilimi TAŞIMAZ (LocalDateTime): bu değer, uygulamanın
+        // sabitlenmiş saat diliminde (bkz. TimeConfig, Europe/Istanbul)
+        // bir duvar saatidir. Türkiye tek dilim olduğu için istemci bunu
+        // olduğu gibi gösterebilir; çok bölgeli bir kullanım gerekirse
+        // burası Instant'a çevrilmeli.
+        LocalDateTime expiresAt) {
 }

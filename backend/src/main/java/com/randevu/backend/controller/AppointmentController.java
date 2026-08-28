@@ -86,7 +86,7 @@ public class AppointmentController {
         }
 
         Appointment created = appointmentService.createAppointment(appointment);
-        return ResponseEntity.ok(AppointmentMapper.toResponse(created));
+        return ResponseEntity.ok(toResponse(created));
     }
 
     // Yardımcı Request Yapısı — customerId kaldırıldı, artık token'dan alınıyor
@@ -150,7 +150,7 @@ public class AppointmentController {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return appointmentService.getBusinessAppointments(businessId).stream()
-                .map(AppointmentMapper::toResponse)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -160,7 +160,7 @@ public class AppointmentController {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         List<AppointmentResponse> pending = appointmentService.getPendingAppointmentsForBusiness(businessId).stream()
-                .map(AppointmentMapper::toResponse)
+                .map(this::toResponse)
                 .toList();
         return ResponseEntity.ok(pending);
     }
@@ -177,7 +177,8 @@ public class AppointmentController {
         // gorunmeyecegini bilmesi gerekiyor) -- randevu basina bir sorgu
         // (N+1), bir musterinin randevu sayisi kucuk oldugu icin onemsiz.
         return appointmentService.getCustomerAppointments(currentUser.getId()).stream()
-                .map(apt -> AppointmentMapper.toResponse(apt, reviewService.hasReview(apt.getId())))
+                .map(apt -> AppointmentMapper.toResponse(apt, reviewService.hasReview(apt.getId()),
+                        appointmentService.expiresAt(apt)))
                 .toList();
     }
 
@@ -195,7 +196,7 @@ public class AppointmentController {
         User currentUser = currentUserService.getCurrentUser(authentication);
         AppointmentAction parsedAction = AppointmentAction.from(action);
         Appointment updated = appointmentService.changeStatus(appointmentId, parsedAction, currentUser.getId());
-        return ResponseEntity.ok(AppointmentMapper.toResponse(updated));
+        return ResponseEntity.ok(toResponse(updated));
     }
 
     // 5. Kendi Yaklaşan Randevularımı Listeleme — /customer/{id}/upcoming ile
@@ -204,7 +205,7 @@ public class AppointmentController {
     public List<AppointmentResponse> getMyUpcomingAppointments(Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         return appointmentService.getUpcomingCustomerAppointments(currentUser.getId()).stream()
-                .map(AppointmentMapper::toResponse)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -214,7 +215,7 @@ public class AppointmentController {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return appointmentService.getUpcomingBusinessAppointments(businessId).stream()
-                .map(AppointmentMapper::toResponse)
+                .map(this::toResponse)
                 .toList();
     }
 
@@ -230,5 +231,12 @@ public class AppointmentController {
 
         List<LocalTime> availableSlots = appointmentService.getAvailableTimeSlots(businessId, serviceId, date);
         return ResponseEntity.ok(availableSlots);
+    }
+
+    // BusinessController.toResponseWithRating ile ayni desen: mapper
+    // durumsuz kalsin diye hesaplanan deger burada uretilip parametre
+    // geciriliyor. expiresAt sadece PENDING randevularda dolu.
+    private AppointmentResponse toResponse(Appointment appointment) {
+        return AppointmentMapper.toResponse(appointment, false, appointmentService.expiresAt(appointment));
     }
 }

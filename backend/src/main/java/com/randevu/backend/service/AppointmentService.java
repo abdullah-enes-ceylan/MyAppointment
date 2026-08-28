@@ -30,6 +30,7 @@ public class AppointmentService {
     private final AvailabilityCalculator availabilityCalculator;
     private final StaffRepository staffRepository;
     private final StaffWorkingHourRepository staffWorkingHourRepository;
+    private final AppointmentExpiryPolicy expiryPolicy;
     private final Clock clock;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
@@ -40,6 +41,7 @@ public class AppointmentService {
             AvailabilityCalculator availabilityCalculator,
             StaffRepository staffRepository,
             StaffWorkingHourRepository staffWorkingHourRepository,
+            AppointmentExpiryPolicy expiryPolicy,
             Clock clock) {
         this.appointmentRepository = appointmentRepository;
         this.businessRepository = businessRepository;
@@ -49,6 +51,7 @@ public class AppointmentService {
         this.availabilityCalculator = availabilityCalculator;
         this.staffRepository = staffRepository;
         this.staffWorkingHourRepository = staffWorkingHourRepository;
+        this.expiryPolicy = expiryPolicy;
         this.clock = clock;
     }
 
@@ -101,6 +104,37 @@ public class AppointmentService {
         // kuralı (ör. ileride eklenebilecek "otomatik onay" seçeneği) okuyamazdı.
         // Gerçek Business burada, yukarıda yükleniyor -- karar da buraya ait.
         newAppointment.setStatus(AppointmentStatus.PENDING);
+
+        // Zaman kaynagi DAIMA enjekte edilen Clock -- ciplak LocalDateTime.now()
+        // yok (bkz. TimeConfig). Ayni "now" hem createdAt hem ufuk kontrolu
+        // icin kullaniliyor ki ikisi arasinda mikrosaniyelik bir tutarsizlik
+        // bile olusmasin.
+        LocalDateTime now = LocalDateTime.now(clock);
+        newAppointment.setCreatedAt(now);
+
+        // Randevu ufku: onceden hicbir ust sinir yoktu (@Future sadece gecmisi
+        // engelliyordu), yani 2099'a randevu alinabiliyordu. Sinirsiz ufuk hem
+        // slotu aylarca kilitliyor hem de isletmenin taahhut edemeyecegi bir
+        // tarihe randevu yaziyor (fiyat/personel/calisma saatleri degisir).
+        if (expiryPolicy.isBeyondHorizon(newAppointment.getAppointmentDate(), now)) {
+            throw new BusinessRuleException("Randevu tarihi en fazla "
+                    + expiryPolicy.getBookingHorizon().toDays() + " gün ileriye alınabilir.");
+        }
+
+        // Ayni isletmede acik (cevaplanmamis) talep siniri. Isletme bazinda
+        // cunku saldiri senaryosu "bir isletmenin takvimini doldurmak"; genel
+        // bir sinir uc farkli isletmeden cevap bekleyen normal kullaniciyi da
+        // cezalandirirdi. APPROVED sayilmiyor: duzenli musterinin mevcut
+        // randevusu varken bir sonrakini almasi engellenmemeli.
+        // Not: bu tek hesapli kotuye kullanimi sinirlar, coklu hesabi degil --
+        // o kayit/IP bazli hiz limiti isi (Faz 3.5).
+        int openRequests = appointmentRepository.countByCustomerIdAndBusinessIdAndStatus(
+                newAppointment.getCustomer().getId(), businessId, AppointmentStatus.PENDING);
+        if (openRequests >= expiryPolicy.getMaxOpenRequestsPerBusiness()) {
+            throw new BusinessRuleException("Bu işletmede cevaplanmamış "
+                    + expiryPolicy.getMaxOpenRequestsPerBusiness()
+                    + " talebiniz var. Yeni talep için mevcutların sonuçlanmasını bekleyin.");
+        }
 
         LocalDateTime newStart = newAppointment.getAppointmentDate();
         LocalDateTime newEnd = newStart.plusMinutes(service.getDurationInMinutes());
@@ -318,6 +352,40 @@ public class AppointmentService {
         elapsed.forEach(a -> a.setStatus(AppointmentStatus.COMPLETED));
         appointmentRepository.saveAll(elapsed);
         return elapsed.size();
+    }
+
+    // Cevaplanmamis taleplerden suresi dolanlari EXPIRED'a cevirir.
+    //
+    // completeElapsedAppointments ile ayni desen: sorgu SADECE hala PENDING
+    // olanlari getirdigi icin islem idempotent -- job yeniden calistiginda
+    // daha once dusurulenler zaten eslesmiyor, ayrica "en son ne zaman
+    // calisti" gibi bir durum tutmaya gerek kalmiyor.
+    //
+    // Dusme ani hesabi burada DEGIL, AppointmentExpiryPolicy'de. O sinif saf
+    // ve saat kaynagi tasimiyor; "now"i buradan, enjekte edilen Clock'tan
+    // aliyor (bkz. TimeConfig).
+    @Transactional
+    public int expireStaleRequests() {
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        List<Appointment> expired = appointmentRepository.findByStatus(AppointmentStatus.PENDING).stream()
+                .filter(a -> expiryPolicy.isExpired(a.getCreatedAt(), a.getAppointmentDate(), now))
+                .toList();
+
+        expired.forEach(a -> a.setStatus(AppointmentStatus.EXPIRED));
+        appointmentRepository.saveAll(expired);
+        return expired.size();
+    }
+
+    // Bir talebin ne zaman dusecegi -- API uzerinden hem musteriye hem
+    // isletmeye gosteriliyor. Kural gizli bir mekanik olmamali: gosterilmezse
+    // 5 gun once talep atan musteri randevudan 1 saat once "olmamis" diye
+    // ogrenir ve baska yere de gidemez.
+    public LocalDateTime expiresAt(Appointment appointment) {
+        if (appointment.getStatus() != AppointmentStatus.PENDING || appointment.getCreatedAt() == null) {
+            return null;
+        }
+        return expiryPolicy.expiresAt(appointment.getCreatedAt(), appointment.getAppointmentDate());
     }
 
     private void requireOwner(boolean isBusinessOwner, String message) {
