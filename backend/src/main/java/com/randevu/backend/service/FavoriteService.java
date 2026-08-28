@@ -10,16 +10,20 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.time.Clock;
 
 @Service
 public class FavoriteService {
 
     private final FavoriteRepository favoriteRepository;
     private final BusinessRepository businessRepository;
+    private final Clock clock;
 
-    public FavoriteService(FavoriteRepository favoriteRepository, BusinessRepository businessRepository) {
+    public FavoriteService(FavoriteRepository favoriteRepository, BusinessRepository businessRepository,
+            Clock clock) {
         this.favoriteRepository = favoriteRepository;
         this.businessRepository = businessRepository;
+        this.clock = clock;
     }
 
     // Kalp ikonu bir toggle -- zaten favorideyse ikinci POST hata vermez,
@@ -36,7 +40,7 @@ public class FavoriteService {
                     Favorite favorite = Favorite.builder()
                             .user(user)
                             .business(business)
-                            .createdAt(LocalDateTime.now())
+                            .createdAt(LocalDateTime.now(clock))
                             .build();
                     return favoriteRepository.save(favorite);
                 });

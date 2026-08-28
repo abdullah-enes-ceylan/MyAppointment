@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import java.time.Instant;
+import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -32,6 +32,14 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    // Hata zaman damgalari da tek saat kaynagindan -- bkz.
+    // RestAuthenticationEntryPoint'teki ayni gerekce.
+    private final Clock clock;
+
+    public GlobalExceptionHandler(Clock clock) {
+        this.clock = clock;
+    }
 
     // Istenen kaynak veritabaninda yok -> 404.
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -66,7 +74,7 @@ public class GlobalExceptionHandler {
                 .forEach(error -> fieldErrors.put(error.getField(), error.getDefaultMessage()));
 
         ValidationErrorResponse body = new ValidationErrorResponse(
-                Instant.now(),
+                clock.instant(),
                 HttpStatus.BAD_REQUEST.value(),
                 HttpStatus.BAD_REQUEST.getReasonPhrase(),
                 "Girdiğiniz bilgilerde hata var.",
@@ -153,7 +161,7 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, HttpServletRequest request) {
         ErrorResponse body = new ErrorResponse(
-                Instant.now(),
+                clock.instant(),
                 status.value(),
                 status.getReasonPhrase(),
                 message,

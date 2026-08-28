@@ -7,7 +7,7 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.time.Instant;
+import java.time.Clock;
 
 // Token yoksa/geçersizse/süresi dolmuşsa devreye giren nokta. Bu, DispatcherServlet'e
 // (yani controller'lara) hiç ulaşmadan, Spring Security'nin filtre zincirinde
@@ -19,6 +19,16 @@ import java.time.Instant;
 // sonlandırıyordu, bu yüzden hiç çalışmıyordu).
 @Component
 public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
+
+    // Hata zaman damgasi da uygulamanin TEK saat kaynagindan geliyor.
+    // Sebep sadece tutarlilik degil: bir sorunu arastirirken hata
+    // yanitindaki saat ile is verisindeki saat (randevu, yorum, favori)
+    // farkli kaynaklardan gelirse zaman cizelgesi cikarilamaz.
+    private final Clock clock;
+
+    public RestAuthenticationEntryPoint(Clock clock) {
+        this.clock = clock;
+    }
 
     // Not: GlobalExceptionHandler'ın ErrorResponse'unu burada kullanmıyoruz.
     // Bu proje "spring-boot-starter-web" değil "spring-boot-starter-webmvc"
@@ -35,7 +45,7 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
         String json = String.format(
                 "{\"timestamp\":\"%s\",\"status\":401,\"error\":\"Unauthorized\",\"message\":\"%s\",\"path\":\"%s\"}",
-                Instant.now(),
+                clock.instant(),
                 "Bu işlem için giriş yapmanız gerekiyor.",
                 escapeJson(request.getRequestURI()));
 

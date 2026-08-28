@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.time.Clock;
 
 // "Sadece gerçekten gitmiş kişi yorum yapabilir" garantisinin SERVİS
 // katmanı -- Review entity'sindeki UNIQUE(appointment_id) kısıtı (şema
@@ -32,10 +33,13 @@ public class ReviewService {
 
     private final ReviewRepository reviewRepository;
     private final AppointmentRepository appointmentRepository;
+    private final Clock clock;
 
-    public ReviewService(ReviewRepository reviewRepository, AppointmentRepository appointmentRepository) {
+    public ReviewService(ReviewRepository reviewRepository, AppointmentRepository appointmentRepository,
+            Clock clock) {
         this.reviewRepository = reviewRepository;
         this.appointmentRepository = appointmentRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -61,7 +65,7 @@ public class ReviewService {
         // yani appointmentDate'in gecmiste oldugu zaten garanti -- burada
         // ayrica "gecmiste mi" diye bakmaya gerek yok, sadece "cok mu eski"
         // kontrol ediliyor.
-        if (appointment.getAppointmentDate().isBefore(LocalDateTime.now().minusDays(REVIEW_WINDOW_DAYS))) {
+        if (appointment.getAppointmentDate().isBefore(LocalDateTime.now(clock).minusDays(REVIEW_WINDOW_DAYS))) {
             throw new BusinessRuleException(
                     "Bu randevu için yorum yapma süresi doldu (" + REVIEW_WINDOW_DAYS + " gün).");
         }
@@ -79,7 +83,7 @@ public class ReviewService {
                 .appointment(appointment)
                 .rating(request.getRating())
                 .comment(request.getComment())
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(clock))
                 .build();
 
         return reviewRepository.save(review);

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.time.Clock;
 
 // Profil ekranindaki ozet sayilari toplar. UserService'e DEGIL ayri bir
 // sinifa konuldu (SRP): UserService "hesap yonetimi" (kayit, profil,
@@ -30,13 +31,16 @@ public class ProfileStatsService {
     private final AppointmentRepository appointmentRepository;
     private final FavoriteRepository favoriteRepository;
     private final ReviewRepository reviewRepository;
+    private final Clock clock;
 
     public ProfileStatsService(AppointmentRepository appointmentRepository,
             FavoriteRepository favoriteRepository,
-            ReviewRepository reviewRepository) {
+            ReviewRepository reviewRepository,
+            Clock clock) {
         this.appointmentRepository = appointmentRepository;
         this.favoriteRepository = favoriteRepository;
         this.reviewRepository = reviewRepository;
+        this.clock = clock;
     }
 
     // Verilen kullanicinin profil ozet sayilarini hesaplar.
@@ -45,7 +49,7 @@ public class ProfileStatsService {
                 appointmentRepository.countByCustomerId(userId),
                 appointmentRepository.countByCustomerIdAndStatus(userId, AppointmentStatus.COMPLETED),
                 appointmentRepository.countByCustomerIdAndAppointmentDateAfterAndStatusIn(
-                        userId, LocalDateTime.now(), ACTIVE_STATUSES),
+                        userId, LocalDateTime.now(clock), ACTIVE_STATUSES),
                 favoriteRepository.countByUser_Id(userId),
                 reviewRepository.countByAppointment_Customer_Id(userId));
     }

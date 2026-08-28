@@ -17,6 +17,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.time.Clock;
 
 @Service
 public class AppointmentService {
@@ -29,6 +30,7 @@ public class AppointmentService {
     private final AvailabilityCalculator availabilityCalculator;
     private final StaffRepository staffRepository;
     private final StaffWorkingHourRepository staffWorkingHourRepository;
+    private final Clock clock;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
             BusinessRepository businessRepository,
@@ -37,7 +39,8 @@ public class AppointmentService {
             BusinessClosureRepository businessClosureRepository,
             AvailabilityCalculator availabilityCalculator,
             StaffRepository staffRepository,
-            StaffWorkingHourRepository staffWorkingHourRepository) {
+            StaffWorkingHourRepository staffWorkingHourRepository,
+            Clock clock) {
         this.appointmentRepository = appointmentRepository;
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
@@ -46,6 +49,7 @@ public class AppointmentService {
         this.availabilityCalculator = availabilityCalculator;
         this.staffRepository = staffRepository;
         this.staffWorkingHourRepository = staffWorkingHourRepository;
+        this.clock = clock;
     }
 
     // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
@@ -304,7 +308,7 @@ public class AppointmentService {
     // zamani" takibi gerekmiyor, restart'ta da guvenli.
     @Transactional
     public int completeElapsedAppointments() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         List<Appointment> elapsed = appointmentRepository.findByStatus(AppointmentStatus.APPROVED).stream()
                 .filter(a -> a.getAppointmentDate()
                         .plusMinutes(a.getServiceItem().getDurationInMinutes())
@@ -330,12 +334,12 @@ public class AppointmentService {
 
     // Müşterinin şu andan sonraki randevularını getirir.
     public List<Appointment> getUpcomingCustomerAppointments(Long customerId) {
-        return appointmentRepository.findByCustomerIdAndAppointmentDateAfter(customerId, LocalDateTime.now());
+        return appointmentRepository.findByCustomerIdAndAppointmentDateAfter(customerId, LocalDateTime.now(clock));
     }
 
     // İşletmenin şu andan sonraki randevularını getirir.
     public List<Appointment> getUpcomingBusinessAppointments(Long businessId) {
-        return appointmentRepository.findByBusinessIdAndAppointmentDateAfter(businessId, LocalDateTime.now());
+        return appointmentRepository.findByBusinessIdAndAppointmentDateAfter(businessId, LocalDateTime.now(clock));
     }
 
     // Belirtilen gün için işletmenin ve hizmetin süresine uygun boş saat
