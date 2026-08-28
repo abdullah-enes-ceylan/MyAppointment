@@ -210,7 +210,7 @@ export default function HomePage() {
           filtre kategori değil, konum. Sekmeye tıklamak konum modundan
           çıkmanın da yolu (filterByCategory nearbyMode'u false yapıyor). */}
       <div className="bg-white border-b border-slate-200 sticky top-14 sm:top-16 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6">
           <div className="flex gap-1 sm:gap-2 overflow-x-auto scrollbar-none">
             {CATEGORIES.map(({ key, label, Icon }) => {
               const active = !nearbyMode && activeCategory === key;
@@ -234,7 +234,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6">
         {/* Hizmet grubu filtresi — kategoriden AYRI bir eksen olduğu için
             ayrı bir satırda duruyor (bkz. backend ServedGender). */}
         <div className="flex items-center gap-2 mb-5 overflow-x-auto scrollbar-none">
