@@ -68,6 +68,34 @@ cd backend && ./mvnw spring-boot:run
 cd frontend && npm run dev
 ```
 
+### Yerel ortam — tekrar eden tuzaklar
+
+Bunlar birkaç kez zaman kaybettirdi, her seferinde yeniden keşfetmeye gerek yok.
+
+**Türkçe karakter + Git Bash.** Kabuktan doğrudan Türkçe karakterli SQL veya JSON
+göndermek veriyi bozuyor (`invalid byte sequence for encoding "UTF8"`, ya da API
+tarafında `JSON parse error: Invalid UTF-8 middle byte`). Dosyayı Python ile UTF-8
+yazıp göndermek gerekiyor:
+
+```bash
+python3 -c "import io; io.open('q.sql','w',encoding='utf-8').write('...')"
+PGCLIENTENCODING=UTF8 psql ... -f q.sql
+curl ... -H "Content-Type: application/json; charset=utf-8" --data-binary @govde.json
+```
+
+**psql yolu:** `C:\PostgreSQL\18\bin\psql.exe` (Program Files altında **değil**).
+Veritabanı `appointment_db`. Kimlik bilgileri `application-dev.properties`'te —
+o dosya gitignore'da, **buraya asla yazma**.
+
+**Şema doğrulaması.** `ddl-auto=validate` açık: entity'ye alan eklenip migration
+yazılmazsa (veya migration henüz uygulanmadıysa) uygulama açılmaz ve testler
+`BackendApplicationTests` üzerinden düşer. Bu bir arıza değil, güvenlik ağı —
+migration'ı uygulamak için backend'i yeniden başlat.
+
+**Uygulanmış migration dosyası ASLA düzenlenmez.** Flyway açılışta checksum
+doğruluyor; tek bir yorum satırı değişikliği bile `FlywayValidateException` ile
+uygulamayı durdurur. Yeni numaralı migration yaz.
+
 ---
 
 ## Verilmiş Mimari Kararlar
