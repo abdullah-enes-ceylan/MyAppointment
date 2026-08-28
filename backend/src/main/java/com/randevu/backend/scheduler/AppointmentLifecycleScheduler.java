@@ -23,6 +23,13 @@ public class AppointmentLifecycleScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(AppointmentLifecycleScheduler.class);
 
+    // Iki gorev de AYNI araligi paylasiyor ve placeholder TEK yerde
+    // yaziyor. Ayni metni iki @Scheduled'a ayri ayri yazmak, ileride
+    // birinin guncellenip digerinin unutulmasina acik kapi birakirdi.
+    // Anotasyon degeri derleme zamani sabiti olmak zorunda; literal ile
+    // baslatilan static final String bu sarti sagliyor.
+    private static final String SCHEDULER_CRON = "${app.appointment.scheduler-cron:0 */5 * * * *}";
+
     private final AppointmentService appointmentService;
 
     public AppointmentLifecycleScheduler(AppointmentService appointmentService) {
@@ -38,7 +45,7 @@ public class AppointmentLifecycleScheduler {
     // cron kullanildi: fixedDelay onceki calisma bitince sayar, bu isin
     // "saat baginda" calismasi onemli degil ama okunabilirlik icin cron
     // ifadesi (her 5 dakikada bir) tercih edildi.
-    @Scheduled(cron = "${app.appointment.scheduler-cron:0 */5 * * * *}")
+    @Scheduled(cron = SCHEDULER_CRON)
     public void completeElapsedAppointments() {
         int completedCount = appointmentService.completeElapsedAppointments();
         if (completedCount > 0) {
@@ -51,7 +58,7 @@ public class AppointmentLifecycleScheduler {
     // 3 dakikalik pay) bu oransal olarak buyuk bir sapma ama pratikte
     // zararsiz -- bilerek kabul edildi. Daha sik calistirmak, kazandirdigi
     // hassasiyetten fazla veritabani yuku getirirdi.
-    @Scheduled(cron = "${app.appointment.scheduler-cron:0 */5 * * * *}")
+    @Scheduled(cron = SCHEDULER_CRON)
     public void expireStaleRequests() {
         int expiredCount = appointmentService.expireStaleRequests();
         if (expiredCount > 0) {

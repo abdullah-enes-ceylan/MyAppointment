@@ -2,6 +2,11 @@ import { useState, useEffect } from "react";
 import api from "../../api/axios";
 import Toast from "../../components/Toast";
 
+// Arka plan yenileme araligi. Backend'deki zaman asimi job'i varsayilan
+// olarak 5 dakikada bir calisiyor; buradaki aralik ondan belirgin sekilde
+// kisa olmali ki ekrandaki liste sunucudan uzun sure geride kalmasin.
+const REFRESH_INTERVAL_MS = 60_000;
+
 function formatDate(dateStr) {
   const date = new Date(dateStr);
   const months = [
@@ -27,19 +32,40 @@ export default function InboxTab({ businessId }) {
   const [actionLoading, setActionLoading] = useState(null);
 
   useEffect(() => {
-    if (businessId) fetchPending();
+    if (!businessId) return;
+    fetchPending();
+
+    // Talepler arka planda zaman aşımına uğrayabiliyor (bkz. backend
+    // AppointmentExpiryPolicy) ve bu sayfa açık bırakılan bir sekmede
+    // dakikalarca durabiliyor. Yenileme olmadan işletme, sunucuda çoktan
+    // düşmüş bir talebi ekranda görüp onaylamaya çalışıyor ve anlamsız bir
+    // hata alıyordu -- bu "kötü şans" değil, panelin normal kullanımı.
+    const interval = setInterval(() => fetchPending({ silent: true }), REFRESH_INTERVAL_MS);
+
+    // Sekmeye geri dönüldüğünde beklemeden tazele: kullanıcı başka
+    // sekmedeyken periyodik yenileme çalışmış olsa bile, döndüğü anda en
+    // güncel listeyi görmesi gerekiyor.
+    const onFocus = () => fetchPending({ silent: true });
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [businessId]);
 
-  async function fetchPending() {
-    setLoading(true);
+  // silent: arka plan yenilemelerinde yükleniyor göstergesini yakmıyoruz --
+  // aksi halde liste her dakika gözünün önünde "yükleniyor"a dönerdi.
+  async function fetchPending({ silent = false } = {}) {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const res = await api.get(`/api/appointments/business/${businessId}/pending`);
       setAppointments(res.data);
     } catch (err) {
-      setError("Bekleyen randevular yüklenirken hata oluştu.");
+      if (!silent) setError("Bekleyen randevular yüklenirken hata oluştu.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -55,6 +81,11 @@ export default function InboxTab({ businessId }) {
     } catch (err) {
       const msg = err.response?.data?.message || err.response?.data || "İşlem sırasında bir hata oluştu.";
       setToast({ message: String(msg), type: "error" });
+      // Hata mesajı tek başına yetmiyor: işlem başarısız olduysa ekrandaki
+      // liste sunucudaki gerçekle uyuşmuyor demektir (en tipik hali: talep
+      // bu arada zaman aşımına uğramış). Tazelemezsek kullanıcı aynı satıra
+      // tekrar tekrar basıp aynı hatayı almaya devam eder.
+      fetchPending({ silent: true });
     } finally {
       setActionLoading(null);
     }
