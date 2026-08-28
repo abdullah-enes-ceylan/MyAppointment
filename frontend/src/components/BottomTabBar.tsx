@@ -1,6 +1,7 @@
+import type { ComponentType, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
 
-const icon = {
+const icon: SVGProps<SVGSVGElement> = {
   width: 22,
   height: 22,
   viewBox: "0 0 24 24",
@@ -11,7 +12,13 @@ const icon = {
   strokeLinejoin: "round",
 };
 
-const TABS = [
+interface Tab {
+  to: string;
+  label: string;
+  Icon: ComponentType;
+}
+
+const TABS: Tab[] = [
   {
     to: "/",
     label: "Keşfet",

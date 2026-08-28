@@ -31,6 +31,11 @@ api.interceptors.request.use(
 // kullanıcının oturumu geçerli, onu zorla çıkışa atmak yanlış olur.
 // Sayfa bileşenleri kendi catch bloklarında err.response?.data?.message
 // ile bu hatayı zaten gösteriyor (bkz. BusinessDetailPage, PendingAppointments).
+//
+// error parametresinin tipini axios'un kendi tanımı (AxiosInterceptorRejected)
+// belirliyor, burada elle bir tip bildirimi eklenmiyor -- axios bu callback'i
+// serbest tipli kabul ediyor, kütüphane sınırında olan ve bizim eklemediğimiz
+// bir gevşeklik.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
