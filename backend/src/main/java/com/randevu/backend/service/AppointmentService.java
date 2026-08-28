@@ -395,9 +395,26 @@ public class AppointmentService {
     }
 
     private void requireCurrentStatus(Appointment appointment, Set<AppointmentStatus> allowed, String message) {
-        if (!allowed.contains(appointment.getStatus())) {
-            throw new BusinessRuleException(message);
+        if (allowed.contains(appointment.getStatus())) {
+            return;
         }
+
+        // EXPIRED icin ozel mesaj. Kontrol burada, tek yerde: approve, reject,
+        // cancel ve no_show'un DORDU de bu metottan geciyor, dolayisiyla
+        // mesaji her eyleme ayri ayri eklemek gerekmiyor (ve biri unutulmuyor).
+        //
+        // Neden gerekli: zaman asimina ugramis bir talepte cagirana
+        // "Sadece onay bekleyen randevular onaylanabilir" deniyordu -- teknik
+        // olarak dogru ama GERCEK sebebi soylemiyor. Isletme sahibi istek
+        // kutusunu acik birakip 10 dakika sonra onaya bastiginda tam bu
+        // duruma dusuyor ve talebin neden kayboldugunu anlamiyor. Bu "kotu
+        // sans" degil, normal kullanim.
+        if (appointment.getStatus() == AppointmentStatus.EXPIRED) {
+            throw new BusinessRuleException(
+                    "Bu talep cevaplanmadığı için zaman aşımına uğradı, artık işlem yapılamaz.");
+        }
+
+        throw new BusinessRuleException(message);
     }
 
     // Müşterinin şu andan sonraki randevularını getirir.

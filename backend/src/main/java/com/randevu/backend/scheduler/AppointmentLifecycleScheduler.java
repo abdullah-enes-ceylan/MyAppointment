@@ -38,7 +38,7 @@ public class AppointmentLifecycleScheduler {
     // cron kullanildi: fixedDelay onceki calisma bitince sayar, bu isin
     // "saat baginda" calismasi onemli degil ama okunabilirlik icin cron
     // ifadesi (her 5 dakikada bir) tercih edildi.
-    @Scheduled(cron = "0 */5 * * * *")
+    @Scheduled(cron = "${app.appointment.scheduler-cron:0 */5 * * * *}")
     public void completeElapsedAppointments() {
         int completedCount = appointmentService.completeElapsedAppointments();
         if (completedCount > 0) {
@@ -51,7 +51,7 @@ public class AppointmentLifecycleScheduler {
     // 3 dakikalik pay) bu oransal olarak buyuk bir sapma ama pratikte
     // zararsiz -- bilerek kabul edildi. Daha sik calistirmak, kazandirdigi
     // hassasiyetten fazla veritabani yuku getirirdi.
-    @Scheduled(cron = "0 */5 * * * *")
+    @Scheduled(cron = "${app.appointment.scheduler-cron:0 */5 * * * *}")
     public void expireStaleRequests() {
         int expiredCount = appointmentService.expireStaleRequests();
         if (expiredCount > 0) {
