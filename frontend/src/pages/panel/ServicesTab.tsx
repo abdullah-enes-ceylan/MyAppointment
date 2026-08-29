@@ -1,28 +1,45 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
 import api from "../../api/axios";
+import { getErrorMessage } from "../../api/errors";
 import Toast from "../../components/Toast";
+import type { ServiceItemRequest, ServiceItemResponse } from "../../types/api";
 
-const EMPTY_FORM = { name: "", description: "", price: "", durationInMinutes: "" };
+// Form alanlari controlled input oldugu icin string tutuluyor (price/
+// durationInMinutes girilirken bos string olabilmeli); gonderilirken
+// Number() ile ServiceItemRequest'e cevriliyor.
+interface ServiceFormState {
+  name: string;
+  description: string;
+  price: string;
+  durationInMinutes: string;
+}
+
+const EMPTY_FORM: ServiceFormState = { name: "", description: "", price: "", durationInMinutes: "" };
+
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
 
 // Hizmet yönetimi — seçili işletmenin hizmetlerini listeler, ekleme/
 // düzenleme/silme yapar. ServiceItemController create/update uçları hâlâ
 // ham ServiceItem entity'si bekliyor (Faz 1.5 sadece Business için DTO
 // getirdi) — bu yüzden gönderilen alanlar entity'nin setter'larıyla
 // birebir eşleşiyor: name, description, price, durationInMinutes.
-export default function ServicesTab({ businessId }) {
-  const [services, setServices] = useState([]);
+export default function ServicesTab({ businessId }: { businessId: number | null }) {
+  const [services, setServices] = useState<ServiceItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState(EMPTY_FORM);
+  const [addForm, setAddForm] = useState<ServiceFormState>(EMPTY_FORM);
 
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<ServiceFormState>(EMPTY_FORM);
 
-  const [deletingId, setDeletingId] = useState(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (businessId) fetchServices();
@@ -32,41 +49,38 @@ export default function ServicesTab({ businessId }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/api/service-items/business/${businessId}`);
+      const res = await api.get<ServiceItemResponse[]>(`/api/service-items/business/${businessId}`);
       setServices(res.data);
-    } catch (err) {
+    } catch {
       setError("Hizmetler yüklenirken hata oluştu.");
     } finally {
       setLoading(false);
     }
   }
 
-  function extractError(err, fallback) {
-    return String(err.response?.data?.message || err.response?.data || fallback);
-  }
-
-  async function handleAddSubmit(e) {
+  async function handleAddSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.post(`/api/service-items/create/${businessId}`, {
+      const body: ServiceItemRequest = {
         name: addForm.name,
         description: addForm.description,
         price: Number(addForm.price),
         durationInMinutes: Number(addForm.durationInMinutes),
-      });
+      };
+      const res = await api.post<ServiceItemResponse>(`/api/service-items/create/${businessId}`, body);
       setServices((prev) => [...prev, res.data]);
       setAddForm(EMPTY_FORM);
       setShowAddForm(false);
       setToast({ message: "✅ Hizmet eklendi.", type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Hizmet eklenirken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Hizmet eklenirken hata oluştu."), type: "error" });
     } finally {
       setSaving(false);
     }
   }
 
-  function startEdit(service) {
+  function startEdit(service: ServiceItemResponse) {
     setEditingId(service.id);
     setEditForm({
       name: service.name,
@@ -76,34 +90,35 @@ export default function ServicesTab({ businessId }) {
     });
   }
 
-  async function handleEditSubmit(e, serviceId) {
+  async function handleEditSubmit(e: FormEvent<HTMLFormElement>, serviceId: number) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.put(`/api/service-items/update/${serviceId}`, {
+      const body: ServiceItemRequest = {
         name: editForm.name,
         description: editForm.description,
         price: Number(editForm.price),
         durationInMinutes: Number(editForm.durationInMinutes),
-      });
+      };
+      const res = await api.put<ServiceItemResponse>(`/api/service-items/update/${serviceId}`, body);
       setServices((prev) => prev.map((s) => (s.id === serviceId ? res.data : s)));
       setEditingId(null);
       setToast({ message: "✅ Hizmet güncellendi.", type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Hizmet güncellenirken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Hizmet güncellenirken hata oluştu."), type: "error" });
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(serviceId) {
+  async function handleDelete(serviceId: number) {
     setDeletingId(serviceId);
     try {
       await api.delete(`/api/service-items/delete/${serviceId}`);
       setServices((prev) => prev.filter((s) => s.id !== serviceId));
       setToast({ message: "🗑️ Hizmet silindi.", type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Hizmet silinirken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Hizmet silinirken hata oluştu."), type: "error" });
     } finally {
       setDeletingId(null);
     }
@@ -159,14 +174,14 @@ export default function ServicesTab({ businessId }) {
                   required
                   placeholder="Hizmet adı"
                   value={addForm.name}
-                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setAddForm({ ...addForm, name: e.target.value })}
                   className={inputClass}
                 />
                 <input
                   type="text"
                   placeholder="Açıklama"
                   value={addForm.description}
-                  onChange={(e) => setAddForm({ ...addForm, description: e.target.value })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setAddForm({ ...addForm, description: e.target.value })}
                   className={inputClass}
                 />
                 <input
@@ -176,7 +191,7 @@ export default function ServicesTab({ businessId }) {
                   required
                   placeholder="Fiyat (₺)"
                   value={addForm.price}
-                  onChange={(e) => setAddForm({ ...addForm, price: e.target.value })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setAddForm({ ...addForm, price: e.target.value })}
                   className={inputClass}
                 />
                 <input
@@ -185,7 +200,7 @@ export default function ServicesTab({ businessId }) {
                   required
                   placeholder="Süre (dk)"
                   value={addForm.durationInMinutes}
-                  onChange={(e) => setAddForm({ ...addForm, durationInMinutes: e.target.value })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setAddForm({ ...addForm, durationInMinutes: e.target.value })}
                   className={inputClass}
                 />
               </div>
@@ -226,13 +241,13 @@ export default function ServicesTab({ businessId }) {
                         type="text"
                         required
                         value={editForm.name}
-                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, name: e.target.value })}
                         className={inputClass}
                       />
                       <input
                         type="text"
                         value={editForm.description}
-                        onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, description: e.target.value })}
                         className={inputClass}
                       />
                       <input
@@ -241,7 +256,7 @@ export default function ServicesTab({ businessId }) {
                         min="0"
                         required
                         value={editForm.price}
-                        onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, price: e.target.value })}
                         className={inputClass}
                       />
                       <input
@@ -249,7 +264,7 @@ export default function ServicesTab({ businessId }) {
                         min="1"
                         required
                         value={editForm.durationInMinutes}
-                        onChange={(e) => setEditForm({ ...editForm, durationInMinutes: e.target.value })}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, durationInMinutes: e.target.value })}
                         className={inputClass}
                       />
                     </div>

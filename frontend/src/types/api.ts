@@ -220,3 +220,81 @@ export interface ReviewRequest {
   rating: number;
   comment: string | null;
 }
+
+// backend/src/main/java/com/randevu/backend/dto/request/ServiceItemRequest.java
+export interface ServiceItemRequest {
+  name: string;
+  description: string;
+  price: number;
+  durationInMinutes: number;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/StaffResponse.java
+export interface StaffResponse {
+  id: number;
+  name: string;
+  services: ServiceItemResponse[];
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/StaffRequest.java
+export interface StaffRequest {
+  name: string;
+  serviceIds: number[];
+}
+
+// java.time.DayOfWeek -- Jackson varsayilani enum adini oldugu gibi yazar.
+export type DayOfWeek =
+  | "MONDAY"
+  | "TUESDAY"
+  | "WEDNESDAY"
+  | "THURSDAY"
+  | "FRIDAY"
+  | "SATURDAY"
+  | "SUNDAY";
+
+// backend/src/main/java/com/randevu/backend/dto/response/WorkingHourResponse.java
+export interface WorkingHourResponse {
+  dayOfWeek: DayOfWeek;
+  openTime: string | null;
+  closeTime: string | null;
+  closed: boolean;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/WorkingHourRequest.java
+// openTime/closeTime BILEREK nullable -- closed=true iken ikisi de bos olabilir.
+export interface WorkingHourRequest {
+  dayOfWeek: DayOfWeek;
+  openTime: string | null;
+  closeTime: string | null;
+  closed: boolean;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/BusinessClosureResponse.java
+// BusinessClosure.java entity'sinde reason'da nullable=false YOK.
+export interface BusinessClosureResponse {
+  id: number;
+  date: string; // LocalDate -> "YYYY-MM-DD"
+  reason: string | null;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/BusinessClosureRequest.java
+export interface BusinessClosureRequest {
+  date: string;
+  reason: string | null;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/BusinessRequest.java
+// phone/description @NotBlank/@NotNull DEGIL (opsiyonel); latitude/longitude
+// bilerek @NotNull DEGIL (konum ayri adimda giriliyor, bkz. BusinessRequest.java:51-53).
+export interface BusinessRequest {
+  name: string;
+  address: string;
+  phone?: string | null;
+  description?: string | null;
+  openTime: string;
+  closeTime: string;
+  category: BusinessCategory;
+  servedGender: ServedGender;
+  latitude?: number | null;
+  longitude?: number | null;
+}

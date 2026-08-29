@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
 import api from "../../api/axios";
+import { getErrorMessage } from "../../api/errors";
 import Toast from "../../components/Toast";
+import type { BusinessClosureRequest, BusinessClosureResponse, DayOfWeek, WorkingHourRequest, WorkingHourResponse } from "../../types/api";
 
-const DAYS = [
+const DAYS: { key: DayOfWeek; label: string }[] = [
   { key: "MONDAY", label: "Pazartesi" },
   { key: "TUESDAY", label: "Salı" },
   { key: "WEDNESDAY", label: "Çarşamba" },
@@ -12,44 +14,58 @@ const DAYS = [
   { key: "SUNDAY", label: "Pazar" },
 ];
 
-function emptyDayState() {
-  const state = {};
+// Gunluk UI durumu -- WorkingHourResponse/Request'ten farkli: openTime/
+// closeTime burada her zaman string (bos "" dahil, input[type=time] boyle
+// calisiyor), "configured" ise sadece bu ekranin kendi bilgisi (backend
+// hic bu gunu donmemisse hala yapilandirilmamis demek).
+interface DayState {
+  openTime: string;
+  closeTime: string;
+  closed: boolean;
+  configured: boolean;
+}
+
+type DaysState = Record<DayOfWeek, DayState>;
+
+function emptyDayState(): DaysState {
+  const state = {} as DaysState;
   for (const d of DAYS) {
     state[d.key] = { openTime: "", closeTime: "", closed: false, configured: false };
   }
   return state;
 }
 
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
+
 // HTML <input type="time"> "HH:mm" verir, backend'deki LocalTime alanı
 // (Jackson ISO_LOCAL_TIME) saniyesiz "HH:mm"i de kabul ediyor — ayrıca
 // dönüştürmeye gerek yok.
-export default function WorkingHoursTab({ businessId }) {
-  const [days, setDays] = useState(emptyDayState());
-  const [closures, setClosures] = useState([]);
+export default function WorkingHoursTab({ businessId }: { businessId: number | null }) {
+  const [days, setDays] = useState<DaysState>(emptyDayState());
+  const [closures, setClosures] = useState<BusinessClosureResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [savingDay, setSavingDay] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [savingDay, setSavingDay] = useState<DayOfWeek | null>(null);
 
-  const [closureForm, setClosureForm] = useState({ date: "", reason: "" });
+  const [closureForm, setClosureForm] = useState<BusinessClosureRequest>({ date: "", reason: "" });
   const [addingClosure, setAddingClosure] = useState(false);
-  const [deletingClosureId, setDeletingClosureId] = useState(null);
+  const [deletingClosureId, setDeletingClosureId] = useState<number | null>(null);
 
   useEffect(() => {
     if (businessId) fetchAll();
   }, [businessId]);
-
-  function extractError(err, fallback) {
-    return String(err.response?.data?.message || err.response?.data || fallback);
-  }
 
   async function fetchAll() {
     setLoading(true);
     setError(null);
     try {
       const [hoursRes, closuresRes] = await Promise.all([
-        api.get(`/api/businesses/${businessId}/working-hours`),
-        api.get(`/api/businesses/${businessId}/closures`),
+        api.get<WorkingHourResponse[]>(`/api/businesses/${businessId}/working-hours`),
+        api.get<BusinessClosureResponse[]>(`/api/businesses/${businessId}/closures`),
       ]);
       const merged = emptyDayState();
       for (const wh of hoursRes.data) {
@@ -62,18 +78,18 @@ export default function WorkingHoursTab({ businessId }) {
       }
       setDays(merged);
       setClosures(closuresRes.data);
-    } catch (err) {
+    } catch {
       setError("Çalışma saatleri yüklenirken hata oluştu.");
     } finally {
       setLoading(false);
     }
   }
 
-  function updateDay(key, patch) {
+  function updateDay(key: DayOfWeek, patch: Partial<DayState>) {
     setDays((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
-  async function saveDay(key) {
+  async function saveDay(key: DayOfWeek) {
     const day = days[key];
     if (!day.closed && (!day.openTime || !day.closeTime)) {
       setToast({ message: "Açılış ve kapanış saati zorunlu (ya da günü kapalı işaretleyin).", type: "error" });
@@ -81,49 +97,51 @@ export default function WorkingHoursTab({ businessId }) {
     }
     setSavingDay(key);
     try {
-      const res = await api.put(`/api/businesses/${businessId}/working-hours`, {
+      const body: WorkingHourRequest = {
         dayOfWeek: key,
         openTime: day.closed ? null : day.openTime,
         closeTime: day.closed ? null : day.closeTime,
         closed: day.closed,
-      });
+      };
+      const res = await api.put<WorkingHourResponse>(`/api/businesses/${businessId}/working-hours`, body);
       updateDay(key, {
         openTime: res.data.openTime ? res.data.openTime.slice(0, 5) : "",
         closeTime: res.data.closeTime ? res.data.closeTime.slice(0, 5) : "",
         closed: res.data.closed,
         configured: true,
       });
-      setToast({ message: `✅ ${DAYS.find((d) => d.key === key).label} kaydedildi.`, type: "success" });
+      const dayLabel = DAYS.find((d) => d.key === key)?.label;
+      setToast({ message: `✅ ${dayLabel} kaydedildi.`, type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Kaydedilirken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Kaydedilirken hata oluştu."), type: "error" });
     } finally {
       setSavingDay(null);
     }
   }
 
-  async function handleAddClosure(e) {
+  async function handleAddClosure(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setAddingClosure(true);
     try {
-      const res = await api.post(`/api/businesses/${businessId}/closures`, closureForm);
+      const res = await api.post<BusinessClosureResponse>(`/api/businesses/${businessId}/closures`, closureForm);
       setClosures((prev) => [...prev, res.data]);
       setClosureForm({ date: "", reason: "" });
       setToast({ message: "✅ Kapanış günü eklendi.", type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Kapanış günü eklenirken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Kapanış günü eklenirken hata oluştu."), type: "error" });
     } finally {
       setAddingClosure(false);
     }
   }
 
-  async function handleDeleteClosure(closureId) {
+  async function handleDeleteClosure(closureId: number) {
     setDeletingClosureId(closureId);
     try {
       await api.delete(`/api/businesses/${businessId}/closures/${closureId}`);
       setClosures((prev) => prev.filter((c) => c.id !== closureId));
       setToast({ message: "🗑️ Kapanış günü kaldırıldı.", type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Kaldırılırken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Kaldırılırken hata oluştu."), type: "error" });
     } finally {
       setDeletingClosureId(null);
     }
@@ -179,7 +197,7 @@ export default function WorkingHoursTab({ businessId }) {
                   <input
                     type="checkbox"
                     checked={day.closed}
-                    onChange={(e) => updateDay(d.key, { closed: e.target.checked })}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) => updateDay(d.key, { closed: e.target.checked })}
                     className="cursor-pointer"
                   />
                   Kapalı
@@ -189,7 +207,7 @@ export default function WorkingHoursTab({ businessId }) {
                   type="time"
                   disabled={day.closed}
                   value={day.openTime}
-                  onChange={(e) => updateDay(d.key, { openTime: e.target.value })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => updateDay(d.key, { openTime: e.target.value })}
                   className={timeInputClass}
                 />
                 <span className="text-slate-500 text-xs">—</span>
@@ -197,7 +215,7 @@ export default function WorkingHoursTab({ businessId }) {
                   type="time"
                   disabled={day.closed}
                   value={day.closeTime}
-                  onChange={(e) => updateDay(d.key, { closeTime: e.target.value })}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => updateDay(d.key, { closeTime: e.target.value })}
                   className={timeInputClass}
                 />
 
@@ -228,14 +246,14 @@ export default function WorkingHoursTab({ businessId }) {
             required
             min={new Date().toISOString().slice(0, 10)}
             value={closureForm.date}
-            onChange={(e) => setClosureForm({ ...closureForm, date: e.target.value })}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setClosureForm({ ...closureForm, date: e.target.value })}
             className="px-3 py-2 bg-bg-light border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
           />
           <input
             type="text"
             placeholder="Sebep (opsiyonel — ör. Resmi Tatil)"
-            value={closureForm.reason}
-            onChange={(e) => setClosureForm({ ...closureForm, reason: e.target.value })}
+            value={closureForm.reason ?? ""}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setClosureForm({ ...closureForm, reason: e.target.value })}
             className="flex-1 min-w-[180px] px-3 py-2 bg-bg-light border border-white/10 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
           />
           <button

@@ -1,29 +1,39 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
 import api from "../../api/axios";
+import { getErrorMessage } from "../../api/errors";
 import Toast from "../../components/Toast";
+import type { ServiceItemResponse, StaffRequest, StaffResponse } from "../../types/api";
 
-const EMPTY_FORM = { name: "", serviceIds: [] };
+// StaffRequest'in kendisi form state olarak dogrudan kullanilabiliyor --
+// ServicesTab'daki gibi string'e cevrilmesi gereken bir alan yok
+// (serviceIds zaten number[]).
+const EMPTY_FORM: StaffRequest = { name: "", serviceIds: [] };
+
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
 
 // Personel yönetimi — Faz 2.3'ün backend'i (StaffController) kullanılıyor.
 // MÜŞTERİ TARAFINDA personel seçimi/görünürlüğü YOK (bkz. CLAUDE.md karar
 // tablosu, 2026-08-23) — bu ekran SADECE işletme sahibi için, kimin hangi
 // hizmeti verdiğini yönetmek amacıyla. Randevu ataması backend'de görünmez
 // şekilde otomatik yapılıyor (Faz 2.9).
-export default function StaffTab({ businessId }) {
-  const [staff, setStaff] = useState([]);
-  const [services, setServices] = useState([]);
+export default function StaffTab({ businessId }: { businessId: number | null }) {
+  const [staff, setStaff] = useState<StaffResponse[]>([]);
+  const [services, setServices] = useState<ServiceItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addForm, setAddForm] = useState(EMPTY_FORM);
+  const [addForm, setAddForm] = useState<StaffRequest>(EMPTY_FORM);
 
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<StaffRequest>(EMPTY_FORM);
 
-  const [deletingId, setDeletingId] = useState(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (businessId) fetchAll();
@@ -34,78 +44,68 @@ export default function StaffTab({ businessId }) {
     setError(null);
     try {
       const [staffRes, servicesRes] = await Promise.all([
-        api.get(`/api/staff/business/${businessId}`),
-        api.get(`/api/service-items/business/${businessId}`),
+        api.get<StaffResponse[]>(`/api/staff/business/${businessId}`),
+        api.get<ServiceItemResponse[]>(`/api/service-items/business/${businessId}`),
       ]);
       setStaff(staffRes.data);
       setServices(servicesRes.data);
-    } catch (err) {
+    } catch {
       setError("Personel bilgileri yüklenirken hata oluştu.");
     } finally {
       setLoading(false);
     }
   }
 
-  function extractError(err, fallback) {
-    return String(err.response?.data?.message || err.response?.data || fallback);
-  }
-
-  function toggleServiceId(currentIds, serviceId) {
+  function toggleServiceId(currentIds: number[], serviceId: number): number[] {
     return currentIds.includes(serviceId)
       ? currentIds.filter((id) => id !== serviceId)
       : [...currentIds, serviceId];
   }
 
-  async function handleAddSubmit(e) {
+  async function handleAddSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.post(`/api/staff/create/${businessId}`, {
-        name: addForm.name,
-        serviceIds: addForm.serviceIds,
-      });
+      const res = await api.post<StaffResponse>(`/api/staff/create/${businessId}`, addForm);
       setStaff((prev) => [...prev, res.data]);
       setAddForm(EMPTY_FORM);
       setShowAddForm(false);
       setToast({ message: "✅ Personel eklendi.", type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Personel eklenirken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Personel eklenirken hata oluştu."), type: "error" });
     } finally {
       setSaving(false);
     }
   }
 
-  function startEdit(member) {
+  function startEdit(member: StaffResponse) {
     setEditingId(member.id);
     setEditForm({ name: member.name, serviceIds: member.services.map((s) => s.id) });
   }
 
-  async function handleEditSubmit(e, staffId) {
+  async function handleEditSubmit(e: FormEvent<HTMLFormElement>, staffId: number) {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await api.put(`/api/staff/update/${staffId}`, {
-        name: editForm.name,
-        serviceIds: editForm.serviceIds,
-      });
+      const res = await api.put<StaffResponse>(`/api/staff/update/${staffId}`, editForm);
       setStaff((prev) => prev.map((s) => (s.id === staffId ? res.data : s)));
       setEditingId(null);
       setToast({ message: "✅ Personel güncellendi.", type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Personel güncellenirken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Personel güncellenirken hata oluştu."), type: "error" });
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(staffId) {
+  async function handleDelete(staffId: number) {
     setDeletingId(staffId);
     try {
       await api.delete(`/api/staff/delete/${staffId}`);
       setStaff((prev) => prev.filter((s) => s.id !== staffId));
       setToast({ message: "🗑️ Personel silindi.", type: "success" });
     } catch (err) {
-      setToast({ message: extractError(err, "Personel silinirken hata oluştu."), type: "error" });
+      setToast({ message: getErrorMessage(err, "Personel silinirken hata oluştu."), type: "error" });
     } finally {
       setDeletingId(null);
     }
@@ -114,7 +114,7 @@ export default function StaffTab({ businessId }) {
   const inputClass =
     "w-full px-3 py-2 bg-bg-light border border-white/10 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all";
 
-  function ServiceCheckboxes({ selectedIds, onChange }) {
+  function ServiceCheckboxes({ selectedIds, onChange }: { selectedIds: number[]; onChange: (ids: number[]) => void }) {
     if (services.length === 0) {
       return <p className="text-xs text-slate-500 italic">Önce Hizmetler sekmesinden hizmet ekleyin.</p>;
     }
@@ -190,7 +190,7 @@ export default function StaffTab({ businessId }) {
                 required
                 placeholder="Personel adı"
                 value={addForm.name}
-                onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setAddForm({ ...addForm, name: e.target.value })}
                 className={inputClass}
               />
               <div>
@@ -237,7 +237,7 @@ export default function StaffTab({ businessId }) {
                       type="text"
                       required
                       value={editForm.name}
-                      onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, name: e.target.value })}
                       className={inputClass}
                     />
                     <div>
