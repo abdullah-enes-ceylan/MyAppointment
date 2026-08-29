@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import BusinessCard from "../components/BusinessCard";
 import { CATEGORIES, GENDERS, getCategoryLabel } from "../components/CategoryIcons";
 import { setLocationLabel } from "../components/Navbar";
+import type { BusinessCategory, BusinessDetailResponse, BusinessResponse, NearbyBusinessResponse, ServedGender, ServiceItemResponse } from "../types/api";
 
 // Faz 2.11: tarayıcı konum izni reddedilirse/desteklenmezse düşülen
 // sabit şehir listesi. Koordinatlar şehir merkezine yakın bir nokta --
@@ -25,21 +26,32 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// businesses state'i iki farkli sekilde doluyor: normal/kategori modunda
+// GET /api/businesses(/category/{cat}) -> BusinessDetailResponse (serviceItems
+// gomulu), nearby modunda ise GET /api/businesses/nearby -> NearbyBusinessResponse'un
+// SADECE business (serviceItems'siz BusinessResponse) + distanceKm'i alinip
+// duz nesneye yayiliyor (bkz. fetchNearby). Bu yuzden ikisini de karsilayan
+// tek bir tip: serviceItems VE distanceKm ikisi de opsiyonel.
+type HomeBusiness = BusinessResponse & {
+  serviceItems?: ServiceItemResponse[];
+  distanceKm?: number;
+};
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchQuery = searchParams.get("q") ?? "";
 
-  const [businesses, setBusinesses] = useState([]);
+  const [businesses, setBusinesses] = useState<HomeBusiness[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState("ALL");
-  const [activeGender, setActiveGender] = useState("ALL");
+  const [activeCategory, setActiveCategory] = useState<BusinessCategory | "ALL">("ALL");
+  const [activeGender, setActiveGender] = useState<ServedGender | "ALL">("ALL");
   const [nearbyMode, setNearbyMode] = useState(false);
   const [showCityPicker, setShowCityPicker] = useState(false);
-  const [locationError, setLocationError] = useState(null);
-  const [favoriteIds, setFavoriteIds] = useState(new Set());
-  const [earliestSlots, setEarliestSlots] = useState({});
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
+  const [earliestSlots, setEarliestSlots] = useState<Record<number, string>>({});
 
   useEffect(() => {
     fetchBusinesses();
@@ -61,7 +73,7 @@ export default function HomePage() {
       return;
     }
     api
-      .get("/api/favorites/me")
+      .get<BusinessDetailResponse[]>("/api/favorites/me")
       .then((res) => setFavoriteIds(new Set(res.data.map((b) => b.id))))
       .catch(() => {});
   }, [isAuthenticated]);
@@ -82,7 +94,7 @@ export default function HomePage() {
       const service = biz.serviceItems?.[0];
       if (!service) return;
       try {
-        const res = await api.get("/api/appointments/available-slots", {
+        const res = await api.get<string[]>("/api/appointments/available-slots", {
           params: { businessId: biz.id, serviceId: service.id, date },
         });
         if (!cancelled && res.data.length > 0) {
@@ -101,7 +113,7 @@ export default function HomePage() {
   async function fetchBusinesses() {
     setLoading(true);
     try {
-      const res = await api.get("/api/businesses");
+      const res = await api.get<BusinessDetailResponse[]>("/api/businesses");
       setBusinesses(res.data);
     } catch (err) {
       console.error("İşletmeler yüklenemedi:", err);
@@ -110,13 +122,13 @@ export default function HomePage() {
     }
   }
 
-  async function filterByCategory(categoryKey) {
+  async function filterByCategory(categoryKey: BusinessCategory | "ALL") {
     setNearbyMode(false);
     setActiveCategory(categoryKey);
     setLoading(true);
     try {
       const url = categoryKey === "ALL" ? "/api/businesses" : `/api/businesses/category/${categoryKey}`;
-      const res = await api.get(url);
+      const res = await api.get<BusinessDetailResponse[]>(url);
       setBusinesses(res.data);
     } catch (err) {
       console.error("Filtreleme hatası:", err);
@@ -125,11 +137,11 @@ export default function HomePage() {
     }
   }
 
-  async function fetchNearby(lat, lng, radiusKm, label) {
+  async function fetchNearby(lat: number, lng: number, radiusKm: number, label: string) {
     setLoading(true);
     setLocationError(null);
     try {
-      const res = await api.get("/api/businesses/nearby", { params: { lat, lng, radiusKm } });
+      const res = await api.get<NearbyBusinessResponse[]>("/api/businesses/nearby", { params: { lat, lng, radiusKm } });
       setBusinesses(res.data.map((item) => ({ ...item.business, distanceKm: item.distanceKm })));
       setNearbyMode(true);
       setShowCityPicker(false);
@@ -178,13 +190,18 @@ export default function HomePage() {
       if (!genderOk) return false;
       if (!q) return true;
 
+      // .filter(Boolean) description'daki null'i tur seviyesinde otomatik
+      // elemiyor (TS'in "inferred predicate" ozelligi burada tetiklenmiyor,
+      // test edildi) -- "?." ile gercek bir gozden kacan null durumunu
+      // maskelemiyoruz, zaten filter(Boolean) sayesinde field hicbir zaman
+      // bos/null degil, sadece tur bunu bilmiyor.
       return [b.name, b.description, b.address, getCategoryLabel(b.category)]
         .filter(Boolean)
-        .some((field) => field.toLocaleLowerCase("tr").includes(q));
+        .some((field) => field?.toLocaleLowerCase("tr").includes(q));
     });
   }, [businesses, searchQuery, activeGender]);
 
-  async function toggleFavorite(businessId) {
+  async function toggleFavorite(businessId: number) {
     const wasFavorited = favoriteIds.has(businessId);
     setFavoriteIds((prev) => {
       const next = new Set(prev);

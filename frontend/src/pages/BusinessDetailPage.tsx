@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import { getErrorMessage } from "../api/errors";
 import Toast from "../components/Toast";
 import LocationPicker from "../components/LocationPicker";
 import StarRating from "../components/StarRating";
 import { useAuth } from "../context/AuthContext";
+import type { AppointmentRequest, BusinessDetailResponse, ReviewResponse, ServiceItemResponse } from "../types/api";
 
-function formatReviewDate(dateStr) {
+function formatReviewDate(dateStr: string) {
   const date = new Date(dateStr);
   const months = [
     "Oca", "Şub", "Mar", "Nis", "May", "Haz",
@@ -15,37 +17,48 @@ function formatReviewDate(dateStr) {
   return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-function formatTime(timeStr) {
+function formatTime(timeStr: string | null | undefined) {
   // "09:45:00" → "09:45"
   if (!timeStr) return "";
   const parts = timeStr.split(":");
   return `${parts[0]}:${parts[1]}`;
 }
 
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
+
+// Manuel hizmet ID girisinde (services bos donerse) sadece bu dort alan
+// uyduruluyor -- gercek ServiceItemResponse'un description'ini icermez,
+// bu yuzden ServiceItemResponse'un TAMAMI degil, sadece bu bilesende
+// gercekten kullanilan alt kumesi.
+type SelectableService = Pick<ServiceItemResponse, "id" | "name" | "price" | "durationInMinutes">;
+
 export default function BusinessDetailPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
 
-  const [business, setBusiness] = useState(null);
+  const [business, setBusiness] = useState<BusinessDetailResponse | null>(null);
   const [isFavorited, setIsFavorited] = useState(false);
-  const [services, setServices] = useState([]);
-  const [reviews, setReviews] = useState([]);
+  const [services, setServices] = useState<ServiceItemResponse[]>([]);
+  const [reviews, setReviews] = useState<ReviewResponse[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(true);
-  const [selectedService, setSelectedService] = useState(null);
+  const [selectedService, setSelectedService] = useState<SelectableService | null>(null);
   const [selectedDate, setSelectedDate] = useState("");
-  const [slots, setSlots] = useState([]);
-  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [slots, setSlots] = useState<string[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   // İşletme bilgilerini çek
   useEffect(() => {
     async function fetchBusiness() {
       try {
-        const res = await api.get("/api/businesses");
+        const res = await api.get<BusinessDetailResponse[]>("/api/businesses");
         const found = res.data.find((b) => b.id === Number(id));
         if (found) {
           setBusiness(found);
@@ -56,7 +69,7 @@ export default function BusinessDetailPage() {
         } else {
           setToast({ message: "İşletme bulunamadı.", type: "error" });
         }
-      } catch (err) {
+      } catch {
         setToast({ message: "İşletme bilgileri yüklenemedi.", type: "error" });
       } finally {
         setLoading(false);
@@ -70,9 +83,9 @@ export default function BusinessDetailPage() {
     async function fetchReviews() {
       setReviewsLoading(true);
       try {
-        const res = await api.get(`/api/reviews/business/${id}`);
+        const res = await api.get<ReviewResponse[]>(`/api/reviews/business/${id}`);
         setReviews(res.data);
-      } catch (err) {
+      } catch {
         // Sessizce yut -- yorumlar sayfanin ana islevi (randevu alma) icin
         // kritik degil, ayri bir hata toast'i gereksiz gurultu olurdu.
       } finally {
@@ -91,7 +104,7 @@ export default function BusinessDetailPage() {
       return;
     }
     api
-      .get("/api/favorites/me")
+      .get<BusinessDetailResponse[]>("/api/favorites/me")
       .then((res) => setIsFavorited(res.data.some((b) => b.id === Number(id))))
       .catch(() => {});
   }, [id, isAuthenticated]);
@@ -122,7 +135,7 @@ export default function BusinessDetailPage() {
     setSelectedSlot(null);
 
     try {
-      const res = await api.get("/api/appointments/available-slots", {
+      const res = await api.get<string[]>("/api/appointments/available-slots", {
         params: {
           businessId: id,
           serviceId: selectedService.id,
@@ -134,8 +147,7 @@ export default function BusinessDetailPage() {
         setToast({ message: "Bu tarihte uygun saat bulunamadı.", type: "error" });
       }
     } catch (err) {
-      const msg = err.response?.data || "Saatler alınırken hata oluştu.";
-      setToast({ message: String(msg), type: "error" });
+      setToast({ message: getErrorMessage(err, "Saatler alınırken hata oluştu."), type: "error" });
     } finally {
       setSlotsLoading(false);
     }
@@ -143,22 +155,23 @@ export default function BusinessDetailPage() {
 
   // Randevu oluştur
   async function handleBooking() {
-    if (!selectedSlot) return;
+    if (!selectedSlot || !selectedService) return;
 
     setBookingLoading(true);
 
     try {
-      await api.post("/api/appointments/create", {
+      const body: AppointmentRequest = {
         businessId: Number(id),
         serviceId: selectedService.id,
         appointmentDate: `${selectedDate}T${selectedSlot}`,
-      });
+      };
+      await api.post("/api/appointments/create", body);
 
       setToast({ message: "🎉 Randevunuz başarıyla oluşturuldu!", type: "success" });
       setSelectedSlot(null);
 
       // Saatleri yenile
-      const res = await api.get("/api/appointments/available-slots", {
+      const res = await api.get<string[]>("/api/appointments/available-slots", {
         params: {
           businessId: id,
           serviceId: selectedService.id,
@@ -167,8 +180,7 @@ export default function BusinessDetailPage() {
       });
       setSlots(res.data);
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || "Randevu oluşturulurken hata oluştu.";
-      setToast({ message: String(msg), type: "error" });
+      setToast({ message: getErrorMessage(err, "Randevu oluşturulurken hata oluştu."), type: "error" });
     } finally {
       setBookingLoading(false);
     }
@@ -230,7 +242,10 @@ export default function BusinessDetailPage() {
               </button>
             )}
           </div>
-          {business.reviewCount > 0 ? (
+          {/* averageRating null kontrolu BusinessCard'daki (PR3) ayni gerekce --
+              backend sozlesmesi reviewCount>0 iken averageRating'in dolu
+              olacagini garanti ediyor ama TS bunu tek basina cikaramiyor. */}
+          {business.reviewCount > 0 && business.averageRating != null ? (
             <div className="flex items-center gap-1.5 mt-1.5">
               <StarRating value={business.averageRating} size="text-sm" />
               <span className="text-emerald-100 text-sm">
@@ -319,7 +334,7 @@ export default function BusinessDetailPage() {
                   type="number"
                   min="1"
                   placeholder="Hizmet ID (örn: 1)"
-                  onChange={(e) => {
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => {
                     const val = Number(e.target.value);
                     if (val > 0) {
                       setSelectedService({ id: val, name: `Hizmet #${val}`, durationInMinutes: 0, price: 0 });

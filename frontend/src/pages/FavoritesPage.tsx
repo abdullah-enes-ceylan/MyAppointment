@@ -2,15 +2,16 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import BusinessCard from "../components/BusinessCard";
+import type { BusinessDetailResponse } from "../types/api";
 
 // HomePage'in "İşletme Keşfet" paneliyle aynı görsel dil (açık zemin,
 // beyaz kart container'ı) -- kategori/yakınımdakiler filtreleri burada
 // yok, liste zaten kullanıcının kendi seçtiği işletmelerle sınırlı.
 export default function FavoritesPage() {
   const navigate = useNavigate();
-  const [businesses, setBusinesses] = useState([]);
+  const [businesses, setBusinesses] = useState<BusinessDetailResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [earliestSlots, setEarliestSlots] = useState({});
+  const [earliestSlots, setEarliestSlots] = useState<Record<number, string>>({});
 
   useEffect(() => {
     fetchFavorites();
@@ -19,7 +20,7 @@ export default function FavoritesPage() {
   async function fetchFavorites() {
     setLoading(true);
     try {
-      const res = await api.get("/api/favorites/me");
+      const res = await api.get<BusinessDetailResponse[]>("/api/favorites/me");
       setBusinesses(res.data);
     } catch (err) {
       console.error("Favoriler yüklenemedi:", err);
@@ -43,7 +44,7 @@ export default function FavoritesPage() {
       const service = biz.serviceItems?.[0];
       if (!service) return;
       try {
-        const res = await api.get("/api/appointments/available-slots", {
+        const res = await api.get<string[]>("/api/appointments/available-slots", {
           params: { businessId: biz.id, serviceId: service.id, date },
         });
         if (!cancelled && res.data.length > 0) {
@@ -62,7 +63,7 @@ export default function FavoritesPage() {
   // Favoriden çıkarınca kart listeden de kaybolur -- bu sayfada "favoride
   // değil" hali göstermenin bir anlamı yok, HomePage'deki gibi kalp
   // ikonunu boş göstermek yerine direkt listeden kaldırıyoruz.
-  async function removeFavorite(businessId) {
+  async function removeFavorite(businessId: number) {
     setBusinesses((prev) => prev.filter((b) => b.id !== businessId));
     try {
       await api.delete(`/api/favorites/${businessId}`);

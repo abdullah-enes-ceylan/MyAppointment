@@ -113,3 +113,110 @@ export interface ErrorResponse {
 export interface ValidationErrorResponse extends ErrorResponse {
   fieldErrors: Record<string, string>;
 }
+
+// backend/src/main/java/com/randevu/backend/dto/response/ServiceItemResponse.java
+// ServiceItem.java entity'sinde name/description/price/durationInMinutes
+// hepsi @Column(nullable=false).
+export interface ServiceItemResponse {
+  id: number;
+  name: string;
+  description: string;
+  price: number; // BigDecimal -> JSON number
+  durationInMinutes: number;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/BusinessDetailResponse.java
+// BusinessResponse'un hizmetler gomulu hali. GET /api/businesses,
+// /api/businesses/{id} ve /api/businesses/category/{cat} BUNU donuyor
+// (BusinessResponse degil) -- bkz. BusinessController.java:46,61,128.
+export interface BusinessDetailResponse extends BusinessResponse {
+  serviceItems: ServiceItemResponse[];
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/NearbyBusinessResponse.java
+export interface NearbyBusinessResponse {
+  business: BusinessResponse;
+  distanceKm: number;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/ReviewerSummary.java
+// User.java entity'sinde name/surName @Column(nullable=false).
+export interface ReviewerSummary {
+  name: string;
+  surName: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/ReviewResponse.java
+// Review.java entity'sinde rating/createdAt nullable=false; comment'te
+// nullable=false YOK -- entity yorumu acik: "musteri sadece puan verip
+// yorum yazmayabilir".
+export interface ReviewResponse {
+  id: number;
+  rating: number;
+  comment: string | null;
+  createdAt: string; // LocalDateTime -> ISO string
+  reviewer: ReviewerSummary;
+}
+
+// backend/src/main/java/com/randevu/backend/controller/AppointmentController.java
+// (static class AppointmentRequest, satir 93) -- diger tum request DTO'larinin
+// aksine dto/request/ altinda DEGIL, dogrudan controller icinde tanimli.
+// staffId bilerek @NotNull DEGIL (personel sistemi kullanmayan isletmeler icin).
+export interface AppointmentRequest {
+  businessId: number;
+  serviceId: number;
+  appointmentDate: string; // "YYYY-MM-DDTHH:mm:ss"
+  staffId?: number;
+}
+
+// backend/src/main/java/com/randevu/backend/entity/AppointmentStatus.java
+export type AppointmentStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED"
+  | "COMPLETED"
+  | "NO_SHOW"
+  | "EXPIRED";
+
+// backend/src/main/java/com/randevu/backend/dto/response/BusinessSummary.java
+export interface BusinessSummary {
+  id: number;
+  name: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/CustomerSummary.java
+export interface CustomerSummary {
+  id: number;
+  name: string;
+  surName: string;
+  phone: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/StaffSummary.java
+// Randevu personel atanmadan olusturulmussa null (bkz. AppointmentResponse.staff).
+export interface StaffSummary {
+  id: number;
+  name: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/AppointmentResponse.java
+export interface AppointmentResponse {
+  id: number;
+  appointmentDate: string; // LocalDateTime -> ISO string
+  status: AppointmentStatus;
+  business: BusinessSummary;
+  serviceItem: ServiceItemResponse;
+  customer: CustomerSummary;
+  staff: StaffSummary | null;
+  hasReview: boolean;
+  // Sadece PENDING'de dolu, diger her durumda null (bkz. AppointmentService.expiresAt).
+  expiresAt: string | null;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/ReviewRequest.java
+export interface ReviewRequest {
+  appointmentId: number;
+  rating: number;
+  comment: string | null;
+}
