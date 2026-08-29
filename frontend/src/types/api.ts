@@ -43,3 +43,73 @@ export interface BusinessResponse {
   longitude: number | null;
   verified: boolean;
 }
+
+// backend/src/main/java/com/randevu/backend/entity/Role.java
+export type Role = "USER" | "BUSINESS_OWNER" | "ADMIN";
+
+// backend/src/main/java/com/randevu/backend/dto/response/UserResponse.java
+// User.java entity'sinde tum alanlar @Column(nullable=false) -- hicbiri null degil.
+export interface UserResponse {
+  id: number;
+  name: string;
+  surName: string;
+  email: string;
+  phone: string;
+  role: Role;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/ProfileStatsResponse.java
+export interface ProfileStatsResponse {
+  totalAppointments: number;
+  completedAppointments: number;
+  upcomingAppointments: number;
+  favoriteCount: number;
+  reviewCount: number;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/LoginResponse.java
+export interface LoginResponse {
+  token: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/LoginRequest.java
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/RegisterRequest.java
+export interface RegisterRequest {
+  name: string;
+  surName: string;
+  email: string;
+  password: string;
+  phone: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/UpdateProfileRequest.java
+export interface UpdateProfileRequest {
+  name: string;
+  surName: string;
+  phone: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/ChangePasswordRequest.java
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/ErrorResponse.java
+export interface ErrorResponse {
+  timestamp: string; // Instant -> ISO string
+  status: number;
+  error: string;
+  message: string;
+  path: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/ValidationErrorResponse.java
+export interface ValidationErrorResponse extends ErrorResponse {
+  fieldErrors: Record<string, string>;
+}

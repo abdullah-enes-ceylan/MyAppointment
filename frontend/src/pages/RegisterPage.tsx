@@ -1,13 +1,20 @@
-import { useState } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../api/axios";
+import { getErrorMessage } from "../api/errors";
 import Toast from "../components/Toast";
+import type { RegisterRequest } from "../types/api";
+
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const [toast, setToast] = useState(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<RegisterRequest>({
     name: "",
     surName: "",
     email: "",
@@ -15,11 +22,11 @@ export default function RegisterPage() {
     phone: "",
   });
 
-  function handleChange(e) {
+  function handleChange(e: ChangeEvent<HTMLInputElement>) {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
 
@@ -28,8 +35,7 @@ export default function RegisterPage() {
       setToast({ message: "🎉 Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz...", type: "success" });
       setTimeout(() => navigate("/login"), 1500);
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || "Kayıt sırasında bir hata oluştu.";
-      setToast({ message: String(msg), type: "error" });
+      setToast({ message: getErrorMessage(err, "Kayıt sırasında bir hata oluştu."), type: "error" });
     } finally {
       setLoading(false);
     }
