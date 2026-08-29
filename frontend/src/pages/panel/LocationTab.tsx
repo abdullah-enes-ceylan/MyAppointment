@@ -1,7 +1,14 @@
 import { useState, useEffect } from "react";
 import api from "../../api/axios";
+import { getErrorMessage } from "../../api/errors";
 import Toast from "../../components/Toast";
 import LocationPicker from "../../components/LocationPicker";
+import type { BusinessDetailResponse, BusinessRequest } from "../../types/api";
+
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
 
 // İşletme konumu — Faz 2.8. Mevcut PUT /api/businesses/{id} akışı
 // kullanılıyor (Faz 1.5), ama BusinessMapper.applyToEntity TÜM alanları
@@ -9,13 +16,13 @@ import LocationPicker from "../../components/LocationPicker";
 // longitude göndersek diğer alanlar null'a düşerdi. Bu yüzden önce
 // işletmenin GÜNCEL tüm bilgisi çekilip, PUT'ta olduğu gibi geri
 // gönderiliyor, sadece konum değişiyor.
-export default function LocationTab({ businessId }) {
-  const [business, setBusiness] = useState(null);
+export default function LocationTab({ businessId }: { businessId: number | null }) {
+  const [business, setBusiness] = useState<BusinessDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
   const [saving, setSaving] = useState(false);
-  const [pendingLocation, setPendingLocation] = useState(null);
+  const [pendingLocation, setPendingLocation] = useState<[number, number] | null>(null);
 
   useEffect(() => {
     if (businessId) fetchBusiness();
@@ -26,9 +33,9 @@ export default function LocationTab({ businessId }) {
     setError(null);
     setPendingLocation(null);
     try {
-      const res = await api.get(`/api/businesses/${businessId}`);
+      const res = await api.get<BusinessDetailResponse>(`/api/businesses/${businessId}`);
       setBusiness(res.data);
-    } catch (err) {
+    } catch {
       setError("İşletme bilgileri yüklenirken hata oluştu.");
     } finally {
       setLoading(false);
@@ -36,16 +43,16 @@ export default function LocationTab({ businessId }) {
   }
 
   async function handleSave() {
-    if (!pendingLocation) return;
+    if (!pendingLocation || !business) return;
     setSaving(true);
     try {
-      const res = await api.put(`/api/businesses/${businessId}`, {
+      const body: BusinessRequest = {
         name: business.name,
         address: business.address,
         phone: business.phone,
         description: business.description,
-        openTime: business.openTime,
-        closeTime: business.closeTime,
+        openTime: business.openTime ?? "",
+        closeTime: business.closeTime ?? "",
         category: business.category,
         // servedGender de geçmek ZORUNDA: applyToEntity tüm alanları
         // request'ten kopyalıyor, buradan göndermezsek işletmenin hizmet
@@ -54,13 +61,13 @@ export default function LocationTab({ businessId }) {
         servedGender: business.servedGender,
         latitude: pendingLocation[0],
         longitude: pendingLocation[1],
-      });
-      setBusiness((prev) => ({ ...prev, latitude: res.data.latitude, longitude: res.data.longitude }));
+      };
+      const res = await api.put<BusinessDetailResponse>(`/api/businesses/${businessId}`, body);
+      setBusiness((prev) => (prev ? { ...prev, latitude: res.data.latitude, longitude: res.data.longitude } : prev));
       setPendingLocation(null);
       setToast({ message: "✅ Konum kaydedildi.", type: "success" });
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || "Konum kaydedilirken hata oluştu.";
-      setToast({ message: String(msg), type: "error" });
+      setToast({ message: getErrorMessage(err, "Konum kaydedilirken hata oluştu."), type: "error" });
     } finally {
       setSaving(false);
     }
@@ -80,7 +87,7 @@ export default function LocationTab({ businessId }) {
     );
   }
 
-  if (error) {
+  if (error || !business) {
     return (
       <div className="text-center py-16">
         <p className="text-5xl mb-4">⚠️</p>

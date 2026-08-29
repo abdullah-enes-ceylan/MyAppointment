@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import api from "../../api/axios";
+import { getErrorMessage } from "../../api/errors";
 import Toast from "../../components/Toast";
+import type { AppointmentResponse } from "../../types/api";
 
 // Arka plan yenileme araligi. Backend'deki zaman asimi job'i varsayilan
 // olarak 5 dakikada bir calisiyor; buradaki aralik ondan belirgin sekilde
 // kisa olmali ki ekrandaki liste sunucudan uzun sure geride kalmasin.
 const REFRESH_INTERVAL_MS = 60_000;
 
-function formatDate(dateStr) {
+function formatDate(dateStr: string) {
   const date = new Date(dateStr);
   const months = [
     "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -21,15 +23,20 @@ function formatDate(dateStr) {
   return `${day} ${month} ${year} — ${hours}:${minutes}`;
 }
 
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
+
 // Bekleyen randevu talepleri — eskiden PendingAppointments.jsx sayfasıydı,
 // businessId sabit kodluydu (=1). Artık BusinessPanelPage'den seçili
 // işletmenin id'sini prop olarak alıyor.
-export default function InboxTab({ businessId }) {
-  const [appointments, setAppointments] = useState([]);
+export default function InboxTab({ businessId }: { businessId: number | null }) {
+  const [appointments, setAppointments] = useState<AppointmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [actionLoading, setActionLoading] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
 
   useEffect(() => {
     if (!businessId) return;
@@ -60,16 +67,16 @@ export default function InboxTab({ businessId }) {
     if (!silent) setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/api/appointments/business/${businessId}/pending`);
+      const res = await api.get<AppointmentResponse[]>(`/api/appointments/business/${businessId}/pending`);
       setAppointments(res.data);
-    } catch (err) {
+    } catch {
       if (!silent) setError("Bekleyen randevular yüklenirken hata oluştu.");
     } finally {
       if (!silent) setLoading(false);
     }
   }
 
-  async function handleAction(appointmentId, action) {
+  async function handleAction(appointmentId: number, action: "approve" | "reject") {
     setActionLoading(appointmentId);
     try {
       await api.put(`/api/appointments/${appointmentId}/${action}`);
@@ -79,8 +86,7 @@ export default function InboxTab({ businessId }) {
         type: action === "approve" ? "success" : "error",
       });
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || "İşlem sırasında bir hata oluştu.";
-      setToast({ message: String(msg), type: "error" });
+      setToast({ message: getErrorMessage(err, "İşlem sırasında bir hata oluştu."), type: "error" });
       // Hata mesajı tek başına yetmiyor: işlem başarısız olduysa ekrandaki
       // liste sunucudaki gerçekle uyuşmuyor demektir (en tipik hali: talep
       // bu arada zaman aşımına uğramış). Tazelemezsek kullanıcı aynı satıra
@@ -112,7 +118,7 @@ export default function InboxTab({ businessId }) {
           <p className="text-5xl mb-4">⚠️</p>
           <p className="text-red-400 text-lg mb-4">{error}</p>
           <button
-            onClick={fetchPending}
+            onClick={() => fetchPending()}
             className="text-emerald-400 hover:text-emerald-300 text-sm font-medium cursor-pointer"
           >
             Tekrar Dene

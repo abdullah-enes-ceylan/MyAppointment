@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import api from "../../api/axios";
+import { getErrorMessage } from "../../api/errors";
 import Toast from "../../components/Toast";
+import type { AppointmentResponse } from "../../types/api";
 
-function formatDate(dateStr) {
+function formatDate(dateStr: string) {
   const date = new Date(dateStr);
   const months = [
     "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -16,7 +18,13 @@ function formatDate(dateStr) {
   return `${day} ${month} ${year} — ${hours}:${minutes}`;
 }
 
-function AppointmentCard({ apt, onNoShow, actionLoading }) {
+interface AppointmentCardProps {
+  apt: AppointmentResponse;
+  onNoShow: (appointmentId: number) => void;
+  actionLoading: number | null;
+}
+
+function AppointmentCard({ apt, onNoShow, actionLoading }: AppointmentCardProps) {
   const [confirming, setConfirming] = useState(false);
   const isPast = new Date(apt.appointmentDate) < new Date();
 
@@ -90,6 +98,11 @@ function AppointmentCard({ apt, onNoShow, actionLoading }) {
   );
 }
 
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
+
 // Onaylanmış randevular — işletme sahibinin "müşteri gelmedi" işaretlemesi
 // için. AppointmentService.changeStatus'ta NO_SHOW sadece APPROVED
 // durumundan gecerli (bkz. Faz 2.1), bu yuzden burada sadece APPROVED
@@ -98,12 +111,12 @@ function AppointmentCard({ apt, onNoShow, actionLoading }) {
 // isaretlemesi tam olarak randevu SAATI GECTIKTEN SONRA yapilir, o yuzden
 // bilerek tum randevulari donen /business/{id} kullanilip client'ta
 // APPROVED'a filtreleniyor.
-export default function ApprovedTab({ businessId }) {
-  const [appointments, setAppointments] = useState([]);
+export default function ApprovedTab({ businessId }: { businessId: number | null }) {
+  const [appointments, setAppointments] = useState<AppointmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [actionLoading, setActionLoading] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
 
   useEffect(() => {
     if (businessId) fetchApproved();
@@ -113,27 +126,26 @@ export default function ApprovedTab({ businessId }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get(`/api/appointments/business/${businessId}`);
+      const res = await api.get<AppointmentResponse[]>(`/api/appointments/business/${businessId}`);
       const approved = res.data
         .filter((a) => a.status === "APPROVED")
-        .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate));
+        .sort((a, b) => new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime());
       setAppointments(approved);
-    } catch (err) {
+    } catch {
       setError("Onaylanmış randevular yüklenirken hata oluştu.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleNoShow(appointmentId) {
+  async function handleNoShow(appointmentId: number) {
     setActionLoading(appointmentId);
     try {
       await api.put(`/api/appointments/${appointmentId}/no_show`);
       setAppointments((prev) => prev.filter((a) => a.id !== appointmentId));
       setToast({ message: "🚷 Randevu 'gelmedi' olarak işaretlendi.", type: "success" });
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || "İşlem sırasında bir hata oluştu.";
-      setToast({ message: String(msg), type: "error" });
+      setToast({ message: getErrorMessage(err, "İşlem sırasında bir hata oluştu."), type: "error" });
     } finally {
       setActionLoading(null);
     }

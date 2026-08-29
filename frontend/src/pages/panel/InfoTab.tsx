@@ -1,7 +1,26 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
 import api from "../../api/axios";
+import { getValidationErrors } from "../../api/errors";
 import Toast from "../../components/Toast";
 import { CATEGORIES, GENDERS } from "../../components/CategoryIcons";
+import type { BusinessCategory, BusinessDetailResponse, BusinessRequest, ServedGender } from "../../types/api";
+
+// Bu sekmede duzenlenen alt kume -- BusinessRequest'in tamami degil,
+// openTime/closeTime/latitude/longitude submit sirasinda business'tan
+// (degismeden) tekrar ekleniyor (bkz. handleSave).
+interface InfoFormState {
+  name: string;
+  address: string;
+  phone: string;
+  description: string;
+  category: BusinessCategory;
+  servedGender: ServedGender;
+}
+
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
 
 // İşletme temel bilgileri. Bu sekme YENİ: daha önce işletme sahibinin
 // adını/kategorisini değiştirebileceği hiçbir ekran yoktu, sadece konum
@@ -12,13 +31,13 @@ import { CATEGORIES, GENDERS } from "../../components/CategoryIcons";
 // TÜM alanları request'ten kopyalıyor, bu yüzden değiştirmediğimiz alanları
 // (saatler, konum) da olduğu gibi geri göndermek zorundayız -- yoksa null'a
 // düşerler.
-export default function InfoTab({ businessId }) {
-  const [business, setBusiness] = useState(null);
-  const [form, setForm] = useState(null);
+export default function InfoTab({ businessId }: { businessId: number | null }) {
+  const [business, setBusiness] = useState<BusinessDetailResponse | null>(null);
+  const [form, setForm] = useState<InfoFormState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState({});
-  const [toast, setToast] = useState(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<ToastState | null>(null);
 
   useEffect(() => {
     if (businessId) fetchBusiness();
@@ -27,7 +46,7 @@ export default function InfoTab({ businessId }) {
   async function fetchBusiness() {
     setLoading(true);
     try {
-      const res = await api.get(`/api/businesses/${businessId}`);
+      const res = await api.get<BusinessDetailResponse>(`/api/businesses/${businessId}`);
       setBusiness(res.data);
       setForm({
         name: res.data.name ?? "",
@@ -44,26 +63,28 @@ export default function InfoTab({ businessId }) {
     }
   }
 
-  async function handleSave(e) {
+  async function handleSave(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!form || !business) return;
     setSaving(true);
     setErrors({});
     try {
-      const res = await api.put(`/api/businesses/${businessId}`, {
+      const body: BusinessRequest = {
         ...form,
         // Bu sekmede düzenlenmeyen ama request'te zorunlu olan alanlar
-        openTime: business.openTime,
-        closeTime: business.closeTime,
+        openTime: business.openTime ?? "",
+        closeTime: business.closeTime ?? "",
         latitude: business.latitude,
         longitude: business.longitude,
-      });
+      };
+      const res = await api.put<BusinessDetailResponse>(`/api/businesses/${businessId}`, body);
       setBusiness(res.data);
       setToast({ message: "✅ İşletme bilgileri güncellendi.", type: "success" });
     } catch (err) {
-      const data = err.response?.data;
-      setErrors(data?.fieldErrors ?? {});
-      if (!data?.fieldErrors) {
-        setToast({ message: String(data?.message ?? "Kaydedilirken hata oluştu."), type: "error" });
+      const { fieldErrors, message } = getValidationErrors(err, "Kaydedilirken hata oluştu.");
+      setErrors(fieldErrors);
+      if (Object.keys(fieldErrors).length === 0) {
+        setToast({ message, type: "error" });
       }
     } finally {
       setSaving(false);
@@ -93,24 +114,45 @@ export default function InfoTab({ businessId }) {
       <form onSubmit={handleSave} className="space-y-4">
         <div>
           <label htmlFor="biz-name" className="block text-xs font-medium text-slate-400 mb-1.5">İşletme Adı</label>
-          <input id="biz-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={field} />
+          <input
+            id="biz-name"
+            value={form.name}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, name: e.target.value })}
+            className={field}
+          />
           {errors.name && <p className="mt-1 text-xs text-red-400">{errors.name}</p>}
         </div>
 
         <div>
           <label htmlFor="biz-address" className="block text-xs font-medium text-slate-400 mb-1.5">Adres</label>
-          <input id="biz-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className={field} />
+          <input
+            id="biz-address"
+            value={form.address}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, address: e.target.value })}
+            className={field}
+          />
           {errors.address && <p className="mt-1 text-xs text-red-400">{errors.address}</p>}
         </div>
 
         <div>
           <label htmlFor="biz-phone" className="block text-xs font-medium text-slate-400 mb-1.5">Telefon</label>
-          <input id="biz-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={field} />
+          <input
+            id="biz-phone"
+            value={form.phone}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, phone: e.target.value })}
+            className={field}
+          />
         </div>
 
         <div>
           <label htmlFor="biz-desc" className="block text-xs font-medium text-slate-400 mb-1.5">Açıklama</label>
-          <textarea id="biz-desc" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={field} />
+          <textarea
+            id="biz-desc"
+            rows={2}
+            value={form.description}
+            onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setForm({ ...form, description: e.target.value })}
+            className={field}
+          />
         </div>
 
         <div>
@@ -118,7 +160,7 @@ export default function InfoTab({ businessId }) {
           <select
             id="biz-cat"
             value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => setForm({ ...form, category: e.target.value as BusinessCategory })}
             className={`${field} cursor-pointer`}
           >
             {CATEGORIES.filter((c) => c.key !== "ALL").map((c) => (
@@ -136,7 +178,7 @@ export default function InfoTab({ businessId }) {
               <button
                 key={g.key}
                 type="button"
-                onClick={() => setForm({ ...form, servedGender: g.key })}
+                onClick={() => setForm({ ...form, servedGender: g.key as ServedGender })}
                 className={`px-4 py-2 text-sm font-medium rounded-xl border transition-colors cursor-pointer ${
                   form.servedGender === g.key
                     ? "bg-emerald-600 text-white border-emerald-600"
