@@ -1,5 +1,5 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import logoIcon from "../assets/logo-icon.png";
 
@@ -13,7 +13,7 @@ const OWNER_ROLES = ["BUSINESS_OWNER", "ADMIN"];
 export const LOCATION_STORAGE_KEY = "randevum_location_label";
 export const LOCATION_CHANGED_EVENT = "randevum:location-changed";
 
-export function setLocationLabel(label) {
+export function setLocationLabel(label: string | null) {
   if (label) {
     localStorage.setItem(LOCATION_STORAGE_KEY, label);
   } else {
@@ -26,12 +26,15 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isAuthenticated, user, logout } = useAuth();
-  const isOwner = OWNER_ROLES.includes(user?.role);
+  // user?.role tipi string | null -- "?? ''" gerekcesi RoleProtectedRoute'daki
+  // ile ayni (bkz. o dosya): null hicbir role stringiyle eslesmez, davranis
+  // ayni kalir, sadece Array.prototype.includes'in bekledigi tip saglanir.
+  const isOwner = OWNER_ROLES.includes(user?.role ?? "");
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [locationLabel, setLabel] = useState(() => localStorage.getItem(LOCATION_STORAGE_KEY));
-  const menuRef = useRef(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const sync = () => setLabel(localStorage.getItem(LOCATION_STORAGE_KEY));
@@ -48,8 +51,10 @@ export default function Navbar() {
   // Dropdown dışına tıklayınca kapansın.
   useEffect(() => {
     if (!menuOpen) return;
-    function onDocClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    function onDocClick(e: MouseEvent) {
+      if (menuRef.current && e.target instanceof Node && !menuRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
@@ -64,7 +69,7 @@ export default function Navbar() {
   // Arama tamamen istemci tarafında (HomePage yüklü listeyi filtreliyor) --
   // backend'de arama ucu yok. Sorgu URL'e yazılıyor ki hem HomePage okuyabilsin
   // hem de arama sonucu paylaşılabilir/yer imine eklenebilir olsun.
-  function handleSearch(e) {
+  function handleSearch(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     navigate(query.trim() ? `/?q=${encodeURIComponent(query.trim())}` : "/");
   }
