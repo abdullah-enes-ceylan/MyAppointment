@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import logoIcon from "../assets/logo-icon.png";
@@ -24,6 +24,10 @@ export function setLocationLabel(label: string | null) {
 
 export default function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Arama sadece ana sayfada anlamli: HomePage disindaki her sayfa zaten
+  // arama sonucu gostermiyor, kutuyu orada tutmak sadece kafa karistirirdi.
+  const isHomePage = location.pathname === "/";
   const [searchParams] = useSearchParams();
   const { isAuthenticated, user, logout } = useAuth();
   // user?.role tipi string | null -- "?? ''" gerekcesi RoleProtectedRoute'daki
@@ -98,26 +102,30 @@ export default function Navbar() {
             </svg>
           </button>
 
-          {/* Masaüstünde arama ortada, mobilde ayrı satırda */}
-          <form onSubmit={handleSearch} className="hidden sm:block flex-1 max-w-xl mx-auto">
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                </svg>
-              </span>
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="İşletme, kuaför veya hizmet ara..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
-              />
-            </div>
-          </form>
+          {/* Masaüstünde arama ortada, mobilde ayrı satırda -- sadece
+              ana sayfada: diger sayfalarda arama sonucu gosterilmiyor,
+              kutuyu orada da tutmak islevsiz ve kafa karistirici olurdu. */}
+          {isHomePage && (
+            <form onSubmit={handleSearch} className="hidden sm:block flex-1 max-w-xl mx-auto">
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="İşletme, kuaför veya hizmet ara..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
+                />
+              </div>
+            </form>
+          )}
 
-          <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-0 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 ml-auto shrink-0">
             {isAuthenticated ? (
               <>
                 {/* Bildirimler: Faz 3.4'teki NotificationPort altyapısı kurulana
@@ -195,24 +203,26 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Mobil arama satırı */}
-        <form onSubmit={handleSearch} className="sm:hidden pb-3">
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="7" />
-                <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-              </svg>
-            </span>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="İşletme, kuaför veya hizmet ara..."
-              className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
-            />
-          </div>
-        </form>
+        {/* Mobil arama satırı — sadece ana sayfada (bkz. yukarıdaki gerekçe) */}
+        {isHomePage && (
+          <form onSubmit={handleSearch} className="sm:hidden pb-3">
+            <div className="relative">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                </svg>
+              </span>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="İşletme, kuaför veya hizmet ara..."
+                className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
+              />
+            </div>
+          </form>
+        )}
       </div>
     </nav>
   );
