@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
 import api from "../api/axios";
+import { getErrorMessage } from "../api/errors";
 import Toast from "../components/Toast";
 import StarRating from "../components/StarRating";
+import type { AppointmentResponse, AppointmentStatus, ReviewRequest } from "../types/api";
 
-function formatDate(dateStr) {
+function formatDate(dateStr: string) {
   const date = new Date(dateStr);
   const months = [
     "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -17,7 +19,13 @@ function formatDate(dateStr) {
   return `${day} ${month} ${year} — ${hours}:${minutes}`;
 }
 
-const STATUS_CONFIG = {
+interface StatusMeta {
+  label: string;
+  icon: string;
+  classes: string;
+}
+
+const STATUS_CONFIG: Record<AppointmentStatus, StatusMeta> = {
   PENDING: { label: "Onay Bekliyor", icon: "⏳", classes: "bg-amber-500/10 border-amber-500/20 text-amber-400" },
   APPROVED: { label: "Onaylandı", icon: "✅", classes: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" },
   REJECTED: { label: "Reddedildi", icon: "❌", classes: "bg-red-500/10 border-red-500/20 text-red-400" },
@@ -32,10 +40,10 @@ const STATUS_CONFIG = {
 // Randevu iptali sadece PENDING/APPROVED durumundaki randevular için
 // AppointmentService.changeStatus'ta izin veriliyor (bkz. backend) — buton
 // bu iki durum dışında hiç gösterilmiyor, aksi halde tıklanınca 409 dönerdi.
-const CANCELLABLE_STATUSES = ["PENDING", "APPROVED"];
+const CANCELLABLE_STATUSES: AppointmentStatus[] = ["PENDING", "APPROVED"];
 
-function StatusBadge({ status }) {
-  const config = STATUS_CONFIG[status] ?? { label: status, icon: "", classes: "bg-slate-500/10 border-slate-500/20 text-slate-400" };
+function StatusBadge({ status }: { status: AppointmentStatus }) {
+  const config = STATUS_CONFIG[status];
   return (
     <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-medium ${config.classes}`}>
       {config.icon} {config.label}
@@ -43,24 +51,31 @@ function StatusBadge({ status }) {
   );
 }
 
+interface ReviewFormProps {
+  appointmentId: number;
+  onSubmitted: () => void;
+  onCancel: () => void;
+}
+
 // Sadece COMPLETED randevularda gösterilir -- backend zaten bunu ZORUNLU
 // kılıyor (ReviewService.createReview, status != COMPLETED ise 409),
 // bu sadece UX: yanlış durumdaki bir randevuda tıklanıp hata almasın.
-function ReviewForm({ appointmentId, onSubmitted, onCancel }) {
+function ReviewForm({ appointmentId, onSubmitted, onCancel }: ReviewFormProps) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      await api.post("/api/reviews/create", { appointmentId, rating, comment: comment || null });
+      const body: ReviewRequest = { appointmentId, rating, comment: comment || null };
+      await api.post("/api/reviews/create", body);
       onSubmitted();
     } catch (err) {
-      setError(String(err.response?.data?.message || err.response?.data || "Yorum gönderilirken hata oluştu."));
+      setError(getErrorMessage(err, "Yorum gönderilirken hata oluştu."));
     } finally {
       setSaving(false);
     }
@@ -74,7 +89,7 @@ function ReviewForm({ appointmentId, onSubmitted, onCancel }) {
       </div>
       <textarea
         value={comment}
-        onChange={(e) => setComment(e.target.value)}
+        onChange={(e: ChangeEvent<HTMLTextAreaElement>) => setComment(e.target.value)}
         maxLength={1000}
         rows={3}
         placeholder="Deneyiminizi paylaşın (opsiyonel)"
@@ -102,7 +117,14 @@ function ReviewForm({ appointmentId, onSubmitted, onCancel }) {
   );
 }
 
-function AppointmentCard({ apt, onCancel, cancelLoading, onReviewSubmitted }) {
+interface AppointmentCardProps {
+  apt: AppointmentResponse;
+  onCancel: (appointmentId: number) => void;
+  cancelLoading: number | null;
+  onReviewSubmitted: (appointmentId: number) => void;
+}
+
+function AppointmentCard({ apt, onCancel, cancelLoading, onReviewSubmitted }: AppointmentCardProps) {
   const [confirming, setConfirming] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
@@ -199,16 +221,21 @@ function AppointmentCard({ apt, onCancel, cancelLoading, onReviewSubmitted }) {
   );
 }
 
+interface ToastState {
+  message: string;
+  type: "success" | "error";
+}
+
 // Müşterinin kendi randevu geçmişi — /appointments/me tüm durumdaki
 // randevuları döner (backend kimliği token'dan alıyor, path'te id yok,
 // bu yüzden başka bir kullanıcının randevusu asla görünmez). Yaklaşan/
 // geçmiş ayrımı burada, istemci tarafında tarihe göre yapılıyor.
 export default function MyAppointmentsPage() {
-  const [appointments, setAppointments] = useState([]);
+  const [appointments, setAppointments] = useState<AppointmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [cancelLoading, setCancelLoading] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [cancelLoading, setCancelLoading] = useState<number | null>(null);
 
   useEffect(() => {
     fetchAppointments();
@@ -218,31 +245,30 @@ export default function MyAppointmentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get("/api/appointments/me");
+      const res = await api.get<AppointmentResponse[]>("/api/appointments/me");
       setAppointments(res.data);
-    } catch (err) {
+    } catch {
       setError("Randevularınız yüklenirken hata oluştu.");
     } finally {
       setLoading(false);
     }
   }
 
-  function handleReviewSubmitted(appointmentId) {
+  function handleReviewSubmitted(appointmentId: number) {
     setAppointments((prev) =>
       prev.map((a) => (a.id === appointmentId ? { ...a, hasReview: true } : a))
     );
     setToast({ message: "⭐ Yorumunuz kaydedildi, teşekkürler!", type: "success" });
   }
 
-  async function handleCancel(appointmentId) {
+  async function handleCancel(appointmentId: number) {
     setCancelLoading(appointmentId);
     try {
-      const res = await api.put(`/api/appointments/${appointmentId}/cancel`);
+      const res = await api.put<AppointmentResponse>(`/api/appointments/${appointmentId}/cancel`);
       setAppointments((prev) => prev.map((a) => (a.id === appointmentId ? res.data : a)));
       setToast({ message: "🚫 Randevu iptal edildi.", type: "success" });
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data || "İptal sırasında bir hata oluştu.";
-      setToast({ message: String(msg), type: "error" });
+      setToast({ message: getErrorMessage(err, "İptal sırasında bir hata oluştu."), type: "error" });
     } finally {
       setCancelLoading(null);
     }
@@ -251,10 +277,10 @@ export default function MyAppointmentsPage() {
   const now = new Date();
   const upcoming = appointments
     .filter((a) => new Date(a.appointmentDate) >= now)
-    .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate));
+    .sort((a, b) => new Date(a.appointmentDate).getTime() - new Date(b.appointmentDate).getTime());
   const past = appointments
     .filter((a) => new Date(a.appointmentDate) < now)
-    .sort((a, b) => new Date(b.appointmentDate) - new Date(a.appointmentDate));
+    .sort((a, b) => new Date(b.appointmentDate).getTime() - new Date(a.appointmentDate).getTime());
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
