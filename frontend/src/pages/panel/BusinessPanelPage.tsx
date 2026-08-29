@@ -7,8 +7,11 @@ import StaffTab from "./StaffTab";
 import WorkingHoursTab from "./WorkingHoursTab";
 import LocationTab from "./LocationTab";
 import InfoTab from "./InfoTab";
+import type { BusinessResponse } from "../../types/api";
 
-const TABS = [
+type TabKey = "inbox" | "approved" | "services" | "staff" | "hours" | "location" | "info";
+
+const TABS: { key: TabKey; label: string }[] = [
   { key: "inbox", label: "📥 İstek Kutusu" },
   { key: "approved", label: "✅ Onaylananlar" },
   { key: "services", label: "✂️ Hizmetler" },
@@ -19,11 +22,11 @@ const TABS = [
 ];
 
 export default function BusinessPanelPage() {
-  const [businesses, setBusinesses] = useState([]);
-  const [selectedBusinessId, setSelectedBusinessId] = useState(null);
-  const [activeTab, setActiveTab] = useState("inbox");
+  const [businesses, setBusinesses] = useState<BusinessResponse[]>([]);
+  const [selectedBusinessId, setSelectedBusinessId] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<TabKey>("inbox");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBusinesses();
@@ -33,12 +36,12 @@ export default function BusinessPanelPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get("/api/businesses/my");
+      const res = await api.get<BusinessResponse[]>("/api/businesses/my");
       setBusinesses(res.data);
       if (res.data.length > 0) {
         setSelectedBusinessId(res.data[0].id);
       }
-    } catch (err) {
+    } catch {
       setError("İşletmeleriniz yüklenirken hata oluştu.");
     } finally {
       setLoading(false);
