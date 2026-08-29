@@ -1,10 +1,12 @@
+import type { ReactNode } from "react";
 import { getCategory, getCategoryLabel, getGenderLabel } from "./CategoryIcons";
+import type { BusinessResponse, ServedGender } from "../types/api";
 
 // Hizmet grubu rozeti kartın en görünür yerinde (kategori etiketinin
 // yanında) çünkü müşterinin "burası bana uygun mu" sorusunu daha kartı
 // açmadan cevaplaması gerekiyor -- yanlış yere randevu isteği gönderip
 // reddedilmesini önleyen şey bu.
-const GENDER_STYLES = {
+const GENDER_STYLES: Record<ServedGender, string> = {
   MALE: "bg-blue-500/25 text-blue-100",
   FEMALE: "bg-pink-500/25 text-pink-100",
   UNISEX: "bg-white/15 text-white/90",
@@ -13,8 +15,23 @@ const GENDER_STYLES = {
 // Küçük bölüm etiketi ("Puan", "Müsaitlik", "Konum") -- tasarımdaki
 // bilgi hiyerarşisinin belirleyici parçası: değerin ne olduğunu
 // tahmin ettirmek yerine açıkça yazıyor.
-function FieldLabel({ children }) {
+function FieldLabel({ children }: { children: ReactNode }) {
   return <div className="text-[11px] font-semibold text-slate-700 leading-tight">{children}</div>;
+}
+
+// business: uc farkli uctan gelen, ortusen ama farkli sekiller kabul ediyor
+// (GET /api/businesses -> BusinessResponse, GET /api/favorites/me ->
+// BusinessDetailResponse'un fazladan serviceItems'i, nearby modunda
+// HomePage'in distanceKm'i duz nesnenin ustune yaydigi hali) -- BusinessResponse
+// bu ucunun ortak alt kumesi, distanceKm ise sadece nearby'de var oldugu icin
+// opsiyonel. Diger iki sekil BusinessResponse'a yapisal olarak uyuyor (fazladan
+// alan tasimasi TS'te sorun degil).
+interface BusinessCardProps {
+  business: BusinessResponse & { distanceKm?: number };
+  earliestSlot?: string;
+  isFavorited?: boolean;
+  onToggleFavorite?: (businessId: number) => void;
+  onOpen: (businessId: number) => void;
 }
 
 // Tüm kartlar aynı boyutta. Bir ara ilk kartı 2 sütun genişliğinde
@@ -26,7 +43,7 @@ export default function BusinessCard({
   isFavorited,
   onToggleFavorite,
   onOpen,
-}) {
+}: BusinessCardProps) {
   const { Icon } = getCategory(business.category);
 
   return (
@@ -93,12 +110,16 @@ export default function BusinessCard({
 
         {/* Puan + Müsaitlik yan yana. Müsaitlik rozeti gerçek slot verisi
             bulunduğunda çıkıyor; yoksa sütun tamamen gizleniyor -- boş bir
-            "Müsaitlik" başlığı bırakmak yanıltıcı olurdu. */}
+            "Müsaitlik" başlığı bırakmak yanıltıcı olurdu.
+            averageRating null kontrolü BİLEREK reviewCount>0 kontrolüne
+            EKLENDİ (backend sözleşmesi ikisinin hep birlikte doğru olacağını
+            garanti ediyor, ama TS bunu tek başına reviewCount'tan çıkaramaz
+            -- bu ek kontrol olmadan averageRating "null olabilir" kalırdı). */}
         <div className="mt-2 flex items-start gap-3">
           <div className="min-w-0">
             <FieldLabel>Puan</FieldLabel>
             <div className="mt-0.5 text-sm text-slate-600 whitespace-nowrap">
-              {business.reviewCount > 0 ? (
+              {business.reviewCount > 0 && business.averageRating != null ? (
                 <>
                   <span className="text-amber-400">★</span>{" "}
                   <span className="font-semibold text-slate-900">{business.averageRating.toFixed(1)}</span>{" "}
