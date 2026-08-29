@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/axios";
+import { getValidationErrors } from "../api/errors";
 import Toast from "../components/Toast";
 import { useAuth } from "../context/AuthContext";
+import type { ChangePasswordRequest, ProfileStatsResponse, Role, UpdateProfileRequest, UserResponse } from "../types/api";
 
-const ROLE_LABELS = {
+const ROLE_LABELS: Record<Role, string> = {
   USER: "Müşteri",
   BUSINESS_OWNER: "İşletme Sahibi",
   ADMIN: "Yönetici",
@@ -12,19 +14,12 @@ const ROLE_LABELS = {
 
 const OWNER_ROLES = ["BUSINESS_OWNER", "ADMIN"];
 
-// Backend'in ValidationErrorResponse'u alan bazlı hata haritası döner
-// (bkz. GlobalExceptionHandler.handleValidation) -- onu formun altına
-// alan alan basabilmek için ayıklıyoruz. Alan bazlı hata yoksa (ör.
-// BusinessRuleException) tek bir genel mesaj kalır.
-function extractErrors(err) {
-  const data = err.response?.data;
-  return {
-    fieldErrors: data?.fieldErrors ?? {},
-    message: data?.message || "Beklenmeyen bir hata oluştu.",
-  };
+interface ToastState {
+  message: string;
+  type: "success" | "error";
 }
 
-function StatTile({ icon, label, value }) {
+function StatTile({ icon, label, value }: { icon: string; label: string; value: number }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5">
       <div className="text-xl">{icon}</div>
@@ -34,7 +29,13 @@ function StatTile({ icon, label, value }) {
   );
 }
 
-function Field({ id, label, error, ...inputProps }) {
+interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
+  id: string;
+  label: ReactNode;
+  error?: string;
+}
+
+function Field({ id, label, error, ...inputProps }: FieldProps) {
   return (
     <div>
       <label htmlFor={id} className="block text-xs font-medium text-slate-500 mb-1.5">
@@ -54,27 +55,36 @@ function Field({ id, label, error, ...inputProps }) {
   );
 }
 
+// pwForm sadece frontend'de tutulan confirmPassword'u da icerdigi icin
+// ChangePasswordRequest'ten AYRI bir tip -- gonderilirken sadece
+// currentPassword/newPassword secilip yollaniyor (bkz. handlePasswordSubmit).
+interface PasswordForm extends ChangePasswordRequest {
+  confirmPassword: string;
+}
+
 export default function ProfilePage() {
   const { user } = useAuth();
-  const isOwner = OWNER_ROLES.includes(user?.role);
+  // user?.role tipi string | null -- RoleProtectedRoute/Navbar'daki ayni
+  // gerekce (bkz. o dosyalar, PR3): null hicbir role stringiyle eslesmez.
+  const isOwner = OWNER_ROLES.includes(user?.role ?? "");
 
-  const [profile, setProfile] = useState(null);
-  const [stats, setStats] = useState(null);
+  const [profile, setProfile] = useState<UserResponse | null>(null);
+  const [stats, setStats] = useState<ProfileStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
 
-  const [infoForm, setInfoForm] = useState({ name: "", surName: "", phone: "" });
-  const [infoErrors, setInfoErrors] = useState({});
+  const [infoForm, setInfoForm] = useState<UpdateProfileRequest>({ name: "", surName: "", phone: "" });
+  const [infoErrors, setInfoErrors] = useState<Record<string, string>>({});
   const [infoSaving, setInfoSaving] = useState(false);
 
-  const [pwForm, setPwForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
-  const [pwErrors, setPwErrors] = useState({});
+  const [pwForm, setPwForm] = useState<PasswordForm>({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [pwErrors, setPwErrors] = useState<Record<string, string>>({});
   const [pwSaving, setPwSaving] = useState(false);
 
   useEffect(() => {
     async function fetchProfile() {
       try {
-        const res = await api.get("/api/users/me");
+        const res = await api.get<UserResponse>("/api/users/me");
         setProfile(res.data);
         setInfoForm({ name: res.data.name, surName: res.data.surName, phone: res.data.phone });
       } catch {
@@ -90,7 +100,7 @@ export default function ProfilePage() {
   // yüklenemezse diğeri yine de görünsün (bkz. ProfileStatsResponse).
   useEffect(() => {
     api
-      .get("/api/users/me/stats")
+      .get<ProfileStatsResponse>("/api/users/me/stats")
       .then((res) => setStats(res.data))
       .catch(() => {
         // Sessizce yut -- sayılar sayfanın ana işlevi (bilgi düzenleme)
@@ -98,17 +108,17 @@ export default function ProfilePage() {
       });
   }, []);
 
-  async function handleInfoSubmit(e) {
+  async function handleInfoSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setInfoSaving(true);
     setInfoErrors({});
 
     try {
-      const res = await api.put("/api/users/me", infoForm);
+      const res = await api.put<UserResponse>("/api/users/me", infoForm);
       setProfile(res.data);
       setToast({ message: "Profil bilgileriniz güncellendi.", type: "success" });
     } catch (err) {
-      const { fieldErrors, message } = extractErrors(err);
+      const { fieldErrors, message } = getValidationErrors(err, "Beklenmeyen bir hata oluştu.");
       setInfoErrors(fieldErrors);
       if (Object.keys(fieldErrors).length === 0) {
         setToast({ message, type: "error" });
@@ -118,7 +128,7 @@ export default function ProfilePage() {
     }
   }
 
-  async function handlePasswordSubmit(e) {
+  async function handlePasswordSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPwErrors({});
 
@@ -140,7 +150,7 @@ export default function ProfilePage() {
       setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
       setToast({ message: "Şifreniz değiştirildi.", type: "success" });
     } catch (err) {
-      const { fieldErrors, message } = extractErrors(err);
+      const { fieldErrors, message } = getValidationErrors(err, "Beklenmeyen bir hata oluştu.");
       setPwErrors(fieldErrors);
       if (Object.keys(fieldErrors).length === 0) {
         setToast({ message, type: "error" });
@@ -164,7 +174,7 @@ export default function ProfilePage() {
     );
   }
 
-  const initials = profile ? `${profile.name?.[0] ?? ""}${profile.surName?.[0] ?? ""}`.toUpperCase() : "";
+  const initials = profile ? `${profile.name[0] ?? ""}${profile.surName[0] ?? ""}`.toUpperCase() : "";
 
   return (
     <div className="bg-slate-50 min-h-[calc(100vh-4rem)]">
@@ -182,9 +192,11 @@ export default function ProfilePage() {
             </h1>
             <div className="flex flex-wrap items-center gap-2 mt-1">
               <span className="text-sm text-slate-500">{profile?.email}</span>
-              <span className="text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
-                {ROLE_LABELS[profile?.role] ?? profile?.role}
-              </span>
+              {profile && (
+                <span className="text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                  {ROLE_LABELS[profile.role]}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -211,21 +223,21 @@ export default function ProfilePage() {
                 id="name"
                 label="Ad"
                 value={infoForm.name}
-                onChange={(e) => setInfoForm({ ...infoForm, name: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setInfoForm({ ...infoForm, name: e.target.value })}
                 error={infoErrors.name}
               />
               <Field
                 id="surName"
                 label="Soyad"
                 value={infoForm.surName}
-                onChange={(e) => setInfoForm({ ...infoForm, surName: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setInfoForm({ ...infoForm, surName: e.target.value })}
                 error={infoErrors.surName}
               />
               <Field
                 id="phone"
                 label="Telefon"
                 value={infoForm.phone}
-                onChange={(e) => setInfoForm({ ...infoForm, phone: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setInfoForm({ ...infoForm, phone: e.target.value })}
                 error={infoErrors.phone}
               />
 
@@ -264,7 +276,7 @@ export default function ProfilePage() {
                 type="password"
                 placeholder="••••••••"
                 value={pwForm.currentPassword}
-                onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
                 error={pwErrors.currentPassword}
               />
               <Field
@@ -273,7 +285,7 @@ export default function ProfilePage() {
                 type="password"
                 placeholder="••••••••"
                 value={pwForm.newPassword}
-                onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setPwForm({ ...pwForm, newPassword: e.target.value })}
                 error={pwErrors.newPassword}
               />
               <Field
@@ -282,7 +294,7 @@ export default function ProfilePage() {
                 type="password"
                 placeholder="••••••••"
                 value={pwForm.confirmPassword}
-                onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setPwForm({ ...pwForm, confirmPassword: e.target.value })}
                 error={pwErrors.confirmPassword}
               />
 
