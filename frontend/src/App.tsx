@@ -1,3 +1,4 @@
+import type { SVGProps } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Navbar from "./components/Navbar";
@@ -15,7 +16,7 @@ import ProfilePage from "./pages/ProfilePage";
 
 const FOOTER_LINKS = ["Hakkımızda", "Destek", "Kullanım Koşulları", "Gizlilik"];
 
-const socialIcon = {
+const socialIcon: SVGProps<SVGSVGElement> = {
   width: 18,
   height: 18,
   viewBox: "0 0 24 24",
