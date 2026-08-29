@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useCallback } from "react";
-import { jwtDecode } from "jwt-decode";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { jwtDecode, type JwtPayload } from "jwt-decode";
 
 // Uygulamanin her yerinden "kim giris yapmis, rolu ne" bilgisine tek
 // yerden erisim saglar. Eskiden Navbar dogrudan localStorage.getItem
@@ -8,7 +8,27 @@ import { jwtDecode } from "jwt-decode";
 // state'i localStorage degisikliginden haberdar olmuyordu. AuthContext
 // ile login/logout artik normal React state guncellemesi, sayfa hic
 // yenilenmeden her bilesen otomatik yeniden render oluyor.
-const AuthContext = createContext(null);
+
+// jwt-decode'un kendi JwtPayload'ı standart claim'leri (sub, exp, ...)
+// biliyor ama "role" backend'e özgü bir claim -- bunu kendimiz ekliyoruz.
+interface RandevumJwtPayload extends JwtPayload {
+  role?: string;
+}
+
+interface AuthUser {
+  email?: string;
+  role: string | null;
+}
+
+interface AuthContextValue {
+  token: string | null;
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  login: (newToken: string) => void;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null);
 
 // JWT'nin role claim'i backend'de SADECE token uretilirken yazilir,
 // yetkilendirme icin HIC KULLANILMAZ (backend her istekte rolu
@@ -18,10 +38,10 @@ const AuthContext = createContext(null);
 // zaman backend'de. Rol backend'de degisirse (ornegin isletme sahibi
 // olma), kullanici yeniden giris yapana kadar token'daki eski rolu
 // tasir — bu, salt UI gorunumu icin kabul edilebilir bir gecikme.
-function decodeUser(token) {
+function decodeUser(token: string | null): AuthUser | null {
   if (!token) return null;
   try {
-    const payload = jwtDecode(token);
+    const payload = jwtDecode<RandevumJwtPayload>(token);
     // Backend "ROLE_USER" gibi onekli yaziyor (bkz. CustomUserDetailsService).
     const role = payload.role?.replace(/^ROLE_/, "") ?? null;
     return { email: payload.sub, role };
@@ -31,11 +51,11 @@ function decodeUser(token) {
   }
 }
 
-export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem("token"));
-  const [user, setUser] = useState(() => decodeUser(localStorage.getItem("token")));
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("token"));
+  const [user, setUser] = useState<AuthUser | null>(() => decodeUser(localStorage.getItem("token")));
 
-  const login = useCallback((newToken) => {
+  const login = useCallback((newToken: string) => {
     localStorage.setItem("token", newToken);
     setToken(newToken);
     setUser(decodeUser(newToken));
@@ -47,7 +67,7 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  const value = {
+  const value: AuthContextValue = {
     token,
     user,
     isAuthenticated: Boolean(token),
@@ -58,7 +78,7 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);
   if (!context) {
     throw new Error("useAuth, AuthProvider icinde kullanilmali.");
