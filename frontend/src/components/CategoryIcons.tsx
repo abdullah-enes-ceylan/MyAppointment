@@ -1,9 +1,12 @@
+import type { ComponentType, SVGProps } from "react";
+import type { BusinessCategory, ServedGender } from "../types/api";
+
 // Kategori sekmelerindeki çizgi ikonlar. Emoji yerine SVG: sekme çubuğu
 // tasarımın en görünür parçası ve emoji her işletim sisteminde farklı
 // (Windows'ta düz, iOS'ta 3B renkli) görünüyor -- SVG her yerde aynı
 // duruyor ve currentColor sayesinde aktif/pasif renginden otomatik
 // etkileniyor. Emoji, kart içeriğinde (⭐ 📍) kalmaya devam ediyor.
-const base = {
+const base: SVGProps<SVGSVGElement> = {
   width: 20,
   height: 20,
   viewBox: "0 0 24 24",
@@ -69,6 +72,12 @@ const PenIcon = () => (
   </svg>
 );
 
+interface CategoryOption {
+  key: BusinessCategory | "ALL";
+  label: string;
+  Icon: ComponentType;
+}
+
 // Kategori listesi TEK KAYNAK burada -- eskiden HomePage ve BusinessCard'da
 // ayrı ayrı tanımlıydı (biri label+icon, diğeri sadece icon), ikisi de aynı
 // enum'ı tekrarlıyordu. Backend'deki BusinessCategory enum'ıyla birebir.
@@ -76,7 +85,7 @@ const PenIcon = () => (
 // "Berber" ayrı bir kategori DEĞİL: berber de erkek kuaförü de Kuaför
 // kategorisinde, aradaki fark GENDERS ile ifade ediliyor (bkz. backend
 // ServedGender enum'ındaki gerekçe).
-export const CATEGORIES = [
+export const CATEGORIES: CategoryOption[] = [
   { key: "ALL", label: "Tümü", Icon: GridIcon },
   { key: "HAIRDRESSER", label: "Kuaför", Icon: ScissorsIcon },
   { key: "BEAUTY_SALON", label: "Güzellik", Icon: SparkleIcon },
@@ -86,23 +95,28 @@ export const CATEGORIES = [
   { key: "TATTOO_STUDIO", label: "Dövme", Icon: PenIcon },
 ];
 
+interface GenderOption {
+  key: ServedGender | "ALL";
+  label: string;
+}
+
 // Backend ServedGender enum'ıyla birebir. "ALL" sadece filtrede kullanılan
 // bir arayüz değeri -- backend'de karşılığı yok, "filtreleme yapma" demek.
-export const GENDERS = [
+export const GENDERS: GenderOption[] = [
   { key: "ALL", label: "Herkes" },
   { key: "MALE", label: "Erkek" },
   { key: "FEMALE", label: "Kadın" },
   { key: "UNISEX", label: "Unisex" },
 ];
 
-export function getCategory(key) {
+export function getCategory(key: BusinessCategory | "ALL"): CategoryOption {
   return CATEGORIES.find((c) => c.key === key) ?? CATEGORIES[0];
 }
 
-export function getCategoryLabel(key) {
+export function getCategoryLabel(key: BusinessCategory | "ALL"): string {
   return getCategory(key).label;
 }
 
-export function getGenderLabel(key) {
+export function getGenderLabel(key: ServedGender | "ALL"): string {
   return GENDERS.find((g) => g.key === key)?.label ?? key;
 }
