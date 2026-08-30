@@ -1,9 +1,14 @@
-import { useState, useEffect, type ChangeEvent, type FormEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent, type FormEvent } from "react";
 import api from "../../api/axios";
-import { getValidationErrors } from "../../api/errors";
+import { getErrorMessage, getValidationErrors } from "../../api/errors";
 import Toast from "../../components/Toast";
 import { CATEGORIES, GENDERS } from "../../components/CategoryIcons";
-import type { BusinessCategory, BusinessDetailResponse, BusinessRequest, ServedGender } from "../../types/api";
+import { resolvePhotoUrl } from "../../utils/photo";
+import type { BusinessCategory, BusinessDetailResponse, BusinessRequest, BusinessResponse, ServedGender } from "../../types/api";
+
+// Backend'in kabul ettigi bicimlerle birebir -- BusinessPhotoProperties.
+// allowedInputFormats (JPEG, PNG) ile ayni kume, sadece MIME karsiliklari.
+const ACCEPTED_PHOTO_TYPES = "image/jpeg,image/png";
 
 // Bu sekmede duzenlenen alt kume -- BusinessRequest'in tamami degil,
 // openTime/closeTime/latitude/longitude submit sirasinda business'tan
@@ -39,9 +44,65 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [toast, setToast] = useState<ToastState | null>(null);
 
+  // Kapak fotografi -- secilen dosyanin ONIZLEMESI (henuz yuklenmeden),
+  // yukleme sirasindaki yukleniyor durumu. business.coverPhotoCardUrl
+  // (zaten kayitli olan) ile photoPreview (yeni secilen, henuz kaydedilmemis)
+  // BILEREK ayri tutuluyor -- yukleme basarisiz olursa eski fotograf
+  // gostermeye devam etmeli, secilen dosya "kaybolmus" gibi durmamali.
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (businessId) fetchBusiness();
   }, [businessId]);
+
+  // Secilen dosya icin URL.createObjectURL ile uretilen blob URL'i, bilesen
+  // unmount olduğunda ya da yeni bir dosya secildiginde serbest birakilmali
+  // -- aksi halde tarayici belleginde birikir (klasik object URL sizintisi).
+  useEffect(() => {
+    return () => {
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+    };
+  }, [photoPreview]);
+
+  function handlePhotoSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoFile(file);
+    setPhotoPreview(file ? URL.createObjectURL(file) : null);
+  }
+
+  async function handlePhotoUpload() {
+    if (!photoFile || !businessId) return;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", photoFile);
+      // axios instance'i varsayilan olarak "Content-Type: application/json"
+      // tasiyor (bkz. api/axios.ts) -- bu FormData govdeleri icin YANLIS ve
+      // gercekten kirici: tarayici, Content-Type ONCEDEN (defaults uzerinden
+      // bile) set edilmisse kendi boundary'li multipart baslığini ASLA
+      // uretmiyor, backend "Current request is not a multipart request"
+      // ile patliyor (bu varsayimdan degil, tarayicida canli denenip
+      // gozlemlenmis bir hatadan biliniyor). Header'i `undefined` yaparak
+      // KALDIRIYORUZ ki tarayici kendi boundary'sini uretsin.
+      const res = await api.post<BusinessResponse>(`/api/businesses/${businessId}/photo`, formData, {
+        headers: { "Content-Type": undefined },
+      });
+      setToast({ message: "✅ Kapak fotoğrafı güncellendi.", type: "success" });
+      if (photoPreview) URL.revokeObjectURL(photoPreview);
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      setBusiness((prev) => (prev ? { ...prev, coverPhotoCardUrl: res.data.coverPhotoCardUrl } : prev));
+    } catch (err) {
+      setToast({ message: getErrorMessage(err, "Fotoğraf yüklenirken hata oluştu."), type: "error" });
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
 
   async function fetchBusiness() {
     setLoading(true);
@@ -91,7 +152,7 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
     }
   }
 
-  if (loading || !form) {
+  if (loading || !form || !business) {
     return (
       <div className="flex justify-center py-16">
         <div className="flex items-center gap-3 text-slate-400">
@@ -110,6 +171,46 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
   return (
     <div className="max-w-2xl space-y-4">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Kapak fotografi -- BILEREK ayri, handleSave'in disinda: bagimsiz bir
+          islem (kendi yukleme ucu var, bkz. BusinessPhotoService), form
+          alanlarindan biri gibi "Kaydet"e bagli degil. */}
+      <div>
+        <label className="block text-xs font-medium text-slate-400 mb-1.5">Kapak Fotoğrafı</label>
+        <div className="flex items-center gap-4">
+          <div className="w-32 h-24 rounded-xl overflow-hidden bg-gradient-to-br from-slate-700 to-slate-800 border border-white/10 shrink-0 flex items-center justify-center">
+            {photoPreview || business.coverPhotoCardUrl ? (
+              <img
+                src={photoPreview ?? resolvePhotoUrl(business.coverPhotoCardUrl) ?? undefined}
+                alt="Kapak fotoğrafı önizleme"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-2xl opacity-40">🖼️</span>
+            )}
+          </div>
+          <div className="flex-1 space-y-2">
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept={ACCEPTED_PHOTO_TYPES}
+              onChange={handlePhotoSelect}
+              className="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-white/10 file:text-white hover:file:bg-white/20 file:cursor-pointer cursor-pointer"
+            />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handlePhotoUpload}
+                disabled={!photoFile || uploadingPhoto}
+                className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                {uploadingPhoto ? "Yükleniyor..." : "Fotoğrafı Yükle"}
+              </button>
+              <p className="text-xs text-slate-500">JPEG veya PNG, en fazla 5 MB.</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <form onSubmit={handleSave} className="space-y-4">
         <div>

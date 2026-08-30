@@ -3,8 +3,14 @@ import axios from "axios";
 // Eskiden http://localhost:8080 sabit kodluydu — deploy'da (frontend ve
 // backend farklı adreslerde çalıştığında) kırılırdı. .env'den okunuyor,
 // VITE_API_URL tanımlı değilse yerel geliştirme varsayılanına düşer.
+//
+// Ayrıca export ediliyor: backend'in döndürdüğü göreceli görsel yolları
+// (ör. "/api/business-photos/xxx-card.jpg") <img src> için mutlak hale
+// getirilirken kullanılıyor -- bkz. utils/photo.ts.
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8080",
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },

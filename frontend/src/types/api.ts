@@ -27,6 +27,10 @@ export type ServedGender = "MALE" | "FEMALE" | "UNISEX";
 //   "puan yok" ile "puan 0" karismasin diye -- bkz. BusinessResponse.java:23-24).
 // - latitude/longitude: isletme konumunu henuz girmemisse null.
 // - name/address/category/servedGender/verified: entity'de nullable=false.
+// - coverPhotoCardUrl: isletme kapak fotografi yuklemediyse null -- frontend
+//   bu durumda gradyan kapagi gostermeye devam eder (bkz. BusinessCard.tsx).
+//   Backend gorece bir yol donuyor ("/api/business-photos/xxx-card.jpg"),
+//   mutlak hale getirmek icin resolvePhotoUrl kullanilmali (bkz. utils/photo.ts).
 export interface BusinessResponse {
   id: number;
   name: string;
@@ -42,6 +46,7 @@ export interface BusinessResponse {
   latitude: number | null;
   longitude: number | null;
   verified: boolean;
+  coverPhotoCardUrl: string | null;
 }
 
 // backend/src/main/java/com/randevu/backend/entity/Role.java
@@ -129,8 +134,11 @@ export interface ServiceItemResponse {
 // BusinessResponse'un hizmetler gomulu hali. GET /api/businesses,
 // /api/businesses/{id} ve /api/businesses/category/{cat} BUNU donuyor
 // (BusinessResponse degil) -- bkz. BusinessController.java:46,61,128.
+// coverPhotoDetailUrl BURADA var, BusinessResponse'ta YOK -- sadece detay
+// sayfasinda ihtiyac duyulan buyuk boyut, liste gorunumune tasinmiyor.
 export interface BusinessDetailResponse extends BusinessResponse {
   serviceItems: ServiceItemResponse[];
+  coverPhotoDetailUrl: string | null;
 }
 
 // backend/src/main/java/com/randevu/backend/dto/response/NearbyBusinessResponse.java
