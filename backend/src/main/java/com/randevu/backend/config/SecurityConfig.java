@@ -65,6 +65,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/businesses/*/working-hours").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/businesses/*/closures").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/appointments/available-slots").permitAll()
+                        // Kapak fotograflari herkese acik bilgi -- isletme listesi/detayi
+                        // gibi (bkz. yukarisi). POST /api/businesses/{id}/photo (yukleme)
+                        // BILEREK burada yok, genel "/api/**" kuralina dusup authenticated
+                        // kaliyor -- OwnershipGuard zaten controller'da kontrol ediyor.
+                        .requestMatchers(HttpMethod.GET, "/api/business-photos/**").permitAll()
                         .requestMatchers("/api/**").authenticated())
                 // Token yok/geçersizken artık Spring'in varsayılan
                 // Http403ForbiddenEntryPoint'i yerine kendi 401 üreten

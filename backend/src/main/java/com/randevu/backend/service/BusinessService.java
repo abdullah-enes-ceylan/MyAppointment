@@ -12,6 +12,7 @@ import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ReviewRepository;
 import com.randevu.backend.repository.ReviewStatsProjection;
 import com.randevu.backend.repository.UserRepository;
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,12 +24,14 @@ public class BusinessService {
     private final BusinessRepository businessRepository;
     private final UserRepository userRepository;
     private final ReviewRepository reviewRepository;
+    private final EntityManager entityManager;
 
     public BusinessService(BusinessRepository businessRepository, UserRepository userRepository,
-            ReviewRepository reviewRepository) {
+            ReviewRepository reviewRepository, EntityManager entityManager) {
         this.businessRepository = businessRepository;
         this.userRepository = userRepository;
         this.reviewRepository = reviewRepository;
+        this.entityManager = entityManager;
     }
 
     // Faz 2.7: puan ortalaması + yorum sayısı. ReviewStatsProjection'ı
@@ -113,6 +116,48 @@ public class BusinessService {
             user.setRole(Role.BUSINESS_OWNER);
             userRepository.save(user);
         }
+    }
+
+    // Kapak fotografi yukleme (BusinessPhotoService) icin: eski photo_key'i
+    // okuyup yeni key ile degistirir. Bilerek TEK transaction icinde,
+    // PESSIMISTIC_WRITE kilidiyle -- kilitsiz bir oku-yaz olsaydi, ayni
+    // isletmeye eszamanli iki yukleme AYNI eski key'i okur, ikisi de kendi
+    // yeni dosyasini yazar ama kaybeden istegin dosyalari DB'de hic
+    // referanslanmadigi icin sonsuza dek diskte oksuz kalirdi (bkz. plan
+    // "Isletme Kapak Fotografi" madde 7 "Eszamanli iki yukleme"). Bu metot
+    // BusinessPhotoService'ten (FARKLI bir bean) cagrildigi icin @Transactional
+    // proxy'si duzgun devreye giriyor -- BusinessPhotoService icinde ayni
+    // sinifin baska bir metodunu "this." ile cagirsaydik proxy atlanir,
+    // kilit hic calismazdi (Spring'in bilinen self-invocation tuzagi).
+    public record PhotoKeySwapResult(Business business, String previousPhotoKey) {
+    }
+
+    @Transactional
+    public PhotoKeySwapResult swapPhotoKey(Long businessId, String newPhotoKey) {
+        Business business = businessRepository.findByIdForUpdate(businessId)
+                .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
+
+        // KRITIK: spring.jpa.open-in-view=true oldugu icin bu HTTP istegi
+        // boyunca TEK bir persistence context (1. seviye onbellek) paylasilir.
+        // Bu metottan ONCE ayni istekte OwnershipGuard.assertOwnsBusiness ZATEN
+        // bu isletmeyi (KILITSIZ) okumus ve onbellege koymus olabilir. JPA'nin
+        // kimlik haritasi kurali geregi, findByIdForUpdate'in SQL'i (kilit
+        // dahil) GERCEKTEN calissa bile, persistence context'te ayni id'li bir
+        // nesne ZATEN varsa Hibernate o ESKI Java nesnesini dondurur -- yeni
+        // sorgunun getirdigi sutun degerlerini YOK SAYAR. refresh() bunu
+        // zorla DB'deki GUNCEL (ve artik kilitli/garantili taze) degerlerle
+        // degistirir. Bu satir olmadan iki eszamanli fotograf yuklemesi
+        // ikisi de "eski" olarak AYNI bayat key'i okur, biri digerinin az once
+        // yazdigi dosyalari sonsuza dek oksuz birakir -- bu varsayim degil,
+        // canli eszamanli curl testiyle once SOMUT OLARAK GOZLEMLENMIS, sonra
+        // bu satirla dogrulanarak kapatilmis bir hata.
+        entityManager.refresh(business);
+
+        String previousPhotoKey = business.getPhotoKey();
+        business.setPhotoKey(newPhotoKey);
+        Business saved = businessRepository.save(business);
+
+        return new PhotoKeySwapResult(saved, previousPhotoKey);
     }
 
     // Gelen metni Enum'a çevirir ve filtreler. Geçersiz kategorilerde boş liste

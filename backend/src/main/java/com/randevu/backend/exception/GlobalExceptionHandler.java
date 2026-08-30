@@ -14,6 +14,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -148,6 +149,18 @@ public class GlobalExceptionHandler {
         log.warn("Okunamayan istek gövdesi — {} {}: {}", request.getMethod(), request.getRequestURI(),
                 ex.getMostSpecificCause().getMessage());
         return build(HttpStatus.BAD_REQUEST, "İstek gövdesi okunamadı.", request);
+    }
+
+    // Servlet seviyesindeki multipart siniri asildi (spring.servlet.multipart.
+    // max-file-size/max-request-size) -> 413. Bu, bizim BusinessPhotoService'in
+    // anlamli BusinessRuleException'indan ONCE devreye giriyor cunku Spring bu
+    // kontrolu dosya govdesi TAMAMEN okunmadan, cok erken yapiyor -- bkz.
+    // BusinessPhotoProperties.maxSizeBytes'in bu sinirdan dusuk tutulmasi
+    // gerekce (plan "Isletme Kapak Fotografi" madde 9).
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex,
+            HttpServletRequest request) {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "Yüklenen dosya çok büyük.", request);
     }
 
     // Son savunma hatti: yukaridaki tiplerin hicbirine uymayan, ongorulmemis

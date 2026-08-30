@@ -7,6 +7,7 @@ import com.randevu.backend.dto.response.NearbyBusinessResponse;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.mapper.BusinessMapper;
+import com.randevu.backend.service.BusinessPhotoService;
 import com.randevu.backend.service.BusinessService;
 import com.randevu.backend.service.BusinessService.RatingStats;
 import com.randevu.backend.service.CurrentUserService;
@@ -19,6 +20,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -31,15 +33,17 @@ public class BusinessController {
     private final OwnershipGuard ownershipGuard;
     private final LocationService locationService;
     private final BusinessPhotoStorage photoStorage;
+    private final BusinessPhotoService businessPhotoService;
 
     public BusinessController(BusinessService businessService, CurrentUserService currentUserService,
                                OwnershipGuard ownershipGuard, LocationService locationService,
-                               BusinessPhotoStorage photoStorage) {
+                               BusinessPhotoStorage photoStorage, BusinessPhotoService businessPhotoService) {
         this.businessService = businessService;
         this.currentUserService = currentUserService;
         this.ownershipGuard = ownershipGuard;
         this.locationService = locationService;
         this.photoStorage = photoStorage;
+        this.businessPhotoService = businessPhotoService;
     }
 
     // BusinessDetailResponse dönüyor (hizmetler gömülü) — frontend şu an
@@ -100,6 +104,21 @@ public class BusinessController {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         Business updated = businessService.updateBusiness(businessId, request);
+        return toResponseWithRating(updated);
+    }
+
+    // YENİ: kapak fotoğrafı yükleme, sahiplik kontrollü. OwnershipGuard
+    // olmadan giriş yapmış herhangi bir kullanıcı başka bir işletmenin
+    // kapağını değiştirebilirdi -- updateBusiness ile aynı desen. Dosyanın
+    // doğrulanması/yeniden kodlanması/depolanması BusinessPhotoService'te
+    // (bkz. o sınıf, plan "Isletme Kapak Fotografi" PR3).
+    @PostMapping("/{id:\\d+}/photo")
+    public BusinessResponse uploadPhoto(@PathVariable("id") Long businessId,
+                                         @RequestParam("file") MultipartFile file,
+                                         Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        Business updated = businessPhotoService.uploadPhoto(businessId, file);
         return toResponseWithRating(updated);
     }
 
