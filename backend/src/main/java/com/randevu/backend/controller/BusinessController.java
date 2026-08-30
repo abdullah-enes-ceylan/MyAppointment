@@ -13,6 +13,7 @@ import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.LocationService;
 import com.randevu.backend.service.LocationService.NearbyBusiness;
 import com.randevu.backend.service.OwnershipGuard;
+import com.randevu.backend.storage.BusinessPhotoStorage;
 
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -29,13 +30,16 @@ public class BusinessController {
     private final CurrentUserService currentUserService;
     private final OwnershipGuard ownershipGuard;
     private final LocationService locationService;
+    private final BusinessPhotoStorage photoStorage;
 
     public BusinessController(BusinessService businessService, CurrentUserService currentUserService,
-                               OwnershipGuard ownershipGuard, LocationService locationService) {
+                               OwnershipGuard ownershipGuard, LocationService locationService,
+                               BusinessPhotoStorage photoStorage) {
         this.businessService = businessService;
         this.currentUserService = currentUserService;
         this.ownershipGuard = ownershipGuard;
         this.locationService = locationService;
+        this.photoStorage = photoStorage;
     }
 
     // BusinessDetailResponse dönüyor (hizmetler gömülü) — frontend şu an
@@ -137,12 +141,12 @@ public class BusinessController {
     // ölçeğinde önemsiz, erken optimizasyon yapmıyoruz (bkz. ROADMAP 2.7).
     private BusinessResponse toResponseWithRating(Business business) {
         RatingStats stats = businessService.getRatingStats(business.getId());
-        return BusinessMapper.toResponse(business, stats.averageRating(), stats.reviewCount());
+        return BusinessMapper.toResponse(business, stats.averageRating(), stats.reviewCount(), photoStorage);
     }
 
     private BusinessDetailResponse toDetailResponseWithRating(Business business) {
         RatingStats stats = businessService.getRatingStats(business.getId());
-        return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount());
+        return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount(), photoStorage);
     }
 
 }

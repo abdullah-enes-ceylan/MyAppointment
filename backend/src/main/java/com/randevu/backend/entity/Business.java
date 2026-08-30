@@ -65,6 +65,16 @@ public class Business {
     @Column(name = "served_gender", nullable = false)
     private ServedGender servedGender = ServedGender.UNISEX;
 
+    // Kapak fotografi icin tek anahtar (uzantisiz UUID). Nullable -- isletme
+    // henuz fotograf yuklememis olabilir, bu durumda mapper eski gradyan
+    // kapagin gosterilmesi icin null URL uretir. Kart/detay dosya adlari
+    // ({photoKey}-card.jpg, {photoKey}-detail.jpg) BusinessMapper'da bu
+    // alandan turetiliyor -- bkz. plan "Isletme Kapak Fotografi" PR2.
+    // BusinessRequest'te BILEREK yok: sadece fotograf yukleme ucu (PR3)
+    // set eder, genel guncelleme akisiyla degistirilemez.
+    @Column(name = "photo_key")
+    private String photoKey;
+
     // Getter ve Setter metotları
     public BusinessCategory getCategory() {
         return category;

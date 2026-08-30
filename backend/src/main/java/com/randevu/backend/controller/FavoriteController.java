@@ -8,6 +8,7 @@ import com.randevu.backend.service.BusinessService;
 import com.randevu.backend.service.BusinessService.RatingStats;
 import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.FavoriteService;
+import com.randevu.backend.storage.BusinessPhotoStorage;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -28,12 +29,14 @@ public class FavoriteController {
     private final FavoriteService favoriteService;
     private final BusinessService businessService;
     private final CurrentUserService currentUserService;
+    private final BusinessPhotoStorage photoStorage;
 
     public FavoriteController(FavoriteService favoriteService, BusinessService businessService,
-            CurrentUserService currentUserService) {
+            CurrentUserService currentUserService, BusinessPhotoStorage photoStorage) {
         this.favoriteService = favoriteService;
         this.businessService = businessService;
         this.currentUserService = currentUserService;
+        this.photoStorage = photoStorage;
     }
 
     // Kalp ikonu toggle'ının "aç" ucu -- idempotent, zaten favorideyse
@@ -67,6 +70,6 @@ public class FavoriteController {
 
     private BusinessDetailResponse toDetailResponseWithRating(Business business) {
         RatingStats stats = businessService.getRatingStats(business.getId());
-        return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount());
+        return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount(), photoStorage);
     }
 }

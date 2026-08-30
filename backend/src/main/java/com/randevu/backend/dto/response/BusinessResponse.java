@@ -27,5 +27,10 @@ public record BusinessResponse(
         Double latitude,
         Double longitude,
         // Onaylı işletme rozeti — sadece admin/seed tarafından set edilir.
-        boolean verified) {
+        boolean verified,
+        // Kapak fotoğrafı yüklenmemişse null — frontend bu durumda mevcut
+        // gradyan kapağı gösterir. Sadece kart boyutu: bu DTO liste
+        // görünümlerinde kullanılıyor, detay boyutuna ihtiyaç yok
+        // (bkz. BusinessDetailResponse.coverPhotoDetailUrl).
+        String coverPhotoCardUrl) {
 }

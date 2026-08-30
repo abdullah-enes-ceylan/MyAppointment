@@ -5,17 +5,21 @@ import com.randevu.backend.dto.response.BusinessDetailResponse;
 import com.randevu.backend.dto.response.BusinessResponse;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
+import com.randevu.backend.storage.BusinessPhotoStorage;
 
 public final class BusinessMapper {
 
     private BusinessMapper() {
     }
 
-    // averageRating/reviewCount BİLEREK parametre — bu sınıf diğer
-    // mapper'lar gibi durumsuz (stateless) kalmalı, ReviewRepository'ye
-    // kendi erişip sorgu atmamalı (SRP: mapper veri DÖNÜŞTÜRÜR, veri
-    // TOPLAMAZ). Puanı hesaplayıp buraya veren taraf BusinessService.
-    public static BusinessResponse toResponse(Business business, Double averageRating, long reviewCount) {
+    // averageRating/reviewCount ve photoStorage BİLEREK parametre — bu sınıf
+    // diğer mapper'lar gibi durumsuz (stateless) kalmalı, kendi başına
+    // ReviewRepository'ye erişip sorgu atmamalı ya da bir Spring bean'i alan
+    // olarak tutmamalı (SRP: mapper veri DÖNÜŞTÜRÜR, veri TOPLAMAZ). Puanı
+    // hesaplayıp buraya veren taraf BusinessService; storage'ı enjekte edip
+    // ileten taraf BusinessController.
+    public static BusinessResponse toResponse(Business business, Double averageRating, long reviewCount,
+            BusinessPhotoStorage photoStorage) {
         return new BusinessResponse(
                 business.getId(),
                 business.getName(),
@@ -30,7 +34,8 @@ public final class BusinessMapper {
                 reviewCount,
                 business.getLatitude(),
                 business.getLongitude(),
-                business.isVerified());
+                business.isVerified(),
+                cardUrl(business, photoStorage));
     }
 
     // business.getServiceItems() TÜM hizmetleri (soft-delete edilmişler
@@ -38,7 +43,8 @@ public final class BusinessMapper {
     // dönen bu detay görünümünde, silinmiş bir hizmetin görünüp seçilebilir
     // gibi durması yanlış olur — ServiceItemService.getServicesByBusiness'teki
     // aynı kuralı burada da uyguluyoruz.
-    public static BusinessDetailResponse toDetailResponse(Business business, Double averageRating, long reviewCount) {
+    public static BusinessDetailResponse toDetailResponse(Business business, Double averageRating, long reviewCount,
+            BusinessPhotoStorage photoStorage) {
         return new BusinessDetailResponse(
                 business.getId(),
                 business.getName(),
@@ -57,7 +63,27 @@ public final class BusinessMapper {
                 reviewCount,
                 business.getLatitude(),
                 business.getLongitude(),
-                business.isVerified());
+                business.isVerified(),
+                cardUrl(business, photoStorage),
+                detailUrl(business, photoStorage));
+    }
+
+    // Dosya adı türetme kuralı TEK bu iki metotta yaşıyor (bkz. plan madde 2:
+    // "{key}-card.jpg", "{key}-detail.jpg"). photoKey null ise işletme henüz
+    // fotoğraf yüklememiştir — frontend bu durumda mevcut gradyan kapağı
+    // gösterir, o yüzden null'u olduğu gibi geçiriyoruz (boş string değil).
+    private static String cardUrl(Business business, BusinessPhotoStorage photoStorage) {
+        if (business.getPhotoKey() == null) {
+            return null;
+        }
+        return photoStorage.urlFor(business.getPhotoKey() + "-card.jpg");
+    }
+
+    private static String detailUrl(Business business, BusinessPhotoStorage photoStorage) {
+        if (business.getPhotoKey() == null) {
+            return null;
+        }
+        return photoStorage.urlFor(business.getPhotoKey() + "-detail.jpg");
     }
 
     // Yeni işletme oluştururken kullanılıyor. owner ve id burada BİLEREK
