@@ -72,6 +72,34 @@ public class BusinessPhotoService {
         return swap.business();
     }
 
+    // Kapak fotografini kaldirir -- photo_key'i NULL'a ceker ve iki dosyayi
+    // diskten siler. Zaten fotografi olmayan bir isletmede cagrilirsa
+    // (previousPhotoKey null) sessizce hicbir sey yapmadan doner -- IDEMPOTENT,
+    // FavoriteController.removeFavorite'teki ayni "toggle'in kapa ucu iki kez
+    // cagrilsa da hata vermez" gerekcesiyle tutarli.
+    //
+    // Sira BILEREK uploadPhoto'nun TERSI: ONCE DB NULL'a cekilir, SONRA
+    // dosyalar silinir. Neden: DB guncellemesi basarisiz olursa (ornegin
+    // kilit zaman asimi) hicbir dosya silinmemis olur, isletme eski
+    // fotografini gostermeye DEVAM eder -- kayip yok. Sira tersine
+    // cevrilseydi (once sil, sonra DB) bir hatada tam olarak az once
+    // kapattigimiz kirik gorsel senaryosuna geri donerdik: dosya yok ama
+    // DB hala eski key'i (varsa) degil, YENI (silinen) key'i mi tutuyor
+    // karisikligi olurdu -- kisacasi DB HER ZAMAN diskteki gercekle
+    // tutarli olacak sekilde ONCE guncellenir.
+    //
+    // swapPhotoKey'in ayni kilit/refresh mekanizmasi (bkz. BusinessService)
+    // burada da gecerli: yukleme ile silme ayni anda gelirse (ornegin
+    // kullanici cift tikladi) ikisi de sirayla, dogru "onceki" degeri
+    // okuyarak calisir -- oksuz dosya kalmaz.
+    public void removePhoto(Long businessId) {
+        BusinessService.PhotoKeySwapResult swap = businessService.swapPhotoKey(businessId, null);
+
+        if (swap.previousPhotoKey() != null) {
+            deleteOldFilesQuietly(swap.previousPhotoKey());
+        }
+    }
+
     // Multipart govdesinin okunmasi basarisiz olursa (ornegin istemci
     // yukleme sirasinda baglantiyi kesti) bu istemci tarafinda sonlanan bir
     // durum -- 500 degil, anlamli bir BusinessRuleException.

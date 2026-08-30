@@ -52,6 +52,7 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [removingPhoto, setRemovingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -101,6 +102,22 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
       setToast({ message: getErrorMessage(err, "Fotoğraf yüklenirken hata oluştu."), type: "error" });
     } finally {
       setUploadingPhoto(false);
+    }
+  }
+
+  // DELETE ucu IDEMPOTENT ve her zaman 204 dondugu icin burada ozel bir hata
+  // dali yok -- StaffTab.handleDelete'teki "Siliniyor..." deseniyle ayni.
+  async function handleRemovePhoto() {
+    if (!businessId) return;
+    setRemovingPhoto(true);
+    try {
+      await api.delete(`/api/businesses/${businessId}/photo`);
+      setToast({ message: "✅ Kapak fotoğrafı kaldırıldı.", type: "success" });
+      setBusiness((prev) => (prev ? { ...prev, coverPhotoCardUrl: null } : prev));
+    } catch (err) {
+      setToast({ message: getErrorMessage(err, "Fotoğraf kaldırılırken hata oluştu."), type: "error" });
+    } finally {
+      setRemovingPhoto(false);
     }
   }
 
@@ -206,8 +223,20 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
               >
                 {uploadingPhoto ? "Yükleniyor..." : "Fotoğrafı Yükle"}
               </button>
-              <p className="text-xs text-slate-500">JPEG veya PNG, en fazla 5 MB.</p>
+              {/* Sadece kayitli bir fotograf VARSA gorunur -- henuz hic
+                  yuklenmemis bir isletmede "kaldir" anlamsiz olurdu. */}
+              {business.coverPhotoCardUrl && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  disabled={removingPhoto || uploadingPhoto}
+                  className="px-4 py-2 text-xs font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                >
+                  {removingPhoto ? "Kaldırılıyor..." : "Fotoğrafı Kaldır"}
+                </button>
+              )}
             </div>
+            <p className="text-xs text-slate-500">JPEG veya PNG, en fazla 5 MB.</p>
           </div>
         </div>
       </div>

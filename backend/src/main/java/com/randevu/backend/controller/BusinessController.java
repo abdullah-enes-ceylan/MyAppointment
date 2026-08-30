@@ -122,6 +122,19 @@ public class BusinessController {
         return toResponseWithRating(updated);
     }
 
+    // YENİ: kapak fotoğrafını kaldırma, sahiplik kontrollü -- uploadPhoto ile
+    // aynı OwnershipGuard deseni. IDEMPOTENT: zaten fotoğrafı olmayan bir
+    // işletmede çağrılırsa da 204 döner, hata fırlatmaz (bkz.
+    // BusinessPhotoService.removePhoto) -- FavoriteController.removeFavorite
+    // ile aynı "toggle'in kapa ucu" felsefesi.
+    @DeleteMapping("/{id:\\d+}/photo")
+    public ResponseEntity<Void> removePhoto(@PathVariable("id") Long businessId, Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        businessPhotoService.removePhoto(businessId);
+        return ResponseEntity.noContent().build();
+    }
+
     // Faz 2.8: konuma göre yakın işletme listeleme. /api/businesses ile
     // aynı sebeple herkese açık (permitAll, bkz. SecurityConfig) — müşteri
     // "yakınımdakiler" özelliğini kullanmak için giriş yapmış olmak
