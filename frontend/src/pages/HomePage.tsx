@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import BusinessCard from "../components/BusinessCard";
 import { CATEGORIES, GENDERS, getCategoryLabel } from "../components/CategoryIcons";
-import { setLocationLabel } from "../components/Navbar";
+import { setLocationLabel, CATEGORY_TABS_SLOT_ID } from "../components/Navbar";
 import type { BusinessCategory, BusinessDetailResponse, BusinessResponse, NearbyBusinessResponse, ServedGender, ServiceItemResponse } from "../types/api";
 
 // Faz 2.11: tarayıcı konum izni reddedilirse/desteklenmezse düşülen
@@ -52,6 +53,15 @@ export default function HomePage() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
   const [earliestSlots, setEarliestSlots] = useState<Record<number, string>>({});
+  // Kategori sekmeleri artik gorsel olarak Navbar'in ilk satirinda (bkz.
+  // CATEGORY_TABS_SLOT_ID) -- Navbar, HomePage'den ONCE render edildigi
+  // icin bu DOM dugumu commit aninda zaten var, ama yine de bir effect
+  // icinde okuyoruz (render sirasinda document erisimi degil).
+  const [tabsSlot, setTabsSlot] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setTabsSlot(document.getElementById(CATEGORY_TABS_SLOT_ID));
+  }, []);
 
   useEffect(() => {
     fetchBusinesses();
@@ -222,34 +232,35 @@ export default function HomePage() {
 
   return (
     <div className="bg-slate-50 min-h-[calc(100vh-3.5rem)]">
-      {/* Kategori sekmeleri — beyaz şerit, mobilde yatay kaydırılabilir.
+      {/* Kategori sekmeleri artik burada DEGIL, Navbar'in ilk satirina
+          portal'lanıyor (bkz. CATEGORY_TABS_SLOT_ID) -- state/veri cekme
+          mantigi (activeCategory, filterByCategory, nearbyMode) HALA
+          burada, sadece JSX'in render edildigi DOM konumu degisti. Koyu
+          Navbar zeminine (#161b33) gore renklendirildi -- eski beyaz
+          seritteki mavi vurgu artik gorunmezdi.
           nearbyMode'dayken hiçbir sekme aktif görünmüyor: o an aktif olan
           filtre kategori değil, konum. Sekmeye tıklamak konum modundan
           çıkmanın da yolu (filterByCategory nearbyMode'u false yapıyor). */}
-      <div className="bg-white border-b border-slate-200 sticky top-14 sm:top-16 z-30">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6">
-          <div className="flex gap-1 sm:gap-2 overflow-x-auto scrollbar-none sm:justify-center">
-            {CATEGORIES.map(({ key, label, Icon }) => {
-              const active = !nearbyMode && activeCategory === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => filterByCategory(key)}
-                  className={`relative shrink-0 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2.5 my-2 rounded-xl text-xs sm:text-sm font-medium transition-colors cursor-pointer ${
-                    active ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <Icon />
-                  <span>{label}</span>
-                  {active && (
-                    <span className="absolute -bottom-2 left-2 right-2 h-[3px] rounded-full bg-blue-600" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      {tabsSlot && createPortal(
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          {CATEGORIES.map(({ key, label, Icon }) => {
+            const active = !nearbyMode && activeCategory === key;
+            return (
+              <button
+                key={key}
+                onClick={() => filterByCategory(key)}
+                className={`shrink-0 flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors cursor-pointer ${
+                  active ? "bg-white/15 text-white" : "text-white/60 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                <Icon />
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            );
+          })}
+        </div>,
+        tabsSlot
+      )}
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6">
         {/* Hizmet grubu filtresi — kategoriden AYRI bir eksen olduğu için

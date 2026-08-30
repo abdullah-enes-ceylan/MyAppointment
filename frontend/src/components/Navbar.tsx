@@ -13,6 +13,15 @@ const OWNER_ROLES = ["BUSINESS_OWNER", "ADMIN"];
 export const LOCATION_STORAGE_KEY = "randevum_location_label";
 export const LOCATION_CHANGED_EVENT = "randevum:location-changed";
 
+// HomePage kategori sekmelerini BURAYA (Navbar'ın ilk satırına, logo ile
+// profil arasina) bir React Portal ile enjekte ediyor. Sekmelerin state'i
+// ve veri cekme mantigi HALA HomePage'de yasiyor -- sadece GORSEL olarak
+// Navbar'in icinde render ediliyorlar. Neden context/prop yerine portal:
+// Navbar butun sayfalarda ortak, HomePage'e ozel filtreleme mantigini
+// Navbar'a tasimak (ya da tersi) SRP'yi bozardi; portal ikisini de
+// birbirine bagimli kilmadan ayni DOM konumuna yerlestiriyor.
+export const CATEGORY_TABS_SLOT_ID = "navbar-category-tabs-slot";
+
 export function setLocationLabel(label: string | null) {
   if (label) {
     localStorage.setItem(LOCATION_STORAGE_KEY, label);
@@ -83,49 +92,19 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-40 bg-[#161b33]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* Masaüstü: tek satır. Mobil: konum+ikonlar üstte, arama altta. */}
+        {/* 1. satır: logo (sol) — kategori sekmeleri (ortada, HomePage'in
+            portal ile doldurdugu bos slot) — profil/bildirim (sag). Sekmeler
+            sadece ana sayfada dolu olur (HomePage mount olunca portal
+            calisir); baska sayfalarda slot bos kalir, flex-1 sayesinde yine
+            de logo ile profili birbirinden ayirmaya devam eder. */}
         <div className="flex items-center gap-3 h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2 shrink-0">
             <img src={logoIcon} alt="Randevum" className="w-8 h-8 object-contain" />
           </Link>
 
-          <button
-            onClick={() => navigate("/?nearby=1")}
-            className="flex items-center gap-1.5 text-sm text-white/90 hover:text-white transition-colors cursor-pointer min-w-0"
-          >
-            <span className="shrink-0">📍</span>
-            <span className="truncate max-w-[120px] sm:max-w-none">
-              {locationLabel ?? "Konum seç"}
-            </span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
-              <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
+          <div id={CATEGORY_TABS_SLOT_ID} className="flex-1 min-w-0 overflow-x-auto scrollbar-none" />
 
-          {/* Masaüstünde arama ortada, mobilde ayrı satırda -- sadece
-              ana sayfada: diger sayfalarda arama sonucu gosterilmiyor,
-              kutuyu orada da tutmak islevsiz ve kafa karistirici olurdu. */}
-          {isHomePage && (
-            <form onSubmit={handleSearch} className="hidden sm:block flex-1 max-w-xl mx-auto">
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                  </svg>
-                </span>
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="İşletme, kuaför veya hizmet ara..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
-                />
-              </div>
-            </form>
-          )}
-
-          <div className="flex items-center gap-2 sm:gap-3 ml-auto shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {isAuthenticated ? (
               <>
                 {/* Bildirimler: Faz 3.4'teki NotificationPort altyapısı kurulana
@@ -203,25 +182,47 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Mobil arama satırı — sadece ana sayfada (bkz. yukarıdaki gerekçe) */}
+        {/* 2. satır: konum seçme + arama — sadece ana sayfada. Ikisi de
+            sadece HomePage'in okudugu/tetikledigi bir davranisa sahip
+            (konum -> /?nearby=1, arama -> /?q=...) -- baska bir sayfada
+            gosterilmeleri islevsiz olurdu (bkz. eskiden aramanin da ayni
+            gerekceyle sadece ana sayfaya kisitlanmasi). Artik tek bir
+            satirda, tum ekran genisliklerinde ayni yapida -- eskiden
+            masaustu/mobil icin ayri ayri render edilen iki arama kutusu
+            tekrari buradaydi, artik gerek kalmadi. */}
         {isHomePage && (
-          <form onSubmit={handleSearch} className="sm:hidden pb-3">
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                </svg>
+          <div className="flex items-center gap-3 pb-3">
+            <button
+              onClick={() => navigate("/?nearby=1")}
+              className="flex items-center gap-1.5 text-sm text-white/90 hover:text-white transition-colors cursor-pointer min-w-0 shrink-0"
+            >
+              <span className="shrink-0">📍</span>
+              <span className="truncate max-w-[100px] sm:max-w-none">
+                {locationLabel ?? "Konum seç"}
               </span>
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="İşletme, kuaför veya hizmet ara..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
-              />
-            </div>
-          </form>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
+                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+
+            <form onSubmit={handleSearch} className="flex-1 max-w-xl">
+              <div className="relative">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="İşletme, kuaför veya hizmet ara..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
+                />
+              </div>
+            </form>
+          </div>
         )}
       </div>
     </nav>
