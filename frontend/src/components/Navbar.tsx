@@ -13,15 +13,6 @@ const OWNER_ROLES = ["BUSINESS_OWNER", "ADMIN"];
 export const LOCATION_STORAGE_KEY = "randevum_location_label";
 export const LOCATION_CHANGED_EVENT = "randevum:location-changed";
 
-// HomePage kategori sekmelerini BURAYA (Navbar'ın ilk satırına, logo ile
-// profil arasina) bir React Portal ile enjekte ediyor. Sekmelerin state'i
-// ve veri cekme mantigi HALA HomePage'de yasiyor -- sadece GORSEL olarak
-// Navbar'in icinde render ediliyorlar. Neden context/prop yerine portal:
-// Navbar butun sayfalarda ortak, HomePage'e ozel filtreleme mantigini
-// Navbar'a tasimak (ya da tersi) SRP'yi bozardi; portal ikisini de
-// birbirine bagimli kilmadan ayni DOM konumuna yerlestiriyor.
-export const CATEGORY_TABS_SLOT_ID = "navbar-category-tabs-slot";
-
 export function setLocationLabel(label: string | null) {
   if (label) {
     localStorage.setItem(LOCATION_STORAGE_KEY, label);
@@ -92,17 +83,14 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-40 bg-[#161b33]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* 1. satır: logo (sol) — kategori sekmeleri (ortada, HomePage'in
-            portal ile doldurdugu bos slot) — profil/bildirim (sag). Sekmeler
-            sadece ana sayfada dolu olur (HomePage mount olunca portal
-            calisir); baska sayfalarda slot bos kalir, flex-1 sayesinde yine
-            de logo ile profili birbirinden ayirmaya devam eder. */}
-        <div className="flex items-center gap-3 h-14 sm:h-16">
+        {/* 1. satır: logo (sol) — profil/bildirim (sag). Isletme kategori
+            sekmeleri BURADA DEGIL -- HomePage'in kendi govdesinde, cinsiyet
+            barinin (Kime: Herkes/Erkek/...) ustunde ayri bir serit olarak
+            duruyor (bkz. HomePage.tsx). */}
+        <div className="flex items-center justify-between h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2 shrink-0">
             <img src={logoIcon} alt="Randevum" className="w-8 h-8 object-contain" />
           </Link>
-
-          <div id={CATEGORY_TABS_SLOT_ID} className="flex-1 min-w-0 overflow-x-auto scrollbar-none" />
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {isAuthenticated ? (
@@ -182,14 +170,15 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* 2. satır: konum seçme + arama — sadece ana sayfada. Ikisi de
-            sadece HomePage'in okudugu/tetikledigi bir davranisa sahip
-            (konum -> /?nearby=1, arama -> /?q=...) -- baska bir sayfada
-            gosterilmeleri islevsiz olurdu (bkz. eskiden aramanin da ayni
-            gerekceyle sadece ana sayfaya kisitlanmasi). Artik tek bir
-            satirda, tum ekran genisliklerinde ayni yapida -- eskiden
-            masaustu/mobil icin ayri ayri render edilen iki arama kutusu
-            tekrari buradaydi, artik gerek kalmadi. */}
+        {/* 2. satır: konum seçme (sol) + arama (ortada) — sadece ana
+            sayfada. Ikisi de sadece HomePage'in okudugu/tetikledigi bir
+            davranisa sahip (konum -> /?nearby=1, arama -> /?q=...) --
+            baska bir sayfada gosterilmeleri islevsiz olurdu (bkz. eskiden
+            aramanin da ayni gerekceyle sadece ana sayfaya kisitlanmasi).
+            Arama kutusu satirin ortasinda durmasi icin sag tarafta konum
+            butonuyla ayni genislikte GORUNMEZ bir denge alani var --
+            aksi halde solundaki konum butonu yuzunden merkezden sola
+            kaymis gibi dururdu. */}
         {isHomePage && (
           <div className="flex items-center gap-3 pb-3">
             <button
@@ -205,8 +194,8 @@ export default function Navbar() {
               </svg>
             </button>
 
-            <form onSubmit={handleSearch} className="flex-1 max-w-xl">
-              <div className="relative">
+            <form onSubmit={handleSearch} className="flex-1 flex justify-center min-w-0">
+              <div className="relative w-full max-w-xl">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <circle cx="11" cy="11" r="7" />
@@ -222,6 +211,15 @@ export default function Navbar() {
                 />
               </div>
             </form>
+
+            {/* Konum butonuyla ayni genislikte gorunmez denge alani --
+                yukaridaki gerekce. aria-hidden: ekran okuyucular icin
+                anlamsiz, sadece gorsel bir hizalama amaci. */}
+            <div className="hidden sm:block shrink-0 invisible" aria-hidden="true">
+              <span className="flex items-center gap-1.5 text-sm">
+                📍 {locationLabel ?? "Konum seç"}
+              </span>
+            </div>
           </div>
         )}
       </div>
