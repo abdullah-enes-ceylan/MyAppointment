@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import logoIcon from "../assets/logo-icon.png";
@@ -83,14 +83,47 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-40 bg-[#161b33]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* 1. satır: logo (sol) — profil/bildirim (sag). Isletme kategori
-            sekmeleri BURADA DEGIL -- HomePage'in kendi govdesinde, cinsiyet
-            barinin (Kime: Herkes/Erkek/...) ustunde ayri bir serit olarak
-            duruyor (bkz. HomePage.tsx). */}
-        <div className="flex items-center justify-between h-14 sm:h-16">
+        {/* 1. satır: logo (sol) — hizli erisim linkleri (logoya yapisik) —
+            bildirim/profil (sag). Isletme kategori sekmeleri BURADA DEGIL --
+            HomePage'in kendi govdesinde, cinsiyet barinin (Kime: Herkes/
+            Erkek/...) ustunde ayri bir serit olarak duruyor (bkz.
+            HomePage.tsx). */}
+        <div className="flex items-center h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2 shrink-0">
             <img src={logoIcon} alt="Randevum" className="w-8 h-8 object-contain" />
           </Link>
+
+          {/* Ana Sayfa / Randevularım / Favorilerim -- eskiden avatar
+              dropdown'unun icindeydi, hizli erisim icin logonun hemen
+              saginda bir bar'a tasindi. Ayni kosul: sadece giris yapmis
+              kullanicida (dropdown'daki eski kosulun birebir aynisi).
+              Mobilde yer yok -- BottomTabBar zaten ayni uc hedefi
+              (Kesfet/Randevularim/Favorilerim) tasidigi icin burada
+              tekrar etmeye gerek yok, hidden sm:flex. */}
+          {isAuthenticated && (
+            <div className="hidden sm:flex items-center gap-1 ml-4 shrink-0">
+              {[
+                { to: "/", label: "Ana Sayfa", end: true },
+                { to: "/appointments", label: "Randevularım", end: false },
+                { to: "/favorites", label: "Favorilerim", end: false },
+              ].map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive ? "text-white" : "text-white/70 hover:text-white"
+                    }`
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          )}
+
+          <div className="flex-1" />
 
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {isAuthenticated ? (
@@ -127,8 +160,6 @@ export default function Navbar() {
                         <p className="text-xs text-slate-500 truncate">{user?.email}</p>
                       </div>
                       {[
-                        { to: "/appointments", label: "📅 Randevularım" },
-                        { to: "/favorites", label: "❤️ Favorilerim" },
                         { to: "/profile", label: "👤 Profil" },
                         ...(isOwner ? [{ to: "/panel", label: "🏢 İşletme Paneli" }] : []),
                       ].map((item) => (
