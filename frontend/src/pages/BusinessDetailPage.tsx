@@ -6,6 +6,7 @@ import Toast from "../components/Toast";
 import LocationPicker from "../components/LocationPicker";
 import StarRating from "../components/StarRating";
 import { useAuth } from "../context/AuthContext";
+import { resolvePhotoUrl } from "../utils/photo";
 import type { AppointmentRequest, BusinessDetailResponse, ReviewResponse, ServiceItemResponse } from "../types/api";
 
 function formatReviewDate(dateStr: string) {
@@ -53,9 +54,15 @@ export default function BusinessDetailPage() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [imgFailed, setImgFailed] = useState(false);
 
   // İşletme bilgilerini çek
   useEffect(() => {
+    // React Router ayni bileseni yeniden kullanabilir (ornegin bir isletmenin
+    // detayindan baska birininkine gecerken) -- imgFailed sifirlanmazsa,
+    // ONCEKI isletmenin kirik fotograf durumu YENI isletmeye (fotografi
+    // saglam olsa bile) tasinirdi.
+    setImgFailed(false);
     async function fetchBusiness() {
       try {
         const res = await api.get<BusinessDetailResponse[]>("/api/businesses");
@@ -212,6 +219,13 @@ export default function BusinessDetailPage() {
     );
   }
 
+  // Kalici olmayan disk senaryosunda (bkz. CLAUDE.md karar tablosu) DB'de
+  // photo_key dururken dosya diskten gidebilir -- servis ucu bu durumda 404
+  // doner. imgFailed olmadan tarayici <img>'i DOM'da tutup kirik resim
+  // ikonu gosterir (bkz. BusinessCard'daki ayni gerekce); bu bayrak
+  // sayesinde ayni duz emerald gradyan basligina duseriz.
+  const coverDetailUrl = imgFailed ? null : resolvePhotoUrl(business.coverPhotoDetailUrl);
+
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
@@ -229,44 +243,72 @@ export default function BusinessDetailPage() {
 
       {/* Business Info Card */}
       <div className="bg-surface/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden mb-6">
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-5">
-          <div className="flex items-start justify-between gap-3">
-            <h1 className="text-2xl font-bold text-white">{business.name}</h1>
-            {isAuthenticated && (
-              <button
-                onClick={toggleFavorite}
-                title={isFavorited ? "Favorilerden çıkar" : "Favorilere ekle"}
-                className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-base bg-black/15 hover:bg-black/25 transition-colors cursor-pointer"
-              >
-                {isFavorited ? "❤️" : "🤍"}
-              </button>
-            )}
-          </div>
-          {/* averageRating null kontrolu BusinessCard'daki (PR3) ayni gerekce --
-              backend sozlesmesi reviewCount>0 iken averageRating'in dolu
-              olacagini garanti ediyor ama TS bunu tek basina cikaramiyor. */}
-          {business.reviewCount > 0 && business.averageRating != null ? (
-            <div className="flex items-center gap-1.5 mt-1.5">
-              <StarRating value={business.averageRating} size="text-sm" />
-              <span className="text-emerald-100 text-sm">
-                {business.averageRating.toFixed(1)} ({business.reviewCount} değerlendirme)
-              </span>
-            </div>
-          ) : (
-            <p className="text-emerald-100/70 text-sm mt-1.5 italic">Henüz değerlendirme yok</p>
+        {/* Kapak fotoğrafı yüklendiyse üstte banner olarak gösterilir, metin
+            karartma gradyanının önünde alta yaslanır -- yüklenmediyse (coverDetailUrl
+            null) mevcut düz emerald gradyan BİREBİR korunur (className/yükseklik
+            hiç değişmez), fotoğrafsız işletmelerde görünüm eskisiyle aynı kalır. */}
+        <div
+          className={`relative overflow-hidden px-6 py-5 ${
+            coverDetailUrl ? "h-56 flex flex-col justify-end" : "bg-gradient-to-r from-emerald-600 to-teal-600"
+          }`}
+        >
+          {coverDetailUrl && (
+            <>
+              <img
+                src={coverDetailUrl}
+                alt={business.name}
+                loading="lazy"
+                decoding="async"
+                onError={() => setImgFailed(true)}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+            </>
           )}
-          <div className="flex flex-wrap gap-4 mt-2 text-emerald-100 text-sm">
-            {business.address && (
-              <span className="flex items-center gap-1.5">📍 {business.address}</span>
+          {/* TEK bir relative sarmalayıcı sart -- CSS'te konumlandırılmış
+              (position != static) elemanlar, DOM sırasından BAĞIMSIZ olarak
+              konumlandırılmamış elemanların HER ZAMAN ÜSTÜNDE boyanır. img/overlay
+              absolute olduğu için, bu metin bloğu relative olmasaydı (DOM'da
+              img'den SONRA gelse bile) fotoğrafın ALTINDA kalıp görünmez olurdu. */}
+          <div className="relative">
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="text-2xl font-bold text-white">{business.name}</h1>
+              {isAuthenticated && (
+                <button
+                  onClick={toggleFavorite}
+                  title={isFavorited ? "Favorilerden çıkar" : "Favorilere ekle"}
+                  className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-base bg-black/15 hover:bg-black/25 transition-colors cursor-pointer"
+                >
+                  {isFavorited ? "❤️" : "🤍"}
+                </button>
+              )}
+            </div>
+            {/* averageRating null kontrolu BusinessCard'daki (PR3) ayni gerekce --
+                backend sozlesmesi reviewCount>0 iken averageRating'in dolu
+                olacagini garanti ediyor ama TS bunu tek basina cikaramiyor. */}
+            {business.reviewCount > 0 && business.averageRating != null ? (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <StarRating value={business.averageRating} size="text-sm" />
+                <span className="text-emerald-100 text-sm">
+                  {business.averageRating.toFixed(1)} ({business.reviewCount} değerlendirme)
+                </span>
+              </div>
+            ) : (
+              <p className="text-emerald-100/70 text-sm mt-1.5 italic">Henüz değerlendirme yok</p>
             )}
-            {business.phone && (
-              <span className="flex items-center gap-1.5">📞 {business.phone}</span>
-            )}
-            {(business.openTime || business.closeTime) && (
-              <span className="flex items-center gap-1.5">
-                🕐 {business.openTime?.slice(0, 5)} — {business.closeTime?.slice(0, 5)}
-              </span>
-            )}
+            <div className="flex flex-wrap gap-4 mt-2 text-emerald-100 text-sm">
+              {business.address && (
+                <span className="flex items-center gap-1.5">📍 {business.address}</span>
+              )}
+              {business.phone && (
+                <span className="flex items-center gap-1.5">📞 {business.phone}</span>
+              )}
+              {(business.openTime || business.closeTime) && (
+                <span className="flex items-center gap-1.5">
+                  🕐 {business.openTime?.slice(0, 5)} — {business.closeTime?.slice(0, 5)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { getCategory, getCategoryLabel, getGenderLabel } from "./CategoryIcons";
+import { resolvePhotoUrl } from "../utils/photo";
 import type { BusinessResponse, ServedGender } from "../types/api";
 
 // Hizmet grubu rozeti kartın en görünür yerinde (kategori etiketinin
@@ -45,17 +46,38 @@ export default function BusinessCard({
   onOpen,
 }: BusinessCardProps) {
   const { Icon } = getCategory(business.category);
+  const coverUrl = resolvePhotoUrl(business.coverPhotoCardUrl);
+  // Kalici olmayan disk senaryosunda (bkz. CLAUDE.md karar tablosu) DB'de
+  // photo_key dururken dosya diskten gidebilir -- servis ucu bu durumda 404
+  // doner. onError olmadan tarayici <img>'i DOM'da tutup kirik resim ikonu
+  // gosterir; bu bayrak sayesinde ayni "fotografsiz" gradyan+ikon kapagina
+  // duseriz, kirik ikon hic gorunmez.
+  const [imgFailed, setImgFailed] = useState(false);
+  const showPhoto = coverUrl && !imgFailed;
 
   return (
     <div className="group flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 p-3">
-      {/* Görsel alanı -- gerçek işletme fotoğrafı henüz bir özellik değil
-          (yükleme/depolama yok). Fotoğraf varmış gibi göstermek yerine
-          kategoriye göre stilize bir kapak: koyu lacivert gradyan + o
-          kategorinin çizgi ikonu. */}
+      {/* Görsel alanı -- işletme kapak fotoğrafı yüklediyse onu gösterir,
+          yüklemediyse VEYA yükleme başarısız olduysa (coverUrl null ya da
+          imgFailed) kategoriye göre stilize kapağa (koyu lacivert gradyan +
+          o kategorinin çizgi ikonu) düşer. Kutu HER İKİ durumda da ayni
+          sabit yükseklikte (h-36) -- fotoğraf gec/hic yüklenmese bile
+          ızgara zıplamaz (CLS yok). */}
       <div className="relative shrink-0 h-36 rounded-xl overflow-hidden bg-gradient-to-br from-[#161b33] via-[#232c52] to-[#2b3766] flex items-center justify-center">
-        <span className="text-white/25 scale-[2.4]">
-          <Icon />
-        </span>
+        {showPhoto ? (
+          <img
+            src={coverUrl}
+            alt={business.name}
+            loading="lazy"
+            decoding="async"
+            onError={() => setImgFailed(true)}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          <span className="text-white/25 scale-[2.4]">
+            <Icon />
+          </span>
+        )}
 
         <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
           <span className="text-[11px] font-medium text-white/90 bg-black/30 backdrop-blur-sm px-2 py-1 rounded-lg">
