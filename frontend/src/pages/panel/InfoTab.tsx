@@ -53,6 +53,12 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
+  // Kalici olmayan disk senaryosunda (bkz. CLAUDE.md karar tablosu) DB'de
+  // coverPhotoCardUrl dururken dosya diskten gidebilir -- BusinessCard/
+  // BusinessDetailPage'deki (PR5) ayni gerekce: onError olmadan tarayici
+  // <img>'i DOM'da tutup kirik resim ikonu gosterir. Yeni bir dosya
+  // secildiginde ya da isletme verisi yenilendiginde sifirlanir (asagida).
+  const [imgFailed, setImgFailed] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -73,6 +79,7 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoFile(file);
     setPhotoPreview(file ? URL.createObjectURL(file) : null);
+    setImgFailed(false);
   }
 
   async function handlePhotoUpload() {
@@ -97,6 +104,7 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
       setPhotoFile(null);
       setPhotoPreview(null);
       if (photoInputRef.current) photoInputRef.current.value = "";
+      setImgFailed(false);
       setBusiness((prev) => (prev ? { ...prev, coverPhotoCardUrl: res.data.coverPhotoCardUrl } : prev));
     } catch (err) {
       setToast({ message: getErrorMessage(err, "Fotoğraf yüklenirken hata oluştu."), type: "error" });
@@ -123,6 +131,7 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
 
   async function fetchBusiness() {
     setLoading(true);
+    setImgFailed(false);
     try {
       const res = await api.get<BusinessDetailResponse>(`/api/businesses/${businessId}`);
       setBusiness(res.data);
@@ -196,10 +205,11 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
         <label className="block text-xs font-medium text-slate-400 mb-1.5">Kapak Fotoğrafı</label>
         <div className="flex items-center gap-4">
           <div className="w-32 h-24 rounded-xl overflow-hidden bg-gradient-to-br from-slate-700 to-slate-800 border border-white/10 shrink-0 flex items-center justify-center">
-            {photoPreview || business.coverPhotoCardUrl ? (
+            {(photoPreview || business.coverPhotoCardUrl) && !imgFailed ? (
               <img
                 src={photoPreview ?? resolvePhotoUrl(business.coverPhotoCardUrl) ?? undefined}
                 alt="Kapak fotoğrafı önizleme"
+                onError={() => setImgFailed(true)}
                 className="w-full h-full object-cover"
               />
             ) : (
