@@ -4,6 +4,7 @@ import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import BusinessCard from "../components/BusinessCard";
 import { CATEGORIES, GENDERS, getCategoryLabel } from "../components/CategoryIcons";
+import { setLocationLabel as broadcastLocationLabel } from "../components/Navbar";
 import type { BusinessCategory, BusinessDetailResponse, BusinessResponse, NearbyBusinessResponse, ServedGender, ServiceItemResponse } from "../types/api";
 
 // Faz 2.11: tarayıcı konum izni reddedilirse/desteklenmezse düşülen
@@ -51,11 +52,11 @@ export default function HomePage() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
   const [earliestSlots, setEarliestSlots] = useState<Record<number, string>>({});
-  // Konum etiketi + arama kutusunun anlik degeri -- eskiden Navbar'da
-  // tutulup localStorage+custom event ile HomePage'e "haber veriliyordu"
-  // (Navbar ve HomePage kardes bilesenlerdi, dogrudan state paylasamiyorlardi).
-  // Hero artik HomePage'in kendi govdesinde oldugu icin bu koprüye hic
-  // gerek kalmadi -- ikisi de duz local state.
+  // Konum etiketi + arama kutusunun anlik degeri. Hero kendi govdesinde
+  // (HomePage) oldugu icin bunlar duz local state -- AMA Navbar'da da
+  // kompakt bir konum/arama gosterimi oldugu icin (2. karsilastirma karari,
+  // bkz. Navbar.tsx) konum etiketi degistiginde broadcastLocationLabel ile
+  // Navbar'a da bildiriliyor (localStorage+custom event bridge).
   const [locationLabel, setLocationLabel] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState(searchQuery);
 
@@ -63,9 +64,22 @@ export default function HomePage() {
     fetchBusinesses();
   }, []);
 
+  // Navbar'daki kompakt konum butonu, hangi sayfada olunursa olunsun
+  // /?nearby=1'e yonlendirip buradan tetikliyor -- Navbar'in HomePage'in
+  // handleNearbyClick'ine dogrudan erisimi yok (kardes bilesenler).
+  useEffect(() => {
+    if (searchParams.get("nearby") === "1") {
+      const next = new URLSearchParams(searchParams);
+      next.delete("nearby");
+      setSearchParams(next, { replace: true });
+      handleNearbyClick();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // Arama kutusu URL'e yazılan q parametresiyle çalışıyor; kullanıcı geri
-  // tuşuna basıp aramadan çıkarsa kutu da temizlensin (eskiden Navbar'daki
-  // ayni gerekceli efekt).
+  // tuşuna basıp aramadan çıkarsa kutu da temizlensin (Navbar'daki kompakt
+  // arama kutusu da ayni q parametresini okuyup yaziyor).
   useEffect(() => {
     setSearchInput(searchQuery);
   }, [searchQuery]);
@@ -149,6 +163,7 @@ export default function HomePage() {
       setNearbyMode(true);
       setShowCityPicker(false);
       setLocationLabel(label);
+      broadcastLocationLabel(label);
     } catch {
       setLocationError("Yakınımdakiler yüklenirken hata oluştu.");
     } finally {
@@ -404,6 +419,7 @@ export default function HomePage() {
               onClick={() => {
                 setSearchParams({}, { replace: true });
                 setLocationLabel(null);
+                broadcastLocationLabel(null);
                 filterByCategory("ALL");
               }}
               className="text-blue-600 hover:underline cursor-pointer"

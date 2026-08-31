@@ -1,12 +1,43 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useAuth } from "../context/AuthContext";
 import logoIcon from "../assets/logo-icon.png";
 
 const OWNER_ROLES = ["BUSINESS_OWNER", "ADMIN"];
 
+// Seçili konum etiketi Navbar'da (kompakt) VE HomePage'in Hero'sunda (büyük)
+// gösteriliyor -- ikisi kardeş bileşen olduğu için doğrudan state
+// paylaşamıyorlar; araya bir context kurmak yerine localStorage + custom
+// event kullanıyoruz: HomePage yazıp olayı tetikliyor, Navbar dinleyip
+// kendini güncelliyor. Tek bir string için ayrı bir Provider katmanı kurmak
+// fazla olurdu.
+//
+// NOT: Bu köprü bir onceki commit'te (Hero'yu tek sahip yaparak) kaldirilmisti,
+// ama "Navbar'da da kompakt konum+arama olsun" karari (Google AI Studio
+// prototipiyle 2. karsilastirma) ile GERI GETIRILDI -- artik iki ayri
+// bilesen (Navbar'in kompakt gosterimi + Hero'nun buyuk gosterimi) ayni
+// etiketi senkron tutmak zorunda.
+export const LOCATION_STORAGE_KEY = "randevum_location_label";
+export const LOCATION_CHANGED_EVENT = "randevum:location-changed";
+
+export function setLocationLabel(label: string | null) {
+  if (label) {
+    localStorage.setItem(LOCATION_STORAGE_KEY, label);
+  } else {
+    localStorage.removeItem(LOCATION_STORAGE_KEY);
+  }
+  window.dispatchEvent(new Event(LOCATION_CHANGED_EVENT));
+}
+
 export default function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Arama sadece ana sayfada anlamli: HomePage disindaki her sayfa zaten
+  // arama sonucu gostermiyor, kutuyu orada tutmak sadece kafa karistirirdi.
+  // Konum butonu ise HER sayfada gorunur -- tiklaninca ana sayfaya donup
+  // Hero'nun "yakinimdakiler" akisini tetikliyor.
+  const isHomePage = location.pathname === "/";
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, user, logout } = useAuth();
   // user?.role tipi string | null -- "?? ''" gerekcesi RoleProtectedRoute'daki
   // ile ayni (bkz. o dosya): null hicbir role stringiyle eslesmez, davranis
@@ -14,7 +45,23 @@ export default function Navbar() {
   const isOwner = OWNER_ROLES.includes(user?.role ?? "");
 
   const [menuOpen, setMenuOpen] = useState(false);
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [locationLabel, setLabel] = useState(() => localStorage.getItem(LOCATION_STORAGE_KEY));
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const sync = () => setLabel(localStorage.getItem(LOCATION_STORAGE_KEY));
+    window.addEventListener(LOCATION_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(LOCATION_CHANGED_EVENT, sync);
+  }, []);
+
+  // Arama kutusu URL'e yazılan q parametresiyle çalışıyor; kullanıcı geri
+  // tuşuna basıp aramadan çıkarsa kutu da temizlensin. Hero'daki arama
+  // kutusu da aynı q parametresini okuyup yazıyor -- ikisi URL üzerinden
+  // senkron kalıyor.
+  useEffect(() => {
+    setQuery(searchParams.get("q") ?? "");
+  }, [searchParams]);
 
   // Dropdown dışına tıklayınca kapansın.
   useEffect(() => {
@@ -34,72 +81,86 @@ export default function Navbar() {
     navigate("/");
   }
 
+  // Arama tamamen istemci tarafında (HomePage yüklü listeyi filtreliyor) --
+  // backend'de arama ucu yok. Sorgu URL'e yazılıyor ki hem HomePage okuyabilsin
+  // hem de arama sonucu paylaşılabilir/yer imine eklenebilir olsun.
+  function handleSearch(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    navigate(query.trim() ? `/?q=${encodeURIComponent(query.trim())}` : "/");
+  }
+
   const initial = (user?.email?.[0] ?? "?").toUpperCase();
 
   return (
     <nav className="sticky top-0 z-40 bg-brand">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* Tek satır: logo (sol) — hızlı erişim linkleri (şeridin TAM
-            ORTASI) — bildirim/profil (sağ). Konum seçme + arama artık
-            burada DEĞİL -- Hero section'a taşındı (bkz. HomePage.tsx),
-            çünkü sadece ana sayfada anlamlıydı ve orada zaten HomePage'in
-            kendi state'ine (searchQuery, locationLabel) doğrudan erişimi
-            var; ayrı bileşenler (Navbar/HomePage) arasında localStorage +
-            custom event köprüsü kurmaya gerek kalmadı.
-            Isletme kategori sekmeleri de BURADA DEGIL -- HomePage'in kendi
-            govdesinde, cinsiyet barinin ustunde ayri bir serit (bkz.
-            HomePage.tsx).
-            Grid ile grid-cols-[1fr_auto_1fr] KASITLI: basit bir flex +
-            justify-between kullansaydik orta grup, sol (logo) ve sag
-            (bildirim+avatar) gruplarinin GENISLIKLERI FARKLI oldugu icin
-            gercek merkezde degil, daha genis olan tarafa dogru kaymis
-            dururdu. Iki disi sutunu ESIT (1fr/1fr) yaparak orta sutunun
-            konumunu sol/sag icerigin genisliginden tamamen BAGIMSIZ hale
-            getiriyoruz -- ortadaki grup, disindaki icerik ne olursa olsun
-            hep tam merkezde kalir. */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center h-14 sm:h-16">
-          <Link to="/" className="flex items-center gap-2 shrink-0 justify-self-start">
+        {/* Tek satır: logo — konum (kompakt, her sayfada) — arama (kompakt,
+            sadece ana sayfada) — Randevularım/Favorilerim — bildirim/profil.
+            Google AI Studio prototipiyle 2. karşılaştırma sonrası
+            (2026-08-30): konum+arama Navbar'a GERİ eklendi, Hero'daki büyük
+            arama/konum kutusu da AYRICA duruyor -- prototipin orijinal
+            Header+HeroSection ikilisiyle aynı, bilerek iki kez var (biri
+            kompakt/her an erişilebilir, biri Hero'nun görsel odak noktası).
+            "Ana Sayfa" linki kaldırıldı -- logo zaten aynı işi görüyor,
+            referans görselde de yoktu. */}
+        <div className="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
+          <Link to="/" className="flex items-center gap-2 shrink-0">
             <img src={logoIcon} alt="Randevum" className="w-8 h-8 object-contain" />
           </Link>
 
-          {/* Ana Sayfa / Randevularım / Favorilerim -- eskiden avatar
-              dropdown'unun icindeydi, hizli erisim icin seridin ortasina
-              tasindi. Ayni kosul: sadece giris yapmis kullanicida
-              (dropdown'daki eski kosulun birebir aynisi). Mobilde yer yok
-              -- BottomTabBar zaten ayni uc hedefi (Kesfet/Randevularim/
-              Favorilerim) tasidigi icin burada tekrar etmeye gerek yok.
-              ONEMLI: mobil gizleme sarmalayici DIV'e "hidden" (display:none)
-              ile DEGIL, tek tek linklere uygulanmis "hidden sm:inline-block"
-              ile yapiliyor. display:none olan bir grid ogesi CSS Grid'in
-              otomatik yerlesiminden TAMAMEN cikiyor -- bu da sag gruptaki
-              bildirim/avatar'in 3. sutun yerine bosalan 2. sutuna kayip
-              artik sag-hizali durmamasina yol aciyordu (canli testte
-              gozlemlendi). Sarmalayici HER ZAMAN flex kalarak orta sutunu
-              yapisal olarak korur, mobilde ise icindeki linkler gorunmez +
-              genisligi sifira duser, ayni gorsel sonucu verir. */}
-          <div className="flex items-center gap-1 justify-self-center">
-            {isAuthenticated &&
-              [
-                { to: "/", label: "Ana Sayfa", end: true },
-                { to: "/appointments", label: "Randevularım", end: false },
-                { to: "/favorites", label: "Favorilerim", end: false },
-              ].map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    `hidden sm:inline-block px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap ${
-                      isActive ? "text-white" : "text-white/70 hover:text-white"
-                    }`
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              ))}
+          <button
+            onClick={() => navigate("/?nearby=1")}
+            className="hidden sm:flex items-center gap-1.5 text-sm text-white/90 hover:text-white transition-colors cursor-pointer min-w-0 shrink-0"
+          >
+            <span className="shrink-0">📍</span>
+            <span className="truncate max-w-[100px]">{locationLabel ?? "Konum seç"}</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
+              <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+
+          {/* flex-1 sarmalayıcı HER sayfada var (sağ grubu doğru itmesi
+              için) -- içeriği (arama kutusu) sadece ana sayfada dolu. */}
+          <div className="flex-1 min-w-0">
+            {isHomePage && (
+              <form onSubmit={handleSearch} className="hidden sm:block max-w-md mx-auto">
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                    </svg>
+                  </span>
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="İşletme, kuaför veya hizmet ara..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-white/10 border border-transparent focus:border-white/30 focus:bg-white text-sm text-white focus:text-slate-900 placeholder-white/50 focus:placeholder-slate-400 transition-all outline-none"
+                  />
+                </div>
+              </form>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0 justify-self-end">
+          {isAuthenticated && (
+            <div className="hidden sm:flex items-center gap-1 shrink-0">
+              <Link
+                to="/appointments"
+                className="px-3 py-2 text-sm font-medium text-white/70 hover:text-white transition-colors whitespace-nowrap"
+              >
+                Randevularım
+              </Link>
+              <Link
+                to="/favorites"
+                className="px-3 py-2 text-sm font-medium text-white/70 hover:text-white transition-colors whitespace-nowrap"
+              >
+                Favorilerim
+              </Link>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {isAuthenticated ? (
               <>
                 {/* Bildirimler: Faz 3.4'teki NotificationPort altyapısı kurulana
