@@ -66,3 +66,37 @@ html {
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* HomePage Hero'sunun soyut arka planı -- fotoğraf YOK, tamamen CSS
+   (2026-08-31 kararı: dosya boyutu sıfır, her ekran boyutunda sorunsuz
+   ölçeklenir, mobilde kırpma sorunu olmaz). Arkadan öne 4 katman:
+   (4) düz yumuşak degrade (--color-canvas -> -soft -> canvas, eskiden
+       Hero'nun kendi Tailwind sınıflarındaydı),
+   (3-2) iki büyük, çok düşük opasiteli radial "glow" lekesi (marka
+       renginde) -- köşelere yakın, yumuşak bir derinlik hissi verir,
+   (1) ince tekrarlayan nokta ızgarası -- "doku" hissi, background-size
+       ile sonsuz tekrarlar, çözünürlükten bağımsız.
+   Hepsi %5-8 opasitede -- BİLEREK bu kadar hafif: arka plan asla ön
+   plana çıkmamalı, üstündeki başlık/arama kutusu kontrastı bozulmamalı.
+   color-mix() kullanıldı: --color-brand değişirse bu doku otomatik
+   takip eder, ayrı bir rgba() değeri elle senkronize edilmesi gerekmez.
+
+   KOYU TEMA NOTU: bu sınıf şu an SADECE açık canvas token'larına göre
+   ayarlı. İleride koyu tema eklenirse (CLAUDE.md: "açık tema, lacivert"
+   kararı verilmişti ama panel/detay sayfaları hâlâ eski koyu temada,
+   kademeli geçiş sürüyor) bu sınıf GÖZDEN GEÇİRİLMELİ -- koyu bir
+   zeminde aynı %6-8 opasiteli LACİVERT lekeler neredeyse hiç görünmez
+   olur (koyu üstüne koyu, doku kaybolur); koyu temada bunun yerine
+   --color-canvas/-soft yerine koyu bir taban + daha AÇIK/beyaz tonlu
+   (örn. color-mix(in srgb, white 6%, transparent)) bir varyant
+   gerekir. Şimdilik tek tema olduğu için ayrı bir dark-mode bloğu
+   yazılmadı, bilinçli olarak ertelendi. */
+.hero-bg-texture {
+  background-image:
+    radial-gradient(circle, color-mix(in srgb, var(--color-brand) 8%, transparent) 1px, transparent 1px),
+    radial-gradient(640px circle at 12% 20%, color-mix(in srgb, var(--color-brand) 7%, transparent), transparent 60%),
+    radial-gradient(560px circle at 88% 80%, color-mix(in srgb, var(--color-brand) 6%, transparent), transparent 60%),
+    linear-gradient(to bottom, var(--color-canvas), var(--color-canvas-soft), var(--color-canvas));
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
+  background-size: 22px 22px, auto, auto, auto;
+}

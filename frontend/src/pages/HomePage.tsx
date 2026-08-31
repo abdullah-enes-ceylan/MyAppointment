@@ -256,12 +256,15 @@ export default function HomePage() {
     <div className="bg-slate-50 min-h-[calc(100vh-3.5rem)]">
       {/* Hero — başlık, büyük pill arama+konum kutusu, cinsiyet filtresi.
           Google AI Studio prototipiyle karşılaştırma sonrası eklendi
-          (2026-08-30): arama+konum artık Navbar'da değil burada -- Navbar
-          bu yüzden tek satıra döndü (bkz. Navbar.tsx). Cinsiyet filtresi de
-          eski ayrı satırından buraya taşındı, prototipteki HeroSection ile
-          aynı gruplama. STICKY DEĞİL -- sadece aşağıdaki kategori şeridi
-          sticky, Hero sayfayla birlikte kayıp gidiyor. */}
-      <div className="relative overflow-hidden bg-gradient-to-b from-canvas via-canvas-soft to-canvas py-10 sm:py-14">
+          (2026-08-30). Kompakt arama+konum Navbar'da da AYRICA duruyor
+          (2. karşılaştırma sonrası geri eklendi, bkz. Navbar.tsx) -- burada
+          duran büyük pill kutu Hero'nun görsel odak noktası, bilerek iki kez
+          var. Cinsiyet filtresi de eski ayrı satırından buraya taşındı,
+          prototipteki HeroSection ile aynı gruplama. STICKY DEĞİL -- sadece
+          aşağıdaki kategori şeridi sticky, Hero sayfayla birlikte kayıp
+          gidiyor. Arka plan: fotoğraf değil, saf CSS doku (bkz. index.css
+          .hero-bg-texture). */}
+      <div className="relative overflow-hidden hero-bg-texture py-10 sm:py-14">
         <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <h1 className="text-2xl sm:text-3xl md:text-[40px] font-bold text-slate-900 tracking-tight leading-tight mb-3">
             Güzellik ve Bakım Randevunuzu{" "}
@@ -451,7 +454,7 @@ export default function HomePage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
             {visibleBusinesses.map((biz) => (
               <BusinessCard
                 key={biz.id}

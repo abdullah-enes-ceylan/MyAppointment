@@ -80,7 +80,7 @@ export default function BusinessCard({
   return (
     <div
       onClick={() => onOpen(business.id)}
-      className="group flex flex-col bg-white rounded-[22px] border border-slate-200 hover:border-slate-300 shadow-[0_4px_20px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_30px_rgba(10,30,66,0.12)] transition-all duration-300 overflow-hidden cursor-pointer transform hover:-translate-y-1"
+      className="group flex flex-col bg-white rounded-2xl border border-slate-200 hover:border-slate-300 shadow-[0_4px_20px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_30px_rgba(10,30,66,0.12)] transition-all duration-300 overflow-hidden cursor-pointer transform hover:-translate-y-1"
     >
       {/* Görsel alanı -- kart kenarına tam bleed (prototipteki gibi), 16:10
           oranlı. İşletme kapak fotoğrafı yüklediyse onu gösterir, yüklemediyse
@@ -105,13 +105,13 @@ export default function BusinessCard({
           </span>
         )}
 
-        <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-          <span className="text-[11px] font-medium text-white/90 bg-black/30 backdrop-blur-sm px-2 py-1 rounded-lg">
+        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 max-w-[calc(100%-2.75rem)]">
+          <span className="text-[10px] font-medium text-white/90 bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-md truncate">
             {getCategoryLabel(business.category)}
           </span>
           {business.servedGender && (
             <span
-              className={`text-[11px] font-medium backdrop-blur-sm px-2 py-1 rounded-lg ${
+              className={`text-[10px] font-medium backdrop-blur-sm px-1.5 py-0.5 rounded-md shrink-0 ${
                 GENDER_STYLES[business.servedGender] ?? GENDER_STYLES.UNISEX
               }`}
             >
@@ -121,7 +121,7 @@ export default function BusinessCard({
         </div>
 
         {business.distanceKm != null && (
-          <span className="absolute bottom-2.5 left-2.5 text-[11px] font-medium text-white/90 bg-black/30 backdrop-blur-sm px-2 py-1 rounded-lg">
+          <span className="absolute bottom-1.5 left-1.5 text-[10px] font-medium text-white/90 bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
             {business.distanceKm.toFixed(1)} km
           </span>
         )}
@@ -133,7 +133,7 @@ export default function BusinessCard({
               onToggleFavorite(business.id);
             }}
             title={isFavorited ? "Favorilerden çıkar" : "Favorilere ekle"}
-            className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer ${
+            className={`absolute top-1.5 right-1.5 w-6.5 h-6.5 rounded-full backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer ${
               isFavorited ? "bg-white text-accent scale-110" : "bg-black/30 hover:bg-white/90 text-white hover:text-accent"
             }`}
           >
@@ -142,18 +142,21 @@ export default function BusinessCard({
         )}
       </div>
 
-      {/* İçerik */}
-      <div className="flex flex-col flex-1 p-4 sm:p-5">
+      {/* İçerik -- 4'lü sıra grid'ine sığması için kompakt (2026-08-31):
+          eskiden p-4/text-lg/py-2.5 idi, dar sütunda taşıyordu. Açıklama
+          satırı bilerek kaldırıldı -- bu genişlikte 2 satır bile kartı
+          gereksiz uzatıyordu, başlık+adres+CTA yeterli bilgiyi veriyor. */}
+      <div className="flex flex-col flex-1 p-2.5 sm:p-3">
         {/* Başlık + kompakt puan rozeti yan yana -- prototipteki SalonCard
             deseni. Puan yoksa rozet yerine sağda küçük bir "Henüz yorum
             yok" metni kalıyor, satır boş görünmesin diye. */}
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="font-bold text-slate-900 text-base sm:text-lg group-hover:text-brand transition-colors line-clamp-1 flex items-center gap-1.5 min-w-0">
+        <div className="flex items-start justify-between gap-1.5">
+          <h3 className="font-bold text-slate-900 text-xs sm:text-sm group-hover:text-brand transition-colors line-clamp-1 flex items-center gap-1 min-w-0">
             <span className="truncate">{business.name}</span>
             {business.verified && (
               <span
                 title="Onaylı işletme"
-                className="shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-blue-500 text-white text-[10px] leading-none"
+                className="shrink-0 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-blue-500 text-white text-[8px] leading-none"
               >
                 ✓
               </span>
@@ -165,18 +168,17 @@ export default function BusinessCard({
               garanti ediyor, ama TS bunu tek başına reviewCount'tan çıkaramaz
               -- bu ek kontrol olmadan averageRating "null olabilir" kalırdı). */}
           {hasRating ? (
-            <div className="flex items-center gap-1 bg-canvas-soft text-brand px-2 py-0.5 rounded-lg text-xs font-bold shrink-0">
+            <div className="flex items-center gap-0.5 bg-canvas-soft text-brand px-1.5 py-0.5 rounded-md text-[10px] font-bold shrink-0">
               <span className="text-amber-400">★</span>
               <span>{business.averageRating!.toFixed(1)}</span>
-              <span className="text-slate-400 font-normal text-[11px]">({business.reviewCount})</span>
             </div>
           ) : (
-            <span className="shrink-0 text-[11px] text-slate-400 italic whitespace-nowrap">Henüz yorum yok</span>
+            <span className="shrink-0 text-[9px] text-slate-400 italic whitespace-nowrap">Yeni</span>
           )}
         </div>
 
         {business.address && (
-          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 min-w-0">
+          <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500 min-w-0">
             <span className="shrink-0">📍</span>
             <span className="truncate">{business.address}</span>
           </div>
@@ -185,16 +187,12 @@ export default function BusinessCard({
         {/* Müsaitlik rozeti gerçek slot verisi bulunduğunda çıkıyor; yoksa
             hiç gösterilmiyor -- uydurma saat göstermiyoruz. */}
         {earliestSlot && (
-          <span className="mt-2.5 inline-flex items-center gap-1 self-start text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg whitespace-nowrap">
-            <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[8px] leading-none">
+          <span className="mt-1.5 inline-flex items-center gap-1 self-start text-[9px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+            <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-emerald-500 text-white text-[7px] leading-none">
               ✓
             </span>
-            Bugün En Erken: {earliestSlot.slice(0, 5)}
+            {earliestSlot.slice(0, 5)}
           </span>
-        )}
-
-        {business.description && (
-          <p className="mt-2.5 text-sm text-slate-500 line-clamp-2">{business.description}</p>
         )}
 
         {/* mt-auto: açıklaması kısa/hiç olmayan kartlarda bile buton en alta
@@ -203,13 +201,13 @@ export default function BusinessCard({
             bu olmadan tıklama önce buton onClick'ini sonra kartın kendi
             onClick'ini de tetikler (aynı yere iki kez navigate -- zararsız
             ama temiz değil). */}
-        <div className="mt-auto pt-3.5 border-t border-slate-100">
+        <div className="mt-auto pt-2 border-t border-slate-100">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onOpen(business.id);
             }}
-            className="w-full py-2.5 text-sm font-semibold text-white bg-brand hover:bg-brand-hover rounded-xl transition-colors duration-200 cursor-pointer"
+            className="w-full py-1.5 text-xs font-semibold text-white bg-brand hover:bg-brand-hover rounded-lg transition-colors duration-200 cursor-pointer"
           >
             Randevu Al
           </button>
