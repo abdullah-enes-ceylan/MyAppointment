@@ -497,7 +497,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.1 Test altyapısı ve algoritma testleri — 7f33458
 - [x] 3.2 Yetkilendirme entegrasyon testleri ⭐ — 7f33458
 - [x] 3.3 API dokümantasyonu — 3bd350e
-- [ ] 3.4 Bildirim altyapısı (kanal-bağımsız)
+- [x] 3.4 Bildirim altyapısı (kanal-bağımsız) — fe8e547
 - [ ] 3.5 Rate limiting ve kötüye kullanım koruması
 - [ ] 3.6 Loglama, izleme ve hata takibi
 - [ ] 3.7 Konteynerleştirme
