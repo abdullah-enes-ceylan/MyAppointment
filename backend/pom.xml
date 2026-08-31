@@ -168,6 +168,18 @@
             <artifactId>thumbnailator</artifactId>
             <version>0.4.20</version>
         </dependency>
+
+        <!-- Faz 3.3: API dokumantasyonu (Swagger UI + OpenAPI semasi).
+             springdoc-openapi'nin 2.x hatti Spring Boot 3.x'i hedefliyor,
+             3.x hatti Spring Boot 4.x icin; testcontainers-bom'daki surum
+             sabitleme sorunuyla ayni gerekce, bu projenin cok yeni bir
+             Spring Boot surumu kullanmasi. Elle sabitlenen 3.1.0, bu
+             satir yazilirken Maven Central'daki en yeni surum. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>3.1.0</version>
+        </dependency>
 	</dependencies>
 
 	<build>

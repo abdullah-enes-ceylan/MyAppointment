@@ -72,6 +72,14 @@ public class SecurityConfig {
                         // BILEREK burada yok, genel "/api/**" kuralina dusup authenticated
                         // kaliyor -- OwnershipGuard zaten controller'da kontrol ediyor.
                         .requestMatchers(HttpMethod.GET, "/api/business-photos/**").permitAll()
+                        // Swagger UI / OpenAPI semasi (Faz 3.3). Prod'da bu yollara hic
+                        // gerek yok -- springdoc.api-docs.enabled/swagger-ui.enabled
+                        // application-prod.properties'te false, yollar hic mapping'e
+                        // girmiyor. Burada permitAll olmasi sadece dev/test'te API
+                        // yuzeyini API'nin KENDISINI kullanmadan (token almadan)
+                        // kesfedebilmek icin -- gercek uclara istek atmak icin Swagger
+                        // UI'in "Authorize" kilidinden yine gercek bir JWT gerekiyor.
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/**").authenticated())
                 // Token yok/geçersizken artık Spring'in varsayılan
                 // Http403ForbiddenEntryPoint'i yerine kendi 401 üreten
