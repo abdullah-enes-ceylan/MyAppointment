@@ -317,9 +317,29 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
   sınıfı yazıp inject edeceksin; iş mantığına dokunmayacaksın. Karar ertelemenin bedeli sıfır olur.
 - Kanal seçildiğinde: SMS için İYS/ticari ileti mevzuatına uyum gerekir (izin kaydı, ret hakkı)
 
-### 3.5 — Rate limiting ve kötüye kullanım koruması `[BE]` `[AI]`
-- Login'de brute force koruması (Bucket4j veya basit in-memory sayaç + IP/email bazlı)
-- `permitAll` olan `/available-slots` ve `/register` uçlarına hız limiti (kimlik doğrulamasız ve DB-yoğun)
+### 3.5 — Rate limiting ve kötüye kullanım koruması `[BE]` `[AI]` ✅ tamamlandı
+- Login'de brute force koruması: HESAP (5/15dk) ve IP (20/15dk) limitleri **bağımsız** — sadece
+  hesap olsa saldırgan farklı hesap dener, sadece IP olsa dağıtık saldırı geçer. Başarılı girişte
+  sadece hesap sayacı sıfırlanır, IP sayacı sıfırlanmaz.
+- `/register` (10/15dk) ve `/available-slots` (60/dk) IP bazlı, işletme kapak fotoğrafı yükleme
+  (5/5dk) kullanıcı id bazlı (uç zaten kimlik doğrulamalı), tüm `/api/**` için 300/dk genel
+  güvenlik ağı (IP bazlı, kimlik doğrulanmış istekler dahil, diğer kurallarla üst üste uygulanır).
+- Bucket4j yerine bağımlılıksız elle yazılmış sabit-pencere sayaç (`RateLimitPort` arayüzü
+  arkasında, bkz. `InMemoryRateLimiter`) — bu projenin çok yeni Spring Boot sürümünde üçüncü
+  parti kütüphane sürüm uyumsuzluğu üç kez yaşandı (testcontainers-bom, springdoc-openapi),
+  basit bir sayaç algoritmasında bu riski almaya değmedi.
+- 429 + `Retry-After` header'ı, mevcut `ErrorResponse` şekliyle tutarlı.
+- **Bilinen riskler (kabul edildi):**
+  - **Tek instance varsayımı.** Bellek içi limiter tek JVM'e özel — birden fazla instance
+    çalışırsa gerçek limit `yapılandırılan × instance sayısı` olur. `RateLimitPort` arayüzü
+    sayesinde Redis'e geçiş tek implementasyon değişikliği. ROADMAP'in mevcut deploy planı tek
+    sunucu olduğu için şimdilik kabul edilebilir (bkz. Faz 3.8).
+  - **Ters vekil arkasında gerçek IP.** Tüm IP bazlı limitler `request.getRemoteAddr()`'ın
+    gerçek istemci IP'sini verdiğini varsayıyor — bu da Caddy'nin `X-Forwarded-For` göndermesine
+    ve `server.forward-headers-strategy=native`'in doğru çalışmasına bağlı. **Yanlış
+    yapılandırılırsa rate limiting koruma olmaktan çıkıp kendi kullanıcılarını kilitleyen bir
+    mekanizmaya döner** — tüm kullanıcılar proxy'nin tek IP'si görünür, aynı limiti paylaşıp
+    birbirini kilitler. Deploy sonrası ilk kontrollerden biri bu olmalı (bkz. Faz 3.8).
 
 ### 3.6 — Loglama, izleme ve hata takibi `[BE]` `[AI]`
 - `logback-spring.xml`: JSON formatı, rolling file, **PII maskeleme** (telefon/email loglara düşmesin)
@@ -350,6 +370,12 @@ Detaylar aşağıdaki bölümde.
 - **DB yedekleme, gerçek kullanıcı verisi girmeden ÖNCE kurulu ve en az bir kez geri yükleyerek
   test edilmiş olmalı** (bkz. Dikkat edilecekler → Yedekleme). Beta'nın ilk gününden itibaren
   gerçek müşteri/randevu verisi işlenmeye başlıyor — "sonra kurarım" diye ertelenemez.
+- **Rate limiting'in gerçek istemci IP'sini gördüğünün doğrulanması** (bkz. Faz 3.5'teki risk
+  notu) — deploy sonrası ilk kontrollerden biri, **farklı cihazlardan** gelen isteklerin
+  sunucu loglarında **farklı IP** olarak göründüğünü teyit etmek olmalı. Doğrulanmazsa, Caddy
+  `X-Forwarded-For` göndermiyor ya da `server.forward-headers-strategy=native` yanlış
+  çalışıyor demektir — bu durumda rate limiting koruma olmaktan çıkıp TÜM kullanıcıları proxy'nin
+  tek IP'si üzerinden birbirine kilitleyen bir mekanizmaya döner.
 
 ### 3.9 — KVKK ve hukuki metinler `[SEN]`
 Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
@@ -498,7 +524,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.2 Yetkilendirme entegrasyon testleri ⭐ — 7f33458
 - [x] 3.3 API dokümantasyonu — 3bd350e
 - [x] 3.4 Bildirim altyapısı (kanal-bağımsız) — fe8e547
-- [ ] 3.5 Rate limiting ve kötüye kullanım koruması
+- [x] 3.5 Rate limiting ve kötüye kullanım koruması — b201bb7
 - [ ] 3.6 Loglama, izleme ve hata takibi
 - [ ] 3.7 Konteynerleştirme
 - [ ] 3.8 Deploy, yedekleme, izleme
