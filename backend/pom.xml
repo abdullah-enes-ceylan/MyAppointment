@@ -64,6 +64,18 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!-- Faz 3.6: /actuator/health icin, deploy platformunun (ileride secilecek,
+		     bkz. Faz 3.8) uygulamanin ayakta olup olmadigini anlamasi icin.
+		     management.endpoints.web.exposure.include=health ile SADECE health
+		     aciliyor; varsayilan zaten "sadece health" olsa da bunu ELLE ve ACIKCA
+		     yazmak, ileride baska bir starter/otomatik yapilandirma bu varsayilani
+		     degistirirse (ornegin butun endpoint'leri acan bir profil eklenirse)
+		     sessizce genislemesini engelliyor. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
 		<!-- Bean Validation: @NotBlank, @Email, @Size, @Future gibi anotasyonlari
 		     etkinlestirir. Bu olmadan @Valid hicbir sey yapmaz, sessizce yok sayilir. -->
 		<dependency>

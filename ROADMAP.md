@@ -341,10 +341,50 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
     mekanizmaya döner** — tüm kullanıcılar proxy'nin tek IP'si görünür, aynı limiti paylaşıp
     birbirini kilitler. Deploy sonrası ilk kontrollerden biri bu olmalı (bkz. Faz 3.8).
 
-### 3.6 — Loglama, izleme ve hata takibi `[BE]` `[AI]`
-- `logback-spring.xml`: JSON formatı, rolling file, **PII maskeleme** (telefon/email loglara düşmesin)
-- Spring Boot Actuator: `/health` açık, diğer endpoint'ler kapalı/korumalı
-- Sentry (ücretsiz kota: ~5k olay/ay) ile exception takibi
+### 3.6 — Loglama, izleme ve hata takibi `[BE]` `[AI]` ✅ tamamlandı
+- **Anti dahil, `anyRequest()` boşluğu ayrı bir iş olarak önce ele alındı** (canlı test):
+  `SecurityConfig`'in eşleşmeyen path'ler için hiç `anyRequest()` kuralı yok — bu, eski Spring
+  Security sürümlerinde bilinen bir tuzak (sessizce korumasız kalma). Geçici bir uçla canlı
+  denendi: bu sürüm eşleşmeyen path'i **varsayılan olarak reddediyor** (401) — iddia edilen açık
+  gerçek değildi. Kod eklenmedi (`anyRequest().authenticated()` gerçekte hiçbir şeyi
+  düzeltmezdi, sadece zaten var olan varsayılanı belgelerdi); bunun yerine davranışın kendisini
+  kilitleyen bir regresyon testi yazıldı (`SecurityConfigUnmatchedPathTest`) — ileride Spring
+  Security majör sürümü yükselirse veya `SecurityConfig` yeniden yazılırsa test kırılıp haber
+  verecek.
+- **`logging.structured.format.console=ecs`** — bu Spring Boot sürümünde **native** olarak
+  tanınıyor, canlı doğrulandı (JVM'e sistem property olarak geçilip çıktının gerçek ECS-şemalı
+  JSON'a döndüğü görüldü). `logback-spring.xml` / `logstash-logback-encoder` gerekmedi. Sadece
+  **prod**'da aktif — dev/test'te renkli/okunabilir konsol çıktısı kalıyor. Rolling file
+  bilerek yazılmadı: deploy platformu henüz seçilmedi (Faz 3.8), kalıcı olmayan bir disk
+  ihtimali işletme kapak fotoğrafındaki aynı riski taşırdı (bkz. CLAUDE.md) — konsola (stdout)
+  yazmak bu riski en baştan ortadan kaldırıyor.
+- **PII maskeleme — `PiiMasker.maskEmails()`.** Kod tabanında email/phone/JWT'yi DOĞRUDAN
+  loglayan hiçbir satır yoktu (grep ile doğrulandı) — bulunan gerçek sızıntı DOLAYLIYDI:
+  `GlobalExceptionHandler`'ın `DataIntegrityViolationException` ve `HttpMessageNotReadableException`
+  handler'ları, DB sürücüsünün/Jackson'ın ürettiği ham mesajı logluyordu; `users.email` UNIQUE
+  kısıtına eşzamanlı iki kayıt isteği çarpınca Postgres'in ürettiği mesaj e-postayı düz metin
+  içeriyordu — bu **canlı** eşzamanlı istekle tetiklendi ve doğrulandı. Genel bir "her logu
+  regex'le tara" filtresi bilerek yazılmadı; sadece bu iki call site'a uygulandı. Ayrıca **canlı
+  testte ikinci, bağımsız bir sızıntı bulundu**: Hibernate'in kendi dahili
+  `org.hibernate.orm.jdbc.error` logger'ı, bizim handler'ımızdan tamamen bağımsız olarak aynı ham
+  e-postayı ayrı bir satırda basıyordu — `PiiMasker` oraya hiç ulaşamıyordu. Sadece prod'da
+  `logging.level.org.hibernate.orm.jdbc.error=OFF` ile kapatıldı (dev/test'te gerçek PII yok,
+  hata ayıklama için açık kalıyor); bilgi kaybı yok çünkü constraint adı zaten bizim maskelenmiş
+  log satırımızda duruyor — bu da canlı doğrulandı. Detay ve gerekçe: CLAUDE.md karar tablosu
+  ("Ham exception mesajı loglama"). Log erişim kontrolü/saklama süresi Faz 3.9'a not düşüldü.
+- **Spring Boot Actuator** — sadece `spring-boot-starter-actuator` +
+  `management.endpoints.web.exposure.include=health` (başka hiçbir endpoint mapping'e girmiyor)
+  + `SecurityConfig`'te `/actuator/health` için tek satır `permitAll`. `/actuator/**` altındaki
+  geri kalan her şey zaten yukarıdaki default-deny'e düşüyor — ayrı bir "yasakla" kuralı
+  gerekmedi. Canlı doğrulandı: `/actuator/health` → 200 (kimlik doğrulamasız), `/actuator` ve
+  `/actuator/env` → 401, mevcut `permitAll` uçları (businesses, swagger) ve korumalı uçlar
+  (`/api/appointments/my`) davranış değiştirmedi.
+- **Sentry — ertelendi.** Gerekçe: (1) prod deploy henüz yok (Faz 3.8 tamamlanmadı), gerçek
+  trafik/kullanıcı olmadan Sentry'nin asıl faydası (canlıda patlayan hatanın anlık bildirimi)
+  hiç devreye girmiyor; (2) yeni JSON yapılı loglar zaten tam stack trace + istek bağlamını
+  taşıyor, bugünkü tek-instance/tek-geliştiricili aşamada log okumak yeterli; (3) yeni bir
+  üçüncü taraf servis/hesap, deploy kararından (Faz 3.8) önce bağlanırsa gereksiz erken bir
+  bağımlılık olur. Faz 3.8 deploy tamamlanıp gerçek trafik başlayınca yeniden değerlendirilecek.
 
 ### 3.7 — Konteynerleştirme `[DevOps]` `[AI]`
 - Backend `Dockerfile` (multi-stage, JRE slim, non-root kullanıcı)
@@ -383,6 +423,11 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
 - VERBİS kayıt yükümlülüğü eşiğini kontrol et
 - İşletmelerle veri işleyen sözleşmesi (sen veri sorumlususun, işletme de öyle)
 - Hesap ve veri silme akışı (unutulma hakkı) — teknik olarak da uygulanmalı
+- Log erişim kontrolü ve saklama süresi: kim (hangi rol) sunucu loglarına erişebilir, loglar
+  ne kadar süre tutulur, rotasyon/silme politikası var mı. Faz 3.6'da `PiiMasker` ile
+  bilinen call site'lardaki e-posta sızıntısı kapatıldı (bkz. CLAUDE.md karar tablosu,
+  "Ham exception mesajı loglama") ama bu, "loglara kim erişebilir" sorusunu cevaplamıyor —
+  o soru burada, KVKK kapsamında ele alınmalı.
 - **Neden Faz 3'te ama ihmal edilmemeli:** Beta'da gerçek kişisel veri işlemeye başladığın an
   yükümlülük doğar. Ücretsiz olması muaf tutmaz.
 
@@ -525,7 +570,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.3 API dokümantasyonu — 3bd350e
 - [x] 3.4 Bildirim altyapısı (kanal-bağımsız) — fe8e547
 - [x] 3.5 Rate limiting ve kötüye kullanım koruması — b201bb7
-- [ ] 3.6 Loglama, izleme ve hata takibi
+- [x] 3.6 Loglama, izleme ve hata takibi
 - [ ] 3.7 Konteynerleştirme
 - [ ] 3.8 Deploy, yedekleme, izleme
 - [ ] 3.9 KVKK ve hukuki metinler

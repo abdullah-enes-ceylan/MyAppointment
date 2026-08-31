@@ -83,6 +83,16 @@ public class SecurityConfig {
                         // kesfedebilmek icin -- gercek uclara istek atmak icin Swagger
                         // UI'in "Authorize" kilidinden yine gercek bir JWT gerekiyor.
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        // Deploy platformu (Faz 3.8) ve varsa yuk dengeleyici/orkestrator
+                        // (ornegin Docker healthcheck, Kubernetes liveness probe) kimlik
+                        // dogrulamasi OLMADAN bu uca erisebilmeli. management.endpoints.
+                        // web.exposure.include=health ZATEN sadece health'i actigi icin
+                        // /actuator/** altindaki DIGER her sey (env, beans, metrics...)
+                        // hicbir sekilde mapping'e girmiyor -- buradaki tek satir onlari
+                        // ayrica yasaklamiyor, sadece health'i ACIYOR. Onlar zaten
+                        // eslesmeyen path olarak varsayilan-red'e (401) duser (bkz.
+                        // SecurityConfigUnmatchedPathTest'te canli dogrulanan davranis).
+                        .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/**").authenticated())
                 // Token yok/geçersizken artık Spring'in varsayılan
                 // Http403ForbiddenEntryPoint'i yerine kendi 401 üreten
