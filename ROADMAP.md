@@ -386,9 +386,37 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
   üçüncü taraf servis/hesap, deploy kararından (Faz 3.8) önce bağlanırsa gereksiz erken bir
   bağımlılık olur. Faz 3.8 deploy tamamlanıp gerçek trafik başlayınca yeniden değerlendirilecek.
 
-### 3.7 — Konteynerleştirme `[DevOps]` `[AI]`
-- Backend `Dockerfile` (multi-stage, JRE slim, non-root kullanıcı)
-- `docker-compose.yml`: app + postgres + Caddy
+### 3.7 — Konteynerleştirme `[DevOps]` `[AI]` — backend/konteyner tarafı ✅, env+frontend devam ediyor
+- **Backend `Dockerfile`** — multi-stage: `maven:3.9-eclipse-temurin-21` build asamasi (testler
+  BILEREK burada calismiyor, Testcontainers Docker-in-Docker gerektirirdi), `jarmode=tools` ile
+  katman cikarma (`dependencies`/`spring-boot-loader`/`snapshot-dependencies`/`application` —
+  jar'i gercekten build edip icini actarak dogrulandi, varsayimla yazilmadi), final asama
+  `eclipse-temurin:21-jre-jammy` (alpine DEGIL — Thumbnailator/ImageIO'nun musl libc ile bilinen
+  uyumsuzluk gecmisi var, foto yukleme bu urunun gercek ozelligi). Root olmayan kullanici
+  (`appuser`, sabit UID/GID 1000).
+- **`docker-compose.yml`** — su an SADECE backend + postgres (Caddy ayri turda, env/frontend'le
+  birlikte). Postgres `healthcheck` (`pg_isready`) + backend'de `depends_on: condition:
+  service_healthy` — canli dogrulandi: backend, Postgres "Healthy" olmadan hic baslamiyor. Bu
+  turda ayrica canli yakalanan bir surum-spesifik hata: **Postgres 18+ imaji artik
+  `/var/lib/postgresql/data` DEGIL `/var/lib/postgresql`'in kendisine mount bekliyor** (eski
+  konvansiyonla container "unused mount/volume" hatasiyla acilista cikti).
+- **`business-photo-storage` volume karari: bind mount** (named volume degil) — tek sunucu
+  varsayimiyla tutarli, host'ta gercek bir klasor olmasi manuel yedeklemeyi kolaylastiriyor. BU
+  KARAR CLAUDE.md'deki asil riski (deploy platformunun host diskinin kalici olup olmadigi)
+  COZMUYOR, sadece container'in ephemeral dosya sistemiyle host diski arasinda kopru kuruyor —
+  platform karari hala Faz 3.8'in isi.
+- **Sir sizintisi canli dogrulandi** — "ignore ettim, herhalde girmedi" degil: build edilen
+  image'in icinde `find`/`grep` ile `application-dev.properties`, `.env`, `.git`, gercek dev
+  sifresi/JWT secret'i ARANDI, bulunamadi. Tek bulunan sey zararsiz `application-dev.properties.example`
+  (icerigi acilip kontrol edildi — sadece placeholder). Bkz. CLAUDE.md, "src/main/resources
+  image'a girer" notu.
+- **Non-root + bind mount izin testi canli yapildi** — gercek bir kullanici/isletme/foto
+  yukleme akisi uctan uca calistirildi: `appuser` (UID 1000) host'taki bind mount'a gercekten
+  yazabildi, container restart sonrasi hem dosya hem DB kaydi (`coverPhotoCardUrl`) kaldigi
+  dogrulandi. **Onemli cekince: bu test Windows + Docker Desktop'ta yapildi**, host klasoru
+  Windows/NTFS sahipliginde gorundu (Unix UID semantigi yok) — gercek Linux sunucudaki izin
+  uyusmazligi senaryosu burada BIREBIR uretilemedi. Bu yuzden Faz 3.8'e somut, isaretlenecek bir
+  madde olarak eklendi (asagida).
 - Frontend static build → Caddy veya Cloudflare Pages, build'de `VITE_API_URL` gerçek backend
   domain'ine ayarlanır (yereldeki `.env`'deki `localhost:8080` değeri prod'a asla sızmaz)
 - **Ortam değişkeni yönetimi + dev/prod profil ayrımı**: `application-dev.properties` sadece
@@ -397,11 +425,17 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
   (bkz. Dikkat edilecekler → Secret yönetimi)
 - **CORS**'a prod frontend domain'i eklenir, `localhost:*` kalıbı prod profilinde tamamen kapatılır
   (bkz. Dikkat edilecekler → CORS)
-- **`DatabaseSeeder` prod profilinde devre dışı bırakılır** (`@Profile("!prod")` ya da eşdeğeri) —
-  beta'ya sahte test verisiyle çıkılmaz
+- **`DatabaseSeeder` prod profilinde devre dışı** ✅ zaten yapılmış — `@Profile("dev")` ile
+  sınırlı (Faz 3.7'de fark edildi, ayrı bir iş gerekmedi).
 
 ### 3.8 — Deploy, yedekleme, izleme `[DevOps]` `[SEN]`
 Detaylar aşağıdaki bölümde.
+- [ ] **`business-photo-storage` host klasörü izinleri** — Faz 3.7'de Windows + Docker Desktop'ta
+  test edilemedi (host klasörü Unix UID semantiği taşımıyor). Deploy günü, sunucuda: host'ta
+  `mkdir -p business-photo-storage && chown 1000:1000 business-photo-storage` çalıştırılıp
+  **gerçek bir foto yüklenip container'ın (appuser, UID 1000) diske gerçekten yazabildiği
+  canlı doğrulanmalı** — sadece komutu çalıştırmak yetmez, yükleme denenmeden bu madde
+  işaretlenmemeli.
 - **Storage adaptörü kararı** (kalıcı disk volume mu, S3/R2 mi) — CLAUDE.md'deki bilinen risk:
   deploy platformunun disk sistemi kalıcı değilse (bazı PaaS'lerde ephemeral disk) tüm işletme
   fotoğrafları sessizce kaybolur, uygulama hata vermez. `BusinessPhotoStorage` arayüzü sayesinde

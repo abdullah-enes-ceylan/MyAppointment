@@ -1,0 +1,20 @@
+# Build context'e giren her sey Docker daemon'a gonderiliyor ve COPY . .
+# gibi bir komut varsa image'a gomulebiliyor -- .gitignore'da olmasi
+# BUNU engellemez, .gitignore sadece git'i etkiler. Asagidaki iki satir
+# (application-dev.properties, application-local.properties) bu yuzden
+# burada TARTISMAYA ACIK DEGIL: gercek yerel DB parolasi ve JWT secret'i
+# tasiyorlar (bkz. CLAUDE.md "Yerel ortam" bolumu).
+target/
+.git/
+.gitignore
+.mvn/
+mvnw
+mvnw.cmd
+business-photo-storage/
+src/main/resources/application-dev.properties
+src/main/resources/application-local.properties
+.env
+.idea/
+*.iml
+.vscode/
+HELP.md

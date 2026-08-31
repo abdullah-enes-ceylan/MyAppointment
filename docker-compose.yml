@@ -1,0 +1,67 @@
+# Bu turda SADECE backend + postgres var. Caddy/reverse-proxy ve gercek env/
+# secret yonetimi (ornegin bir .env dosyasinin production'da nasil doldurulacagi)
+# bilerek disarida -- ayri bir turda ele alinacak (bkz. ROADMAP 3.7). Asagidaki
+# ${...} degiskenler simdilik yerel bir .env dosyasindan (docker-compose'un
+# otomatik okudugu) veya kabuk ortamindan geliyor -- bu SADECE yerel test
+# iskeleti, gercek deploy'da secret enjeksiyonu Faz 3.8'de netlesecek.
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-appointment_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
+    # Postgres 18+ imaji /var/lib/postgresql/data yerine /var/lib/postgresql'in
+    # KENDISINE mount edilmesini bekliyor (surum-spesifik alt dizin
+    # kullaniyor artik, pg_ctlcluster ile uyumlu olmak icin) -- eski
+    # konvansiyonla denendi, container "unused mount/volume" hatasiyla
+    # aciliste cikti, canli duzeltildi.
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    # Backend'in Postgres KONTEYNERININ baslamasini degil, Postgres'in
+    # GERCEKTEN baglanti kabul ettigini beklemesi icin -- duz depends_on
+    # sadece ilkini garanti eder, Postgres init'i birkac saniye surer.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-appointment_db}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-appointment_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET gerekli}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - "8080:8080"
+    volumes:
+      # Bind mount -- named volume degil: tek sunucu varsayimiyla ilerliyoruz
+      # (bkz. CLAUDE.md, rate limiting "tek instance" karari ile ayni mantik),
+      # host'ta gercek bir klasor olmasi manuel yedeklemeyi (rsync/tar) ve
+      # "bu veri nerede duruyor" sorusunu gozle cevaplanabilir kiliyor. BU
+      # KARAR CLAUDE.md'deki asil riski (deploy platformunun host diskinin
+      # kalici olup olmadigi) COZMUYOR -- sadece container'in kendi ephemeral
+      # dosya sistemi ile host diski arasinda bir kopru kuruyor. Platform
+      # karari hala Faz 3.8'in isi.
+      #
+      # ONEMLI: host'taki ./business-photo-storage klasoru, container'daki
+      # appuser'in UID'siyle (1000, bkz. Dockerfile) uyumlu olmali yoksa
+      # yazma "Permission denied" ile patlar -- linux host'ta ilk kurulumda
+      # `mkdir -p business-photo-storage && chown 1000:1000 business-photo-storage`
+      # calistirilmali (Faz 3.8 kurulum adimina yazilacak).
+      - ./backend/business-photo-storage:/app/business-photo-storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Healthcheck'in kendi bekleme penceresini asan nadir bir gecikme
+    # olursa diye ek guvence -- healthcheck zaten ana korumayi sagliyor.
+    restart: on-failure
+
+volumes:
+  postgres_data:
