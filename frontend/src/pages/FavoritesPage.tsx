@@ -98,7 +98,7 @@ export default function FavoritesPage() {
               <p className="text-slate-500 text-lg">Henüz favori işletmeniz yok.</p>
               <button
                 onClick={() => navigate("/")}
-                className="mt-4 text-sm text-[#161b33] font-medium hover:underline cursor-pointer"
+                className="mt-4 text-sm text-brand font-medium hover:underline cursor-pointer"
               >
                 İşletmeleri keşfet →
               </button>

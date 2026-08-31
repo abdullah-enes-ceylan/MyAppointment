@@ -47,7 +47,7 @@ function Field({ id, label, error, ...inputProps }: FieldProps) {
         className={`w-full px-4 py-2.5 bg-white border rounded-xl text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 transition-all disabled:bg-slate-50 disabled:text-slate-400 ${
           error
             ? "border-red-300 focus:ring-red-200"
-            : "border-slate-200 focus:ring-[#161b33]/20 focus:border-[#161b33]/40"
+            : "border-slate-200 focus:ring-brand/20 focus:border-brand/40"
         }`}
       />
       {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
@@ -183,7 +183,7 @@ export default function ProfilePage() {
 
         {/* Kimlik başlığı */}
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 shrink-0 rounded-2xl bg-[#161b33] text-white flex items-center justify-center text-xl font-bold">
+          <div className="w-16 h-16 shrink-0 rounded-2xl bg-brand text-white flex items-center justify-center text-xl font-bold">
             {initials}
           </div>
           <div className="min-w-0">
@@ -255,7 +255,7 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={infoSaving}
-                className="w-full py-2.5 text-sm font-semibold text-white bg-[#161b33] hover:bg-[#20264a] rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
+                className="w-full py-2.5 text-sm font-semibold text-white bg-brand hover:bg-brand-hover rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
               >
                 {infoSaving ? "Kaydediliyor..." : "Değişiklikleri Kaydet"}
               </button>
@@ -301,7 +301,7 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={pwSaving}
-                className="w-full py-2.5 text-sm font-semibold text-white bg-[#161b33] hover:bg-[#20264a] rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
+                className="w-full py-2.5 text-sm font-semibold text-white bg-brand hover:bg-brand-hover rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer"
               >
                 {pwSaving ? "Değiştiriliyor..." : "Şifreyi Değiştir"}
               </button>

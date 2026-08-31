@@ -2,9 +2,30 @@
 
 @theme {
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  /* Faz redesign: marka rengi logoyla uyumlu lacivert oldu (eskisi
-     zümrüt yeşiliydi). Şu an sadece Navbar + HomePage bu paletle
-     yeniden çizildi; diğer sayfalar kademeli geçecek. */
+
+  /* Marka rengi "gece mavisi" -- Google AI Studio prototipiyle
+     karşılaştırma sonrası #161b33'ten #0a1e42'ye güncellendi (2026-08-30).
+     -hover buton hover'ı için açık ton, -mid/-glow BusinessCard kapak
+     gradyanının ara durakları -- üçü de aynı bazdan orantılı türetildi,
+     tek yerden değişsin diye. Bu paleti kullanan yerler: Navbar, HomePage,
+     BusinessCard, ProfilePage, FavoritesPage, App.tsx footer, BottomTabBar.
+     Panel/detay sayfalarının eski koyu teması (aşağıdaki --color-surface
+     vb.) BUNDAN AYRI, kademeli geçecek (bkz. CLAUDE.md).*/
+  --color-brand: #0a1e42;
+  --color-brand-hover: #142959;
+  --color-brand-mid: #172f61;
+  --color-brand-glow: #1f3a75;
+
+  /* Prototipten alınan mercan accent -- favori kalbi gibi marka
+     lacivertinden bilerek ayrışan tek sıcak "dikkat çek" rengi. */
+  --color-accent: #fe7d66;
+  --color-accent-hover: #fd6b50;
+
+  /* Prototipteki mavi tonlu (nötr değil) açık zeminler -- sayfa/panel
+     arka planlarında düz slate yerine kullanılıyor. */
+  --color-canvas: #f7f9fc;
+  --color-canvas-soft: #edf2f9;
+
   --color-primary: #2563eb;
   --color-primary-dark: #1d4ed8;
   --color-primary-light: #60a5fa;

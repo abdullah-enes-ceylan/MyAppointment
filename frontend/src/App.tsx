@@ -82,7 +82,7 @@ function Layout() {
 
       {/* Footer mobilde gizli: alt sekme çubuğu zaten ekranın altını
           kaplıyor, ikisi üst üste binerdi. */}
-      <footer className={`bg-[#161b33] ${isAuthenticated ? "hidden sm:block" : ""}`}>
+      <footer className={`bg-brand ${isAuthenticated ? "hidden sm:block" : ""}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
             {/* Bu sayfalar henüz yok -- KVKK/hukuki metinler Faz 3.9'da
