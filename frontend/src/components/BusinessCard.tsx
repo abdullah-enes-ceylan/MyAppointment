@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { getCategory, getCategoryLabel, getGenderLabel } from "./CategoryIcons";
 import { resolvePhotoUrl } from "../utils/photo";
 import type { BusinessResponse, ServedGender } from "../types/api";
@@ -13,11 +13,25 @@ const GENDER_STYLES: Record<ServedGender, string> = {
   UNISEX: "bg-white/15 text-white/90",
 };
 
-// Küçük bölüm etiketi ("Puan", "Müsaitlik", "Konum") -- tasarımdaki
-// bilgi hiyerarşisinin belirleyici parçası: değerin ne olduğunu
-// tahmin ettirmek yerine açıkça yazıyor.
-function FieldLabel({ children }: { children: ReactNode }) {
-  return <div className="text-[11px] font-semibold text-slate-700 leading-tight">{children}</div>;
+// Prototip tasarımdaki (FavoritesDrawer.tsx) aynı kalp path'i -- tutarlılık
+// için birebir kopyalandı. Emoji yerine SVG: fill/stroke currentColor'a
+// bağlı olduğu için favori durumuna göre renk (accent) CSS'ten kontrol
+// edilebiliyor, emoji ile bu mümkün değildi.
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 20.3l-1.4-1.3C5.4 14.4 2 11.3 2 7.6 2 4.9 4.1 3 6.6 3c1.6 0 3.1.8 4 2 .9-1.2 2.4-2 4-2C17.9 3 20 4.9 20 7.6c0 3.7-3.4 6.8-8.6 11.4z" />
+    </svg>
+  );
 }
 
 // business: uc farkli uctan gelen, ortusen ama farkli sekiller kabul ediyor
@@ -38,6 +52,13 @@ interface BusinessCardProps {
 // Tüm kartlar aynı boyutta. Bir ara ilk kartı 2 sütun genişliğinde
 // "öne çıkan kart" yapmayı denedik ama ızgarada yanındaki sütunun
 // altında büyük bir boşluk bırakıyor ve kart oranlarını bozuyordu.
+//
+// Google AI Studio prototipiyle karşılaştırma sonrası (2026-08-30) kapak
+// gorseli kart kenarlarina tasip (bleed) tam genislikte oldu, kart geneli
+// tiklanabilir hale geldi (eskiden sadece "Randevu Al" butonu). "Puan",
+// "Muhsaitlik" gibi ayri etiketli bloklar yerine basliginin yanina
+// kompakt bir puan rozeti geldi -- prototipteki SalonCard'in bilgi
+// hiyerarsisiyle ayni.
 export default function BusinessCard({
   business,
   earliestSlot,
@@ -54,16 +75,21 @@ export default function BusinessCard({
   // duseriz, kirik ikon hic gorunmez.
   const [imgFailed, setImgFailed] = useState(false);
   const showPhoto = coverUrl && !imgFailed;
+  const hasRating = business.reviewCount > 0 && business.averageRating != null;
 
   return (
-    <div className="group flex flex-col bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200 p-3">
-      {/* Görsel alanı -- işletme kapak fotoğrafı yüklediyse onu gösterir,
-          yüklemediyse VEYA yükleme başarısız olduysa (coverUrl null ya da
-          imgFailed) kategoriye göre stilize kapağa (koyu lacivert gradyan +
-          o kategorinin çizgi ikonu) düşer. Kutu HER İKİ durumda da ayni
-          sabit yükseklikte (h-36) -- fotoğraf gec/hic yüklenmese bile
-          ızgara zıplamaz (CLS yok). */}
-      <div className="relative shrink-0 h-36 rounded-xl overflow-hidden bg-gradient-to-br from-[#161b33] via-[#232c52] to-[#2b3766] flex items-center justify-center">
+    <div
+      onClick={() => onOpen(business.id)}
+      className="group flex flex-col bg-white rounded-[22px] border border-slate-200 hover:border-slate-300 shadow-[0_4px_20px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_30px_rgba(10,30,66,0.12)] transition-all duration-300 overflow-hidden cursor-pointer transform hover:-translate-y-1"
+    >
+      {/* Görsel alanı -- kart kenarına tam bleed (prototipteki gibi), 16:10
+          oranlı. İşletme kapak fotoğrafı yüklediyse onu gösterir, yüklemediyse
+          VEYA yükleme başarısız olduysa (coverUrl null ya da imgFailed)
+          kategoriye göre stilize kapağa (marka gradyanı + o kategorinin çizgi
+          ikonu) düşer. aspect-[16/10] sabit oran, fotoğraf gec/hic yüklenmese
+          bile alanı ANINDA rezerve eder -- eski sabit h-36 ile aynı CLS
+          güvenliği, sadece orantısal (kart genişliğine göre ölçekleniyor). */}
+      <div className="relative shrink-0 aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-brand via-brand-mid to-brand-glow flex items-center justify-center">
         {showPhoto ? (
           <img
             src={coverUrl}
@@ -71,7 +97,7 @@ export default function BusinessCard({
             loading="lazy"
             decoding="async"
             onError={() => setImgFailed(true)}
-            className="absolute inset-0 w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <span className="text-white/25 scale-[2.4]">
@@ -107,89 +133,87 @@ export default function BusinessCard({
               onToggleFavorite(business.id);
             }}
             title={isFavorited ? "Favorilerden çıkar" : "Favorilere ekle"}
-            className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center text-sm transition-colors cursor-pointer ${
-              isFavorited ? "bg-white" : "bg-black/30 hover:bg-black/50"
+            className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer ${
+              isFavorited ? "bg-white text-accent scale-110" : "bg-black/30 hover:bg-white/90 text-white hover:text-accent"
             }`}
           >
-            {isFavorited ? "❤️" : "🤍"}
+            <HeartIcon filled={!!isFavorited} />
           </button>
         )}
       </div>
 
       {/* İçerik */}
-      <div className="flex flex-col flex-1 px-1 pt-3">
-        <h3 className="text-base font-bold text-slate-900 flex items-center gap-1.5 min-w-0">
-          <span className="truncate">{business.name}</span>
-          {business.verified && (
-            <span
-              title="Onaylı işletme"
-              className="shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-blue-500 text-white text-[10px] leading-none"
-            >
-              ✓
-            </span>
-          )}
-        </h3>
-
-        {/* Puan + Müsaitlik yan yana. Müsaitlik rozeti gerçek slot verisi
-            bulunduğunda çıkıyor; yoksa sütun tamamen gizleniyor -- boş bir
-            "Müsaitlik" başlığı bırakmak yanıltıcı olurdu.
-            averageRating null kontrolü BİLEREK reviewCount>0 kontrolüne
-            EKLENDİ (backend sözleşmesi ikisinin hep birlikte doğru olacağını
-            garanti ediyor, ama TS bunu tek başına reviewCount'tan çıkaramaz
-            -- bu ek kontrol olmadan averageRating "null olabilir" kalırdı). */}
-        <div className="mt-2 flex items-start gap-3">
-          <div className="min-w-0">
-            <FieldLabel>Puan</FieldLabel>
-            <div className="mt-0.5 text-sm text-slate-600 whitespace-nowrap">
-              {business.reviewCount > 0 && business.averageRating != null ? (
-                <>
-                  <span className="text-amber-400">★</span>{" "}
-                  <span className="font-semibold text-slate-900">{business.averageRating.toFixed(1)}</span>{" "}
-                  <span className="text-slate-500">({business.reviewCount} yorum)</span>
-                </>
-              ) : (
-                <span className="text-slate-400 italic">Henüz yorum yok</span>
-              )}
-            </div>
-          </div>
-
-          {earliestSlot && (
-            <div className="min-w-0">
-              <FieldLabel>Müsaitlik</FieldLabel>
-              <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg whitespace-nowrap">
-                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[8px] leading-none">
-                  ✓
-                </span>
-                Bugün En Erken: {earliestSlot.slice(0, 5)}
+      <div className="flex flex-col flex-1 p-4 sm:p-5">
+        {/* Başlık + kompakt puan rozeti yan yana -- prototipteki SalonCard
+            deseni. Puan yoksa rozet yerine sağda küçük bir "Henüz yorum
+            yok" metni kalıyor, satır boş görünmesin diye. */}
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-bold text-slate-900 text-base sm:text-lg group-hover:text-brand transition-colors line-clamp-1 flex items-center gap-1.5 min-w-0">
+            <span className="truncate">{business.name}</span>
+            {business.verified && (
+              <span
+                title="Onaylı işletme"
+                className="shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] rounded-full bg-blue-500 text-white text-[10px] leading-none"
+              >
+                ✓
               </span>
+            )}
+          </h3>
+
+          {/* averageRating null kontrolü BİLEREK reviewCount>0 kontrolüne
+              EKLENDİ (backend sözleşmesi ikisinin hep birlikte doğru olacağını
+              garanti ediyor, ama TS bunu tek başına reviewCount'tan çıkaramaz
+              -- bu ek kontrol olmadan averageRating "null olabilir" kalırdı). */}
+          {hasRating ? (
+            <div className="flex items-center gap-1 bg-canvas-soft text-brand px-2 py-0.5 rounded-lg text-xs font-bold shrink-0">
+              <span className="text-amber-400">★</span>
+              <span>{business.averageRating!.toFixed(1)}</span>
+              <span className="text-slate-400 font-normal text-[11px]">({business.reviewCount})</span>
             </div>
+          ) : (
+            <span className="shrink-0 text-[11px] text-slate-400 italic whitespace-nowrap">Henüz yorum yok</span>
           )}
         </div>
 
         {business.address && (
-          <div className="mt-2">
-            <FieldLabel>Konum</FieldLabel>
-            <div className="mt-0.5 flex items-center gap-1 text-sm text-slate-500 min-w-0">
-              <span className="shrink-0">📍</span>
-              <span className="truncate">{business.address}</span>
-            </div>
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 min-w-0">
+            <span className="shrink-0">📍</span>
+            <span className="truncate">{business.address}</span>
           </div>
         )}
 
+        {/* Müsaitlik rozeti gerçek slot verisi bulunduğunda çıkıyor; yoksa
+            hiç gösterilmiyor -- uydurma saat göstermiyoruz. */}
+        {earliestSlot && (
+          <span className="mt-2.5 inline-flex items-center gap-1 self-start text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg whitespace-nowrap">
+            <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[8px] leading-none">
+              ✓
+            </span>
+            Bugün En Erken: {earliestSlot.slice(0, 5)}
+          </span>
+        )}
+
         {business.description && (
-          <p className="mt-2 text-sm text-slate-500 line-clamp-2">{business.description}</p>
+          <p className="mt-2.5 text-sm text-slate-500 line-clamp-2">{business.description}</p>
         )}
 
         {/* mt-auto: açıklaması kısa/hiç olmayan kartlarda bile buton en alta
-            yapışsın -- ızgaradaki kartların butonları aynı hizada dursun. */}
-        <button
-          onClick={() => onOpen(business.id)}
-          className="mt-auto pt-3 w-full"
-        >
-          <span className="block w-full py-2.5 text-sm font-semibold text-white bg-[#161b33] hover:bg-[#20264a] rounded-xl transition-colors duration-200 cursor-pointer">
+            yapışsın -- ızgaradaki kartların butonları aynı hizada dursun.
+            stopPropagation: kart geneli zaten aynı yere (onOpen) götürüyor,
+            bu olmadan tıklama önce buton onClick'ini sonra kartın kendi
+            onClick'ini de tetikler (aynı yere iki kez navigate -- zararsız
+            ama temiz değil). */}
+        <div className="mt-auto pt-3.5 border-t border-slate-100">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpen(business.id);
+            }}
+            className="w-full py-2.5 text-sm font-semibold text-white bg-brand hover:bg-brand-hover rounded-xl transition-colors duration-200 cursor-pointer"
+          >
             Randevu Al
-          </span>
-        </button>
+          </button>
+        </div>
       </div>
     </div>
   );
