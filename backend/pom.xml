@@ -232,6 +232,30 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!-- reuseForks=false: her test SINIFI kendi taze JVM'inde
+			     calisir, bir onceki sinifla ayni JVM'i (dolayisiyla
+			     AbstractIntegrationTest'in paylasilan static Postgres
+			     container'ini) PAYLASMAZ. Varsayilan (reuseForks=true) ile
+			     Testcontainers tabanli TUM siniflar (BackendApplicationTests,
+			     *IntegrationTest) ayni container'i, ayni JVM oturumu boyunca
+			     (birkac dakika) paylasiyordu; bu uzun paylasilan oturumda
+			     Testcontainers'in Ryuk reaper'i (Windows Docker Desktop'ta)
+			     JVM ile baglantiyi kaybedip container'i signal=9 ile
+			     oldurmeye basladi (docker events ile dogrulandi: container
+			     tam basarisiz olan test sinifinin surdugu kadar yasayip
+			     olduruluyordu). Her sinif kendi JVM'inde, kendi kisa omurlu
+			     container'inda calisinca bu kumulatif oturum riski ortadan
+			     kalkiyor; bedeli JVM baslatma/container acma maliyetinin
+			     sinif basina bir kez daha odenmesi, bu projenin test
+			     sayisinda (~15 sinif) ihmal edilebilir. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<reuseForks>false</reuseForks>
+					<forkCount>1</forkCount>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
 

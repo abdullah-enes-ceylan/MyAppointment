@@ -13,6 +13,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Clock;
@@ -60,6 +61,8 @@ class AppointmentServiceStateMachineTest {
     private StaffWorkingHourRepository staffWorkingHourRepository;
     @Mock
     private AppointmentExpiryPolicy expiryPolicy;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private AppointmentService appointmentService;
 
@@ -71,7 +74,8 @@ class AppointmentServiceStateMachineTest {
         Clock clock = Clock.fixed(Instant.parse("2026-09-01T09:00:00Z"), ZoneId.of("Europe/Istanbul"));
         appointmentService = new AppointmentService(appointmentRepository, businessRepository,
                 serviceItemRepository, workingHourRepository, businessClosureRepository,
-                availabilityCalculator, staffRepository, staffWorkingHourRepository, expiryPolicy, clock);
+                availabilityCalculator, staffRepository, staffWorkingHourRepository, expiryPolicy, clock,
+                eventPublisher);
     }
 
     private Appointment appointmentWithStatus(AppointmentStatus status) {

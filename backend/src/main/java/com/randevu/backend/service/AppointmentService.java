@@ -3,8 +3,10 @@ package com.randevu.backend.service;
 import com.randevu.backend.entity.*;
 import com.randevu.backend.exception.BusinessRuleException;
 import com.randevu.backend.exception.ResourceNotFoundException;
+import com.randevu.backend.notification.AppointmentExpiredEvent;
 import com.randevu.backend.repository.*;
 import com.randevu.backend.service.AvailabilityCalculator.BusyInterval;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,7 @@ public class AppointmentService {
     private final StaffWorkingHourRepository staffWorkingHourRepository;
     private final AppointmentExpiryPolicy expiryPolicy;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AppointmentService(AppointmentRepository appointmentRepository,
             BusinessRepository businessRepository,
@@ -42,7 +45,8 @@ public class AppointmentService {
             StaffRepository staffRepository,
             StaffWorkingHourRepository staffWorkingHourRepository,
             AppointmentExpiryPolicy expiryPolicy,
-            Clock clock) {
+            Clock clock,
+            ApplicationEventPublisher eventPublisher) {
         this.appointmentRepository = appointmentRepository;
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
@@ -53,6 +57,7 @@ public class AppointmentService {
         this.staffWorkingHourRepository = staffWorkingHourRepository;
         this.expiryPolicy = expiryPolicy;
         this.clock = clock;
+        this.eventPublisher = eventPublisher;
     }
 
     // Yeni randevu oluşturur ve saat çakışmalarını kontrol eder.
@@ -364,6 +369,14 @@ public class AppointmentService {
     // Dusme ani hesabi burada DEGIL, AppointmentExpiryPolicy'de. O sinif saf
     // ve saat kaynagi tasimiyor; "now"i buradan, enjekte edilen Clock'tan
     // aliyor (bkz. TimeConfig).
+    //
+    // Her dusen randevu icin AppointmentExpiredEvent yayinlaniyor (Faz 3.4).
+    // Bu sinif NotificationPort'u, NotificationService'i, hatta boyle bir
+    // dinleyici olup olmadigini HIC bilmiyor -- sadece "bu oldu" diyor.
+    // AppointmentNotificationListener bunu AFTER_COMMIT ile dinleyip
+    // musteriye bildirim gonderiyor; o gonderim basarisiz olsa bile bu
+    // metodun commit ettigi EXPIRED gecisini ETKILEMEZ (event zaten commit
+    // sonrasi tetikleniyor, bkz. o dinleyicideki gerekce).
     @Transactional
     public int expireStaleRequests() {
         LocalDateTime now = LocalDateTime.now(clock);
@@ -374,6 +387,8 @@ public class AppointmentService {
 
         expired.forEach(a -> a.setStatus(AppointmentStatus.EXPIRED));
         appointmentRepository.saveAll(expired);
+        expired.forEach(a -> eventPublisher.publishEvent(
+                new AppointmentExpiredEvent(a.getId(), a.getCustomer().getId())));
         return expired.size();
     }
 
