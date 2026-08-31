@@ -32,10 +32,13 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
+    private final RateLimitFilter rateLimitFilter;
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
 
-    public SecurityConfig(JwtFilter jwtFilter, RestAuthenticationEntryPoint restAuthenticationEntryPoint) {
+    public SecurityConfig(JwtFilter jwtFilter, RateLimitFilter rateLimitFilter,
+            RestAuthenticationEntryPoint restAuthenticationEntryPoint) {
         this.jwtFilter = jwtFilter;
+        this.rateLimitFilter = rateLimitFilter;
         this.restAuthenticationEntryPoint = restAuthenticationEntryPoint;
     }
 
@@ -86,7 +89,18 @@ public class SecurityConfig {
                 // RestAuthenticationEntryPoint'imiz çalışıyor.
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(restAuthenticationEntryPoint))
                 .httpBasic(httpBasic -> httpBasic.disable())
-                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+                // Sira ONEMLI: JwtFilter ONCE kendi sirasina (Spring
+                // Security'nin bildigi UsernamePasswordAuthenticationFilter'a
+                // gore) kaydedilmeli -- aksi halde "before JwtFilter.class"
+                // cagrisi JwtFilter'in HENUZ bilinen bir sirasi olmadigi icin
+                // "does not have a registered order" hatasi verir (canli
+                // yakalandi). RateLimitFilter, JwtFilter'dan ONCE calisir --
+                // kimlik dogrulama henuz cozulmeden, IP bazli sinirlar hemen
+                // uygulanabilsin (bkz. o sinifin gerekcesi: genel guvenlik
+                // agi kimlik dogrulanmis istekleri de kapsiyor, sadece IP'ye
+                // bakiyor).
+                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(rateLimitFilter, JwtFilter.class);
 
         return http.build();
     }

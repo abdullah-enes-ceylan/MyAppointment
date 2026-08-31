@@ -1,12 +1,16 @@
 package com.randevu.backend.controller;
 
+import com.randevu.backend.config.RateLimitProperties;
 import com.randevu.backend.dto.request.BusinessRequest;
 import com.randevu.backend.dto.response.BusinessDetailResponse;
 import com.randevu.backend.dto.response.BusinessResponse;
 import com.randevu.backend.dto.response.NearbyBusinessResponse;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.exception.RateLimitExceededException;
 import com.randevu.backend.mapper.BusinessMapper;
+import com.randevu.backend.ratelimit.RateLimitPort;
+import com.randevu.backend.ratelimit.RateLimitResult;
 import com.randevu.backend.service.BusinessPhotoService;
 import com.randevu.backend.service.BusinessService;
 import com.randevu.backend.service.BusinessService.RatingStats;
@@ -34,16 +38,21 @@ public class BusinessController {
     private final LocationService locationService;
     private final BusinessPhotoStorage photoStorage;
     private final BusinessPhotoService businessPhotoService;
+    private final RateLimitPort rateLimitPort;
+    private final RateLimitProperties rateLimitProperties;
 
     public BusinessController(BusinessService businessService, CurrentUserService currentUserService,
                                OwnershipGuard ownershipGuard, LocationService locationService,
-                               BusinessPhotoStorage photoStorage, BusinessPhotoService businessPhotoService) {
+                               BusinessPhotoStorage photoStorage, BusinessPhotoService businessPhotoService,
+                               RateLimitPort rateLimitPort, RateLimitProperties rateLimitProperties) {
         this.businessService = businessService;
         this.currentUserService = currentUserService;
         this.ownershipGuard = ownershipGuard;
         this.locationService = locationService;
         this.photoStorage = photoStorage;
         this.businessPhotoService = businessPhotoService;
+        this.rateLimitPort = rateLimitPort;
+        this.rateLimitProperties = rateLimitProperties;
     }
 
     // BusinessDetailResponse dönüyor (hizmetler gömülü) — frontend şu an
@@ -112,12 +121,28 @@ public class BusinessController {
     // kapağını değiştirebilirdi -- updateBusiness ile aynı desen. Dosyanın
     // doğrulanması/yeniden kodlanması/depolanması BusinessPhotoService'te
     // (bkz. o sınıf, plan "Isletme Kapak Fotografi" PR3).
+    //
+    // Faz 3.5: rate limit KULLANICI id bazinda (IP degil) -- uc zaten
+    // kimlik dogrulamali, saldiri modeli "ele gecirilmis/kotu niyetli
+    // hesap". OwnershipGuard'DAN SONRA kontrol ediliyor: sahibi olmayan
+    // biri zaten 403 aliyor, pahali decode/resize islemine hic girmeden --
+    // rate limit sadece GERCEKTEN o isletmenin sahibi olan (dolayisiyla
+    // pahali islemi tetikleyebilecek) istekleri sayar.
     @PostMapping("/{id:\\d+}/photo")
     public BusinessResponse uploadPhoto(@PathVariable("id") Long businessId,
                                          @RequestParam("file") MultipartFile file,
                                          Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+
+        RateLimitResult result = rateLimitPort.tryConsume("photo-upload:user:" + currentUser.getId(),
+                rateLimitProperties.getPhotoUploadMaxRequests(), rateLimitProperties.getPhotoUploadWindow());
+        if (!result.allowed()) {
+            throw new RateLimitExceededException(
+                    "Çok sık fotoğraf yükleme denemesi yapıldı. Lütfen bir süre sonra tekrar deneyin.",
+                    result.retryAfterSeconds());
+        }
+
         Business updated = businessPhotoService.uploadPhoto(businessId, file);
         return toResponseWithRating(updated);
     }

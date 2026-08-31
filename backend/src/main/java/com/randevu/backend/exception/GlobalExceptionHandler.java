@@ -133,6 +133,26 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, "Hatalı e-posta veya şifre.", request);
     }
 
+    // Faz 3.5: login kaba-kuvvet korumasi ve fotograf yukleme limiti (bkz.
+    // AuthController, BusinessController, InMemoryRateLimiter). 429 --
+    // istemciye "az sonra tekrar dene" demenin standart yolu. build()
+    // KULLANILMIYOR: bu tek istisna "Retry-After" header'i da tasimasi
+    // gereken ozel durum, build() sade bir ResponseEntity dondugu icin ek
+    // header eklemeye elverisli degil.
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimitExceeded(RateLimitExceededException ex,
+            HttpServletRequest request) {
+        ErrorResponse body = new ErrorResponse(
+                clock.instant(),
+                HttpStatus.TOO_MANY_REQUESTS.value(),
+                HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(body);
+    }
+
     // Istek govdesi hic okunamadi -> 400. Jackson JSON'i parse edemediginde
     // (bozuk sozdizimi, gecersiz UTF-8 byte'i, beklenen tipe uymayan deger,
     // hatta bos govde) Spring bu exception'i firlatir. NoResourceFoundException

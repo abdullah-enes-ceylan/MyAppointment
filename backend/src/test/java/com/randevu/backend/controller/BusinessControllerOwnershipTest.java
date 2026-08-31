@@ -1,8 +1,11 @@
 package com.randevu.backend.controller;
 
+import com.randevu.backend.config.RateLimitProperties;
 import com.randevu.backend.dto.request.BusinessRequest;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.ratelimit.RateLimitPort;
+import com.randevu.backend.ratelimit.RateLimitResult;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
 import com.randevu.backend.repository.StaffRepository;
@@ -27,6 +30,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 // Faz 3.2 -- ayni desen: OwnershipGuard GERCEK, sadece BusinessRepository
@@ -61,6 +65,10 @@ class BusinessControllerOwnershipTest {
     private Authentication authentication;
     @Mock
     private MultipartFile file;
+    @Mock
+    private RateLimitPort rateLimitPort;
+    @Mock
+    private RateLimitProperties rateLimitProperties;
 
     private BusinessController controller;
     private Business business;
@@ -69,7 +77,7 @@ class BusinessControllerOwnershipTest {
     void setUp() {
         OwnershipGuard ownershipGuard = new OwnershipGuard(businessRepository, serviceItemRepository, staffRepository);
         controller = new BusinessController(businessService, currentUserService, ownershipGuard, locationService,
-                photoStorage, businessPhotoService);
+                photoStorage, businessPhotoService, rateLimitPort, rateLimitProperties);
 
         business = Business.builder().id(BUSINESS_ID).owner(User.builder().id(OWNER_ID).build()).build();
         when(businessRepository.findById(BUSINESS_ID)).thenReturn(Optional.of(business));
@@ -117,6 +125,7 @@ class BusinessControllerOwnershipTest {
     @DisplayName("uploadPhoto: gercek sahip kendi kapak fotografini yukleyebilir")
     void uploadPhoto_sahip_izinVerilir() {
         actingAs(OWNER_ID);
+        when(rateLimitPort.tryConsume(any(), anyInt(), any())).thenReturn(new RateLimitResult(true, 0));
         when(businessPhotoService.uploadPhoto(BUSINESS_ID, file)).thenReturn(business);
         when(businessService.getRatingStats(BUSINESS_ID)).thenReturn(new RatingStats(null, 0));
 
