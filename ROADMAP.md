@@ -494,8 +494,8 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 2.11 Frontend: konum izni ve "yakınımdakiler" — fcd0c75
 
 ### Faz 3 — Üretime Hazırlık
-- [ ] 3.1 Test altyapısı ve algoritma testleri
-- [ ] 3.2 Yetkilendirme entegrasyon testleri ⭐
+- [x] 3.1 Test altyapısı ve algoritma testleri — 7f33458
+- [x] 3.2 Yetkilendirme entegrasyon testleri ⭐ — 7f33458
 - [ ] 3.3 API dokümantasyonu
 - [ ] 3.4 Bildirim altyapısı (kanal-bağımsız)
 - [ ] 3.5 Rate limiting ve kötüye kullanım koruması
