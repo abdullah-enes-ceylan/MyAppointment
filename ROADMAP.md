@@ -496,7 +496,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 ### Faz 3 — Üretime Hazırlık
 - [x] 3.1 Test altyapısı ve algoritma testleri — 7f33458
 - [x] 3.2 Yetkilendirme entegrasyon testleri ⭐ — 7f33458
-- [ ] 3.3 API dokümantasyonu
+- [x] 3.3 API dokümantasyonu — 3bd350e
 - [ ] 3.4 Bildirim altyapısı (kanal-bağımsız)
 - [ ] 3.5 Rate limiting ve kötüye kullanım koruması
 - [ ] 3.6 Loglama, izleme ve hata takibi
