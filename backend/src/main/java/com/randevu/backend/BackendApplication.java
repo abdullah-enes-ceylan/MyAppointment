@@ -1,6 +1,5 @@
 package com.randevu.backend;
 
-import com.randevu.backend.config.FlywayMigrationBootstrap;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -13,12 +12,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 public class BackendApplication {
 
+	// FlywayMigrationBootstrap burada ELLE eklenmiyor -- META-INF/spring.factories
+	// uzerinden kayitli (bkz. o dosya ve FlywayMigrationBootstrap'taki
+	// aciklama), boylece @SpringBootTest gibi bu main()'i hic cagirmayan
+	// yollar da ayni erken Flyway calistirmasini goruyor.
 	public static void main(String[] args) {
-		// FlywayMigrationBootstrap neden addListeners ile elle eklendi,
-		// neden @Component değil: bkz. o sınıftaki açıklama.
-		SpringApplication app = new SpringApplication(BackendApplication.class);
-		app.addListeners(new FlywayMigrationBootstrap());
-		app.run(args);
+		SpringApplication.run(BackendApplication.class, args);
 	}
 
 }

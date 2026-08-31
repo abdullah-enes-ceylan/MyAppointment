@@ -29,6 +29,30 @@
 	<properties>
 		<java.version>21</java.version>
 	</properties>
+
+	<!-- spring-boot-dependencies (4.0.7) testcontainers.version'i 2.0.5'e
+	     sabitliyor ama o surum Maven Central'da hic yayinlanmamis (Spring
+	     Boot 4.0.7'nin kendisi cok yeni bir surum, muhtemelen upstream bir
+	     hata/senkronizasyon sorunu); org.testcontainers:testcontainers,
+	     :postgresql, :junit-jupiter icin "artifact bulunamadi" hatasi
+	     veriyordu. Burada testcontainers-bom'u GERCEKTEN var olan bir
+	     surumle (1.21.4) yeniden import ediyoruz; projenin kendi
+	     dependencyManagement'i miras alinandan daha "yakin" sayildigi icin
+	     bu surum, spring-boot-testcontainers'in transitive olarak cektigi
+	     org.testcontainers:testcontainers'i da (dogrudan bagimlilik olarak
+	     hic yazmadan) gecersiz kilip dogru surumle degistiriyor. -->
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>org.testcontainers</groupId>
+				<artifactId>testcontainers-bom</artifactId>
+				<version>1.21.4</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+
 	<dependencies>
 	
 		<dependency>
@@ -81,6 +105,35 @@
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+
+		<!-- Faz 3.1: BackendApplicationTests artik kullanicinin yerel/native
+		     Postgres kurulumuna degil, testin kendi actigi/kapattigi
+		     TEK KULLANIMLIK bir Docker Postgres container'ina bagliyor.
+		     Boylece context'in ve Flyway migration'larinin GERCEKTEN
+		     tertemiz bir semada calistigi dogrulaniyor, gelistiricinin
+		     makinesindeki (zamanla elle mudahale edilmis olabilecek)
+		     kalici veritabaniyla degil. Versiyon spring-boot-dependencies
+		     BOM'undan geliyor, elle sabitlenmedi. H2 BILEREK kullanilmadi:
+		     partial unique index, CHECK constraint ve FOR UPDATE kilidi
+		     gibi ozelliklerde Postgres'ten farkli davranip yanlis guven
+		     verirdi (bkz. yukaridaki Flyway yorumu, ayni gerekce). Surum
+		     yukaridaki dependencyManagement'ten geliyor (bkz. o blogun
+		     aciklamasi). -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-testcontainers</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
 		</dependency>
 
 		<!-- 1. Spring Security: Projenin kapısındaki güvenlik görevlisi -->

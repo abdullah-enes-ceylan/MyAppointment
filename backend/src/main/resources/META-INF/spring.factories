@@ -1,0 +1,17 @@
+# FlywayMigrationBootstrap ApplicationEnvironmentPreparedEvent'e tepki
+# veriyor (bkz. o siniftaki aciklama) -- daha once SADECE BackendApplication.
+# main()'de "app.addListeners(new FlywayMigrationBootstrap())" ile elle
+# kayitliydi. Sorun: bu kayit SpringApplication ORNEGINE bagliydi, main()
+# uzerinden gecmeyen her yol (en somut ornek: @SpringBootTest kendi
+# SpringApplication'ini KENDISI olusturur) bu listener'i hic gormuyordu --
+# Flyway o yollarda hic calismiyor, Hibernate'in ddl-auto=validate kontrolu
+# yanlislikla BOS/eksik bir semaya bakip gecebiliyordu (Faz 3.1'de
+# BackendApplicationTests'i Testcontainers'a baglarken gercekten yasandi).
+#
+# spring.factories kaydi, ayni ApplicationListener'i HANGI yoldan
+# baslatilirsa baslatilsin (main(), test, ileride baska bir arac) her
+# SpringApplication ornegine otomatik ekler -- Spring'in kendi erken
+# listener'larini (ornegin ortam dosyalarini okuyan mekanizma) da tam
+# boyle kaydettigi, standart bir yontem.
+org.springframework.context.ApplicationListener=\
+com.randevu.backend.config.FlywayMigrationBootstrap
