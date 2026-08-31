@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, type FormEvent, type KeyboardEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import BusinessCard from "../components/BusinessCard";
 import { CATEGORIES, GENDERS, getCategoryLabel } from "../components/CategoryIcons";
-import { setLocationLabel } from "../components/Navbar";
 import type { BusinessCategory, BusinessDetailResponse, BusinessResponse, NearbyBusinessResponse, ServedGender, ServiceItemResponse } from "../types/api";
 
 // Faz 2.11: tarayıcı konum izni reddedilirse/desteklenmezse düşülen
@@ -52,20 +51,24 @@ export default function HomePage() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [favoriteIds, setFavoriteIds] = useState<Set<number>>(new Set());
   const [earliestSlots, setEarliestSlots] = useState<Record<number, string>>({});
+  // Konum etiketi + arama kutusunun anlik degeri -- eskiden Navbar'da
+  // tutulup localStorage+custom event ile HomePage'e "haber veriliyordu"
+  // (Navbar ve HomePage kardes bilesenlerdi, dogrudan state paylasamiyorlardi).
+  // Hero artik HomePage'in kendi govdesinde oldugu icin bu koprüye hic
+  // gerek kalmadi -- ikisi de duz local state.
+  const [locationLabel, setLocationLabel] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState(searchQuery);
 
   useEffect(() => {
     fetchBusinesses();
   }, []);
 
+  // Arama kutusu URL'e yazılan q parametresiyle çalışıyor; kullanıcı geri
+  // tuşuna basıp aramadan çıkarsa kutu da temizlensin (eskiden Navbar'daki
+  // ayni gerekceli efekt).
   useEffect(() => {
-    if (searchParams.get("nearby") === "1") {
-      const next = new URLSearchParams(searchParams);
-      next.delete("nearby");
-      setSearchParams(next, { replace: true });
-      handleNearbyClick();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -170,9 +173,23 @@ export default function HomePage() {
     );
   }
 
-  // Arama tamamen istemci tarafında: backend'de arama ucu yok, liste zaten
-  // yüklü. Ad, açıklama, adres ve kategori adında arıyor. Türkçe karakterler
-  // için toLocaleLowerCase("tr") şart -- "İSTANBUL".toLowerCase() JS'te
+  // Arama tamamen istemci tarafında (aşağıdaki visibleBusinesses zaten
+  // yüklü listeyi filtreliyor) -- backend'de arama ucu yok. Sorgu URL'e
+  // yazılıyor ki hem sayfa yenilenince korunsun hem de arama sonucu
+  // paylaşılabilir/yer imine eklenebilir olsun (eskiden Navbar'daki
+  // handleSearch, artık Hero burada olduğu için doğrudan burada).
+  function handleSearchSubmit(e?: FormEvent) {
+    e?.preventDefault();
+    const trimmed = searchInput.trim();
+    setSearchParams(trimmed ? { q: trimmed } : {});
+  }
+
+  function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") handleSearchSubmit();
+  }
+
+  // Ad, açıklama, adres ve kategori adında arıyor. Türkçe karakterler için
+  // toLocaleLowerCase("tr") şart -- "İSTANBUL".toLowerCase() JS'te
   // "i̇stanbul" üretip eşleşmeyi bozuyor.
   const visibleBusinesses = useMemo(() => {
     const q = searchQuery.trim().toLocaleLowerCase("tr");
@@ -222,31 +239,121 @@ export default function HomePage() {
 
   return (
     <div className="bg-slate-50 min-h-[calc(100vh-3.5rem)]">
-      {/* Kategori sekmeleri — beyaz şerit, mobilde yatay kaydırılabilir.
-          Navbar'ın altında sticky duruyor -- Navbar ana sayfada iki satırlı
-          (logo/profil + konum/arama) olduğu için top ofseti tek satırlık
-          navbar'dan daha büyük (bkz. iki satırın toplam yüksekliği).
+      {/* Hero — başlık, büyük pill arama+konum kutusu, cinsiyet filtresi.
+          Google AI Studio prototipiyle karşılaştırma sonrası eklendi
+          (2026-08-30): arama+konum artık Navbar'da değil burada -- Navbar
+          bu yüzden tek satıra döndü (bkz. Navbar.tsx). Cinsiyet filtresi de
+          eski ayrı satırından buraya taşındı, prototipteki HeroSection ile
+          aynı gruplama. STICKY DEĞİL -- sadece aşağıdaki kategori şeridi
+          sticky, Hero sayfayla birlikte kayıp gidiyor. */}
+      <div className="relative overflow-hidden bg-gradient-to-b from-canvas via-canvas-soft to-canvas py-10 sm:py-14">
+        <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
+          <h1 className="text-2xl sm:text-3xl md:text-[40px] font-bold text-slate-900 tracking-tight leading-tight mb-3">
+            Güzellik ve Bakım Randevunuzu{" "}
+            <span className="text-brand underline decoration-brand/30 decoration-wavy">Alın</span>
+          </h1>
+          <p className="text-sm sm:text-base text-slate-500 max-w-xl mx-auto mb-7">
+            En iyi işletmeleri keşfedin, size uygun zamanı seçin ve hemen yerinizi ayırtın.
+          </p>
+
+          {/* Büyük pill arama + konum kutusu */}
+          <form
+            onSubmit={handleSearchSubmit}
+            className="bg-white rounded-2xl md:rounded-full p-2 md:p-2.5 shadow-xl shadow-brand/10 border border-slate-200 flex flex-col md:flex-row items-center gap-2 md:gap-3 max-w-2xl mx-auto mb-6"
+          >
+            <div className="relative flex-1 w-full flex items-center pl-3">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-400 shrink-0">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+              </svg>
+              <input
+                type="search"
+                placeholder="İşletme, kuaför veya hizmet ara..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                className="w-full py-2.5 px-3 text-sm sm:text-base text-slate-900 placeholder-slate-400 bg-transparent outline-none"
+              />
+            </div>
+
+            <div className="hidden md:block h-7 w-[1px] bg-slate-200" />
+
+            <button
+              type="button"
+              onClick={handleNearbyClick}
+              className="w-full md:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl md:rounded-full text-xs sm:text-sm font-medium bg-canvas-soft hover:bg-slate-200/70 text-slate-700 transition-colors cursor-pointer shrink-0"
+            >
+              <span className="shrink-0">📍</span>
+              <span className="truncate max-w-[140px]">{locationLabel ?? "Yakınımdakiler"}</span>
+            </button>
+
+            <button
+              type="submit"
+              className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl md:rounded-full bg-brand hover:bg-brand-hover text-white text-sm sm:text-base font-semibold shadow-md shadow-brand/30 transition-all cursor-pointer shrink-0"
+            >
+              Ara
+            </button>
+          </form>
+
+          {/* Cinsiyet filtresi — kategoriden AYRI bir eksen olduğu için ayrı
+              bir grup (bkz. backend ServedGender). Eski yeri: kategori
+              şeridinin altındaki içerik alanı; artık Hero'nun parçası. */}
+          <div className="flex flex-col items-center gap-2.5">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Kime</span>
+            <div className="flex items-center justify-center gap-2 bg-white/80 p-1.5 rounded-full border border-slate-200 shadow-sm">
+              {GENDERS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveGender(key)}
+                  className={`px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all cursor-pointer ${
+                    activeGender === key
+                      ? "bg-brand text-white shadow-sm"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-canvas-soft"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Kategori sekmeleri — dikey ikon-kare kutucuklar (Google AI Studio
+          prototipiyle karşılaştırma sonrası, 2026-08-30, eski yatay
+          ikon+etiket pill stilinin yerine). Navbar'ın altında sticky duruyor
+          -- Navbar artık tek satır olduğu için ofset onunla birebir aynı
+          (h-14 sm:h-16).
           nearbyMode'dayken hiçbir sekme aktif görünmüyor: o an aktif olan
           filtre kategori değil, konum. Sekmeye tıklamak konum modundan
           çıkmanın da yolu (filterByCategory nearbyMode'u false yapıyor). */}
-      <div className="bg-white border-b border-slate-200 sticky top-[108px] sm:top-[116px] z-30">
+      <div className="bg-canvas border-b border-slate-200/80 sticky top-14 sm:top-16 z-30 py-4 sm:py-5">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6">
-          <div className="flex gap-1 sm:gap-2 overflow-x-auto scrollbar-none sm:justify-center">
+          <div className="flex items-center gap-3 sm:gap-6 md:gap-8 overflow-x-auto scrollbar-none sm:justify-center py-1">
             {CATEGORIES.map(({ key, label, Icon }) => {
               const active = !nearbyMode && activeCategory === key;
               return (
                 <button
                   key={key}
                   onClick={() => filterByCategory(key)}
-                  className={`relative shrink-0 flex flex-col sm:flex-row items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2.5 my-2 rounded-xl text-xs sm:text-sm font-medium transition-colors cursor-pointer ${
-                    active ? "bg-blue-50 text-blue-700" : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
+                  className="group/cat flex flex-col items-center gap-2 shrink-0 cursor-pointer"
                 >
-                  <Icon />
-                  <span>{label}</span>
-                  {active && (
-                    <span className="absolute -bottom-2 left-2 right-2 h-[3px] rounded-full bg-blue-600" />
-                  )}
+                  <div
+                    className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-all duration-200 ${
+                      active
+                        ? "bg-brand text-white shadow-lg shadow-brand/25 scale-105 ring-4 ring-brand/15"
+                        : "bg-canvas-soft text-brand hover:bg-slate-200/70"
+                    }`}
+                  >
+                    <Icon />
+                  </div>
+                  <span
+                    className={`text-xs sm:text-sm font-medium transition-colors ${
+                      active ? "text-brand font-bold" : "text-slate-600 group-hover/cat:text-slate-900"
+                    }`}
+                  >
+                    {label}
+                  </span>
                 </button>
               );
             })}
@@ -255,25 +362,6 @@ export default function HomePage() {
       </div>
 
       <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-6">
-        {/* Hizmet grubu filtresi — kategoriden AYRI bir eksen olduğu için
-            ayrı bir satırda duruyor (bkz. backend ServedGender). */}
-        <div className="flex items-center gap-2 mb-5 overflow-x-auto scrollbar-none">
-          <span className="text-xs font-semibold text-slate-500 shrink-0">Kime:</span>
-          {GENDERS.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setActiveGender(key)}
-              className={`shrink-0 px-3.5 py-1.5 text-xs font-medium rounded-full border transition-colors cursor-pointer ${
-                activeGender === key
-                  ? "bg-[#161b33] text-white border-[#161b33]"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         {showCityPicker && (
           <div className="max-w-lg mb-5 bg-white border border-slate-200 shadow-sm rounded-2xl p-5">
             <p className="text-sm text-slate-600 mb-3">
@@ -360,6 +448,57 @@ export default function HomePage() {
             ))}
           </div>
         )}
+
+        {/* Güven rozetleri şeridi — Google AI Studio prototipinden alındı
+            (2026-08-30), tamamen statik/veri bağımsız, filtre sonucundan
+            etkilenmiyor. Backend'e ya da AuthContext'e hiç dokunmuyor. */}
+        <section className="mt-12 bg-gradient-to-r from-canvas-soft to-canvas rounded-3xl p-6 sm:p-8 border border-slate-200">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              {
+                title: "Onaylı & Hijyenik İşletmeler",
+                description: "Tüm işletmeler müşteri yorumları ve hijyen standartlarına göre düzenli denetlenir.",
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
+                    <path d="M9 12l2 2 4-4" />
+                  </svg>
+                ),
+              },
+              {
+                title: "Anında Onaylı Randevu",
+                description: "Telefonla beklemeden 7/24 dilediğiniz saat dilimini saniyeler içinde ayırtın.",
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3.5 2" />
+                  </svg>
+                ),
+              },
+              {
+                title: "Şeffaf Fiyat, Kolay İptal",
+                description: "Gizli ücret yok. Hizmet fiyatını görüp öyle randevu alırsınız, dilediğinizde iptal edersiniz.",
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="6" width="18" height="12" rx="2" />
+                    <path d="M3 10h18" />
+                    <path d="M7 15h4" />
+                  </svg>
+                ),
+              },
+            ].map((item) => (
+              <div key={item.title} className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-white text-brand flex items-center justify-center shadow-sm shrink-0">
+                  {item.icon}
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900 mb-1">{item.title}</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">{item.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

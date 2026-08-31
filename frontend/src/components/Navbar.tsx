@@ -1,34 +1,12 @@
-import { Link, NavLink, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useState, useEffect, useRef, type FormEvent } from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import logoIcon from "../assets/logo-icon.png";
 
 const OWNER_ROLES = ["BUSINESS_OWNER", "ADMIN"];
 
-// Seçili konum etiketi Navbar'da gösteriliyor ama HomePage'de seçiliyor.
-// İkisi kardeş bileşen olduğu için doğrudan state paylaşamıyorlar; araya
-// bir context kurmak yerine localStorage + custom event kullanıyoruz:
-// HomePage yazıp olayı tetikliyor, Navbar dinleyip kendini güncelliyor.
-// Tek bir string için ayrı bir Provider katmanı kurmak fazla olurdu.
-export const LOCATION_STORAGE_KEY = "randevum_location_label";
-export const LOCATION_CHANGED_EVENT = "randevum:location-changed";
-
-export function setLocationLabel(label: string | null) {
-  if (label) {
-    localStorage.setItem(LOCATION_STORAGE_KEY, label);
-  } else {
-    localStorage.removeItem(LOCATION_STORAGE_KEY);
-  }
-  window.dispatchEvent(new Event(LOCATION_CHANGED_EVENT));
-}
-
 export default function Navbar() {
   const navigate = useNavigate();
-  const location = useLocation();
-  // Arama sadece ana sayfada anlamli: HomePage disindaki her sayfa zaten
-  // arama sonucu gostermiyor, kutuyu orada tutmak sadece kafa karistirirdi.
-  const isHomePage = location.pathname === "/";
-  const [searchParams] = useSearchParams();
   const { isAuthenticated, user, logout } = useAuth();
   // user?.role tipi string | null -- "?? ''" gerekcesi RoleProtectedRoute'daki
   // ile ayni (bkz. o dosya): null hicbir role stringiyle eslesmez, davranis
@@ -36,21 +14,7 @@ export default function Navbar() {
   const isOwner = OWNER_ROLES.includes(user?.role ?? "");
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [query, setQuery] = useState(searchParams.get("q") ?? "");
-  const [locationLabel, setLabel] = useState(() => localStorage.getItem(LOCATION_STORAGE_KEY));
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const sync = () => setLabel(localStorage.getItem(LOCATION_STORAGE_KEY));
-    window.addEventListener(LOCATION_CHANGED_EVENT, sync);
-    return () => window.removeEventListener(LOCATION_CHANGED_EVENT, sync);
-  }, []);
-
-  // Arama kutusu URL'e yazılan q parametresiyle çalışıyor; kullanıcı geri
-  // tuşuna basıp aramadan çıkarsa kutu da temizlensin.
-  useEffect(() => {
-    setQuery(searchParams.get("q") ?? "");
-  }, [searchParams]);
 
   // Dropdown dışına tıklayınca kapansın.
   useEffect(() => {
@@ -70,24 +34,21 @@ export default function Navbar() {
     navigate("/");
   }
 
-  // Arama tamamen istemci tarafında (HomePage yüklü listeyi filtreliyor) --
-  // backend'de arama ucu yok. Sorgu URL'e yazılıyor ki hem HomePage okuyabilsin
-  // hem de arama sonucu paylaşılabilir/yer imine eklenebilir olsun.
-  function handleSearch(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    navigate(query.trim() ? `/?q=${encodeURIComponent(query.trim())}` : "/");
-  }
-
   const initial = (user?.email?.[0] ?? "?").toUpperCase();
 
   return (
-    <nav className="sticky top-0 z-40 bg-[#161b33]">
+    <nav className="sticky top-0 z-40 bg-brand">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* 1. satır: logo (sol) — hizli erisim linkleri (serit genisliginin
-            TAM ORTASI) — bildirim/profil (sag). Isletme kategori sekmeleri
-            BURADA DEGIL -- HomePage'in kendi govdesinde, cinsiyet barinin
-            (Kime: Herkes/Erkek/...) ustunde ayri bir serit olarak duruyor
-            (bkz. HomePage.tsx).
+        {/* Tek satır: logo (sol) — hızlı erişim linkleri (şeridin TAM
+            ORTASI) — bildirim/profil (sağ). Konum seçme + arama artık
+            burada DEĞİL -- Hero section'a taşındı (bkz. HomePage.tsx),
+            çünkü sadece ana sayfada anlamlıydı ve orada zaten HomePage'in
+            kendi state'ine (searchQuery, locationLabel) doğrudan erişimi
+            var; ayrı bileşenler (Navbar/HomePage) arasında localStorage +
+            custom event köprüsü kurmaya gerek kalmadı.
+            Isletme kategori sekmeleri de BURADA DEGIL -- HomePage'in kendi
+            govdesinde, cinsiyet barinin ustunde ayri bir serit (bkz.
+            HomePage.tsx).
             Grid ile grid-cols-[1fr_auto_1fr] KASITLI: basit bir flex +
             justify-between kullansaydik orta grup, sol (logo) ve sag
             (bildirim+avatar) gruplarinin GENISLIKLERI FARKLI oldugu icin
@@ -205,7 +166,7 @@ export default function Navbar() {
                 </Link>
                 <Link
                   to="/register"
-                  className="px-3.5 py-2 text-sm font-medium text-[#161b33] bg-white hover:bg-slate-100 rounded-xl transition-colors"
+                  className="px-3.5 py-2 text-sm font-medium text-brand bg-white hover:bg-slate-100 rounded-xl transition-colors"
                 >
                   Kayıt Ol
                 </Link>
@@ -213,59 +174,6 @@ export default function Navbar() {
             )}
           </div>
         </div>
-
-        {/* 2. satır: konum seçme (sol) + arama (ortada) — sadece ana
-            sayfada. Ikisi de sadece HomePage'in okudugu/tetikledigi bir
-            davranisa sahip (konum -> /?nearby=1, arama -> /?q=...) --
-            baska bir sayfada gosterilmeleri islevsiz olurdu (bkz. eskiden
-            aramanin da ayni gerekceyle sadece ana sayfaya kisitlanmasi).
-            Arama kutusu satirin ortasinda durmasi icin sag tarafta konum
-            butonuyla ayni genislikte GORUNMEZ bir denge alani var --
-            aksi halde solundaki konum butonu yuzunden merkezden sola
-            kaymis gibi dururdu. */}
-        {isHomePage && (
-          <div className="flex items-center gap-3 pb-3">
-            <button
-              onClick={() => navigate("/?nearby=1")}
-              className="flex items-center gap-1.5 text-sm text-white/90 hover:text-white transition-colors cursor-pointer min-w-0 shrink-0"
-            >
-              <span className="shrink-0">📍</span>
-              <span className="truncate max-w-[100px] sm:max-w-none">
-                {locationLabel ?? "Konum seç"}
-              </span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="shrink-0">
-                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-
-            <form onSubmit={handleSearch} className="flex-1 flex justify-center min-w-0">
-              <div className="relative w-full max-w-xl">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                  </svg>
-                </span>
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="İşletme, kuaför veya hizmet ara..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
-                />
-              </div>
-            </form>
-
-            {/* Konum butonuyla ayni genislikte gorunmez denge alani --
-                yukaridaki gerekce. aria-hidden: ekran okuyucular icin
-                anlamsiz, sadece gorsel bir hizalama amaci. */}
-            <div className="hidden sm:block shrink-0 invisible" aria-hidden="true">
-              <span className="flex items-center gap-1.5 text-sm">
-                📍 {locationLabel ?? "Konum seç"}
-              </span>
-            </div>
-          </div>
-        )}
       </div>
     </nav>
   );
