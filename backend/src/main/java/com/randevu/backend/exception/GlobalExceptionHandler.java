@@ -2,6 +2,7 @@ package com.randevu.backend.exception;
 
 import com.randevu.backend.dto.response.ErrorResponse;
 import com.randevu.backend.dto.response.ValidationErrorResponse;
+import com.randevu.backend.logging.PiiMasker;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -92,12 +93,15 @@ public class GlobalExceptionHandler {
     // DataIntegrityViolationException firlatir. Bu handler olmadan istemci
     // 500 gorurdu; oysa bu aslinda 409'luk, anlamli bir durum ("bu saat az
     // once dolduruldu"). Gercek SQL/kisitlama detayi sadece logda kalir,
-    // istemciye asla sizmaz.
+    // istemciye asla sizmaz. Mesaj PiiMasker'dan geciriliyor -- ornegin
+    // users.email UNIQUE kisitini ihlal eden bir yaris durumunda, Postgres'in
+    // urettigi ham "Detail: Key (email)=(x@y.com) already exists." mesaji
+    // e-postayi duz metin loglardi (bkz. PiiMasker gerekcesi).
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex,
             HttpServletRequest request) {
         log.warn("Veri bütünlüğü ihlali — {} {}: {}", request.getMethod(), request.getRequestURI(),
-                ex.getMostSpecificCause().getMessage());
+                PiiMasker.maskEmails(ex.getMostSpecificCause().getMessage()));
         return build(HttpStatus.CONFLICT, "Bu işlem mevcut bir kayıtla çakışıyor.", request);
     }
 
@@ -162,12 +166,14 @@ public class GlobalExceptionHandler {
     // Parser'in ham mesajini ISTEMCIYE VERMIYORUZ; icinde govdenin bir parcasi
     // (yani kullanici verisi/PII) ve ic sinif isimleri gecebiliyor. Detay
     // DataIntegrityViolationException'daki gibi sadece warn seviyesinde logda
-    // kalir; istemci genel bir mesaj gorur.
+    // kalir (yine PiiMasker'dan gecirilerek -- Jackson'in mesaji ayristirmaya
+    // calistigi ham degeri, ornegin istek govdesindeki e-postayi, icerebiliyor);
+    // istemci genel bir mesaj gorur.
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex,
             HttpServletRequest request) {
         log.warn("Okunamayan istek gövdesi — {} {}: {}", request.getMethod(), request.getRequestURI(),
-                ex.getMostSpecificCause().getMessage());
+                PiiMasker.maskEmails(ex.getMostSpecificCause().getMessage()));
         return build(HttpStatus.BAD_REQUEST, "İstek gövdesi okunamadı.", request);
     }
 
