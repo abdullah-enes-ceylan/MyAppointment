@@ -21,3 +21,7 @@ spring.jpa.properties.hibernate.format_sql=true
 
 # En az 32 byte rastgele deger. Asla elle yazilmis bir cumle olmasin.
 jwt.secret=BURAYA_OPENSSL_ILE_URETTIGIN_SECRET
+
+# CORS — sadece yerel gelistirme originleri. Prod'da bu deger tamamen farkli
+# (gercek frontend domain'i, localhost YOK) olmali -- bkz. application-prod.properties.
+app.cors.allowed-origins=http://localhost:*,http://127.0.0.1:*

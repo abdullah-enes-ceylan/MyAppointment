@@ -329,10 +329,27 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
 ### 3.7 — Konteynerleştirme `[DevOps]` `[AI]`
 - Backend `Dockerfile` (multi-stage, JRE slim, non-root kullanıcı)
 - `docker-compose.yml`: app + postgres + Caddy
-- Frontend static build → Caddy veya Cloudflare Pages
+- Frontend static build → Caddy veya Cloudflare Pages, build'de `VITE_API_URL` gerçek backend
+  domain'ine ayarlanır (yereldeki `.env`'deki `localhost:8080` değeri prod'a asla sızmaz)
+- **Ortam değişkeni yönetimi + dev/prod profil ayrımı**: `application-dev.properties` sadece
+  yerelde kalır, `application-prod.properties` tüm sırları (`SPRING_DATASOURCE_PASSWORD`,
+  `JWT_SECRET` vb.) ortam değişkeninden okur — repoda düz metin şifre kalmadığı doğrulanır
+  (bkz. Dikkat edilecekler → Secret yönetimi)
+- **CORS**'a prod frontend domain'i eklenir, `localhost:*` kalıbı prod profilinde tamamen kapatılır
+  (bkz. Dikkat edilecekler → CORS)
+- **`DatabaseSeeder` prod profilinde devre dışı bırakılır** (`@Profile("!prod")` ya da eşdeğeri) —
+  beta'ya sahte test verisiyle çıkılmaz
 
 ### 3.8 — Deploy, yedekleme, izleme `[DevOps]` `[SEN]`
 Detaylar aşağıdaki bölümde.
+- **Storage adaptörü kararı** (kalıcı disk volume mu, S3/R2 mi) — CLAUDE.md'deki bilinen risk:
+  deploy platformunun disk sistemi kalıcı değilse (bazı PaaS'lerde ephemeral disk) tüm işletme
+  fotoğrafları sessizce kaybolur, uygulama hata vermez. `BusinessPhotoStorage` arayüzü sayesinde
+  S3/R2'ye geçiş tek adaptör değişikliği — ama **karar deploy'dan önce verilmeli**, sonradan fark
+  edilirse veri kaybı geri getirilemez.
+- **DB yedekleme, gerçek kullanıcı verisi girmeden ÖNCE kurulu ve en az bir kez geri yükleyerek
+  test edilmiş olmalı** (bkz. Dikkat edilecekler → Yedekleme). Beta'nın ilk gününden itibaren
+  gerçek müşteri/randevu verisi işlenmeye başlıyor — "sonra kurarım" diye ertelenemez.
 
 ### 3.9 — KVKK ve hukuki metinler `[SEN]`
 Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
@@ -342,6 +359,27 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
 - Hesap ve veri silme akışı (unutulma hakkı) — teknik olarak da uygulanmalı
 - **Neden Faz 3'te ama ihmal edilmemeli:** Beta'da gerçek kişisel veri işlemeye başladığın an
   yükümlülük doğar. Ücretsiz olması muaf tutmaz.
+
+### 3.10 — E-posta doğrulama `[BE]` `[SEN]`
+Kapalı beta'da (tanıdık, elle seçilmiş işletmeler) şart değil — ama **açık/genel kayıt
+başlamadan önce mutlaka olmalı**.
+
+**Neden:** Randevu talebi zaman aşımı kararı (bkz. CLAUDE.md karar tablosu, "Randevu ufku / talep
+sınırı") her hesabı işletme başına en fazla 3 açık `PENDING` talep ile sınırlıyor ama bilerek
+"tek hesabı sınırlar, çoklu hesabı değil" diyor — çoklu hesap sorununu ayrı bir kalem olarak
+Faz 3.5'e (rate limiting) bırakıyordu. Doğrulanmamış e-postayla sınırsız hesap açılabildiği
+sürece "bir işletmenin takvimini çok sayıda sahte hesapla doldurma" saldırısının en ucuz yolu
+tam olarak budur — IP/rate-limit tek başına yeterli değil, e-postanın gerçek/erişilebilir
+olduğunu doğrulamak ek bir maliyet katmanı ekler.
+
+- Kayıt sonrası hesap `emailVerified=false` ile başlar; doğrulama tamamlanmadan randevu talebi
+  oluşturulamaz (kapsamın netleşmesi gerekiyor: sadece randevu mu, favori/yorum da mı).
+- Doğrulama linki/kodu göndermek bir bildirim kanalı gerektirir — **3.4'e bağımlı**, ondan önce
+  başlamaz. Kanal burada zaten e-posta olarak sabit (link göndermenin en ucuz yolu), 3.4'teki
+  "kanal kararı ertelendi" notuyla çelişmez çünkü doğrulama e-postası SMS/WhatsApp'tan bağımsız,
+  ayrı bir iş.
+- Doğrulanmamış hesabın süre aşımı/temizlenmesi (ör. 24 saat sonra pasifleşir mi, silinir mi) —
+  karar verilecek.
 
 ---
 
@@ -410,7 +448,10 @@ Her faz sonunda:
 6. **Uçtan uca akış:** `npm run dev` + `mvnw spring-boot:run` ile kayıt → login → işletme seç →
    hizmet → slot → randevu → sahip hesabıyla inbox → onay → tamamlanma → yorum.
 7. **Deploy öncesi:** Prod profiliyle yerelde ayağa kaldır, `.env` dosyası olmadan **başlamadığını**
-   doğrula (sır sızıntısına karşı fail-fast).
+   doğrula (sır sızıntısına karşı fail-fast). Ayrıca tek tek kontrol et: CORS'ta `localhost:*`
+   kalmadığını, `DatabaseSeeder`'ın prod profilinde çalışmadığını, frontend build'inin
+   `VITE_API_URL` olarak gerçek backend domain'ini kullandığını, storage adaptörü kararının
+   verildiğini (3.8) ve bir yedek geri yükleme denemesinin gerçekten yapıldığını (3.8).
 
 ---
 
@@ -462,6 +503,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [ ] 3.7 Konteynerleştirme
 - [ ] 3.8 Deploy, yedekleme, izleme
 - [ ] 3.9 KVKK ve hukuki metinler
+- [ ] 3.10 E-posta doğrulama (3.4'e bağımlı, açık kayıt öncesi şart)
 
 ---
 

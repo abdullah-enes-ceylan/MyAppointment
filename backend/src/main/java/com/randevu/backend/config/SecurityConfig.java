@@ -1,5 +1,6 @@
 package com.randevu.backend.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -17,6 +18,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -92,11 +94,26 @@ public class SecurityConfig {
         return authConfig.getAuthenticationManager();
     }
 
+    // Izin verilen origin'ler PROFILE'A GORE degisir: dev'de localhost:*
+    // wildcard'i (application-dev.properties), prod'da gercek frontend
+    // domain'i (application-prod.properties, env degiskeninden, varsayilansiz
+    // -- tanimsizsa uygulama acilmaz). Eskiden bu liste burada sabit
+    // kodluydu ("http://localhost:*") -- allowCredentials(true) acikken bu
+    // kalibin prod'a sizmasi gercek bir risk olurdu (herhangi bir portta
+    // calisan yerel bir sayfa, kurbanin tarayicisinda kimlik bilgileriyle
+    // API'ye istek atabilirdi). Artik prod dosyasinda bu deger hic yoksa
+    // (env degiskeni bos) uygulama fail-fast ile hic acilmiyor, sessizce
+    // yanlis bir varsayilana dusmuyor.
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.cors.allowed-origins}") String allowedOrigins) {
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(
-                List.of("http://localhost:*", "http://127.0.0.1:*"));
+        configuration.setAllowedOriginPatterns(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
