@@ -490,6 +490,36 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
   `X-Forwarded-For` header'ı gönderildi, backend'in gördüğü IP değişmedi — spoofing'e kapalı
   olduğu doğrulandı (ayrıntı ve çekince için Faz 3.8'deki rate-limiting IP maddesine bakınız).
 
+**Üçüncü geçiş — bir önceki raporun cevapsız bıraktığı iki soru + gözden kaçan asıl konu
+(2026-09-01):**
+- **Güvenlik header'ları — zaten vardı, önceki rapor sadece teyit etmeyi unuttu.** Caddyfile'da
+  `header` bloğu ilk Caddy turunda eklenmişti (`Strict-Transport-Security`,
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `-Server`) —
+  yukarıdaki ilk geçişte zaten yazılı, canlı doğrulanmıştı. Ayrı bir iş gerekmedi.
+- **`show-details` — okundu: hiçbir dosyada set edilmemiş, yani Spring'in güvenli varsayılanı
+  (`never`) geçerli.** Bu bir "3.8'e ertelenecek karar" değil, zaten doğru duran bir okumaydı —
+  canlı yanıt da bunu defalarca doğruladı (`{"status":"UP","groups":[...]}`, hiçbir zaman DB
+  bağlantısı/disk detayı içermedi).
+- **Fotoğraf yükleme dizini — gerçekten atlanmıştı, Postgres'le AYNI sınıf bir risk.**
+  `docker-compose.yml`'de `./backend/business-photo-storage:/app/business-photo-storage` zaten
+  bir BIND MOUNT (named volume değil, ilk Caddy turunda kurulmuştu) ama Postgres'e yapılan
+  `down && up` testi bu dizine hiç uygulanmamıştı. Şimdi yapıldı: gerçek bir fotoğraf yüklendi,
+  `docker compose down` (volume/bind mount etkilenmeden) + `up` sonrası dosya host'ta duruyordu
+  ve `/api/business-photos/...` üzerinden hâlâ servis ediliyordu.
+- **Backend container'ın UID'si canlı teyit edildi:** `docker compose exec backend id` →
+  `uid=1000(appuser)`, root değil (Dockerfile'daki `USER appuser` satırı zaten oradaydı, ilk
+  container turunda eklenmişti — şimdi ayrıca çalışan bir compose stack'inde de doğrulandı).
+- **Caddy'de govde boyutu siniri yoktu — gercek bir bosluk, eklendi.** `spring.servlet.
+  multipart.max-file-size=8MB` sadece istek backend'e ULAŞTIKTAN sonra devreye giriyordu; Caddy
+  tarafında hiçbir sınır olmaması, çok daha büyük bir gövdenin (ör. 500MB) backend'e taşınmasına
+  izin verip ucuz bir bant genişliği/bellek tüketen DoS deseni oluşturuyordu.
+  `/api/*` handle bloğuna `request_body { max_size 10MB }` eklendi — 8MB servlet sınırının
+  hafifçe üstünde (aynı "her katman bir öncekinden gevşek" mantığı: 5MB iş kuralı < 8MB servlet
+  < 10MB Caddy). Canlı doğrulandı: 12MB'lik bir gövde Caddy'den 413 ile geri döndü, backend'e hiç
+  ulaşmadı.
+- **`TempRemoteAddrController.java`'nın hiçbir commit'e girmediği doğrulandı** —
+  `git log --all --full-history` ile sıfır sonuç, `git show --stat HEAD` dosya listesinde de yok.
+
 ### 3.8 — Deploy, yedekleme, izleme `[DevOps]` `[SEN]`
 Detaylar aşağıdaki bölümde.
 - [ ] **`business-photo-storage` host klasörü izinleri** — Faz 3.7'de Windows + Docker Desktop'ta

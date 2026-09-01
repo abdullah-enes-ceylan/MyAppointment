@@ -35,7 +35,22 @@
 
 	# API ve actuator istekleri backend container'ina -- docker-compose'un
 	# ic agi uzerinden servis adiyla (postgres:5432 ile ayni desen).
+	#
+	# request_body max_size: Spring'in KENDI govde siniri
+	# (spring.servlet.multipart.max-file-size=8MB) yalnizca istek backend'e
+	# ULASTIKTAN sonra devreye giriyor -- Caddy'nin onunde HICBIR govde
+	# sinirinin olmamasi, cok daha buyuk (ornegin 500MB) bir govdenin
+	# backend'e (ve oradan Tomcat'e) tasinmasina izin verirdi, bu da
+	# bant genisligi/bellek tuketen ucuz bir DoS deseni olurdu. 10MB --
+	# 8MB'lik servlet sinirinin HAFIFCE USTUNDE (ayni gerekce:
+	# BusinessPhotoProperties.maxSizeBytes < servlet siniri < Caddy siniri --
+	# her katman bir oncekinden biraz gevsek, boylece normal-boyuttaki bir
+	# istek HER ZAMAN bir sonraki, daha anlamli hata mesaji ureten katmana
+	# ulasir).
 	handle /api/* {
+		request_body {
+			max_size 10MB
+		}
 		reverse_proxy backend:8080
 	}
 	# "/actuator" (sonunda / olmadan, sondaki segment olmadan) /actuator/*
