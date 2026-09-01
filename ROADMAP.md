@@ -764,6 +764,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [ ] 3.8 Deploy, yedekleme, izleme
 - [ ] 3.9 KVKK ve hukuki metinler
 - [ ] 3.10 E-posta doğrulama (3.4'e bağımlı, açık kayıt öncesi şart)
+- [ ] 3.11 Auth sertleştirme: httpOnly cookie + CSRF ⭐ (3.8'den sonra, beta onboarding'den önce)
 
 ---
 
