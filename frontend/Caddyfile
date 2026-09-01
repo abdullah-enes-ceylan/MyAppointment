@@ -9,7 +9,20 @@
 	#     duz HTTP ile gitme" der -- ilk ziyarette bile downgrade/mitm
 	#     saldirisini zorlastirir. Sadece HTTPS baglaminda anlamli, duz
 	#     HTTP'de tarayici bu header'i zaten yok sayar (yerel testte
-	#     zararsiz).
+	#     zararsiz). max-age BILEREK KISA (300sn) -- Faz 3.8 ilk deploy
+	#     haftasinda HTTPS/sertifikada bir sorun cikarsa, UZUN bir max-age
+	#     tarayicilarin duz HTTP'ye dusmesine hic izin vermez ve tum test
+	#     cihazlarinda (ozellikle zaten bir kez ziyaret etmis olanlarda)
+	#     sikisip kalinir -- bu GERI ALINAMAZ bir hata sinifi, sertifika
+	#     hatasi gibi normalde kolayca duzeltilebilecek bir sorunu haftalar
+	#     suren bir tarayici-onbellegi sorununa cevirir. RUNBOOK.md'nin
+	#     "Ilk 48 Saat" bolumundeki stabilite penceresi gecince (yani sistem
+	#     kanitlanmis sekilde guvenilir calisiyorken) buraya donup
+	#     `max-age=31536000; includeSubDomains` degerine yukseltilecek.
+	#     `preload` DIREKTIFI BILEREK YOK -- Chrome/Firefox/Safari'nin HSTS
+	#     preload listesine girmek aylar surer, LISTEDEN CIKMAK da oyle;
+	#     beta oncesi bir sistemde bu geri donusu neredeyse imkansiz riski
+	#     almanin hicbir faydasi yok.
 	#   X-Content-Type-Options: tarayicinin, sunucunun bildirdigi
 	#     Content-Type'i "tahmin ederek" degistirmesini (MIME sniffing)
 	#     engeller -- ornegin bir kullanicinin yukledigi dosyanin
@@ -26,7 +39,7 @@
 	# font kaynaklari vb. tek tek gozden gecirilmeli), yanlis/gevsek bir
 	# CSP hicbir sey eklemez, cok siki bir CSP ise siteyi bozar.
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Strict-Transport-Security "max-age=300"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"

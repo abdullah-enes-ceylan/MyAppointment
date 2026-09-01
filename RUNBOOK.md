@@ -59,9 +59,10 @@ denemene gerek yok, ama NEDEN güvenle ilerleyebildiğimizi bilmen için:
    ```
    14 satırın hepsi `success=t`, `\dt` ile 14 uygulama tablosunun hepsi gerçekten oluşmuş
    görüldü, ve uygulama bu şema üzerinde `/api/businesses` ve `/actuator/health`'e normal
-   yanıt verdi. Bu sunucuda TEKRARLANMASI GEREKMEYEN bir test — ama A8'deki ilk deploy da
-   yapısal olarak birebir aynı senaryo (boş volume + prod profili + V1-V14), o yüzden A8'in
-   kanıt satırı zaten bunu bir kez daha, gerçek sunucuda doğrulayacak.
+   yanıt verdi. **Bu, zincirin GEÇERLİ olduğunu kanıtlıyor — ama sunucudaki asıl çalıştırma
+   yine de ayrıca doğrulanmalı** (farklı donanım, farklı Postgres/Docker sürümü kombinasyonu
+   olabilir). Bu yüzden A8'in kanıt adımına aynı `flyway_schema_history` kontrolü ZORUNLU bir
+   satır olarak eklendi — beş saniyelik bir sorgu, atlanacak yer değil.
 
 ---
 
@@ -339,6 +340,15 @@ toplam RAM'inin (4096 MB) altında kalmalı — swap'a taşmış olması (yani `
 `used` değerinin 0'dan büyük çıkması) tek başına felaket değil ama "ne kadar yakın gittiğimizi"
 gösterir, not al.
 
+**Ek kanıt — ATLAMA, beş saniyelik bir kontrol:** Yerel migration provası (Ön Koşul bölümü)
+zincirin GEÇERLİ olduğunu kanıtladı, ama sunucudaki bu ilk kalkış zincirin GERÇEK donanımdaki
+İLK çalıştırılışı — bunu ayrıca doğrula:
+```bash
+docker compose exec postgres psql -U postgres -d appointment_db \
+  -c "SELECT version, success FROM flyway_schema_history ORDER BY installed_rank;"
+```
+**Beklenen:** 14 satır, `1`'den `14`'e kadar, hepsinin `success` sütunu `t`.
+
 ## A8.1 — Disk temizliği (her build'den sonra rutin)
 
 Build cache ve eski (dangling) image'lar aylar içinde 40 GB'lık diski doldurabilir — disk
@@ -461,11 +471,26 @@ kilit simgesi normal.
 Gerekçe: `show-details=never` sadece gövdeyi (`components`) gizliyor, HTTP durum kodu yine de
 DB durumuna göre değişiyor — canlı doğrulandı, Postgres durdurulunca `/actuator/health` **503**
 + `{"status":"DOWN"}` döndü. Dışarı kapalı olsaydı dış bir monitor'ün bunu fark etmesinin yolu
-kalmazdı. Bölüm B'deki uptime monitor bu endpoint'i hedefleyecek — `/` (statik ana sayfa) DEĞİL,
-çünkü Caddy ayakta kaldığı sürece `/` backend/Postgres tamamen ölse bile 200 döner.
+kalmazdı. `/` (statik ana sayfa) DEĞİL bu endpoint izlenecek — Caddy ayakta kaldığı sürece `/`
+backend/Postgres tamamen ölse bile 200 döner.
 
-- [ ] Uptime monitor (UptimeRobot/healthchecks.io) `https://randevum.com/actuator/health`'e
-  kuruldu (Bölüm B5) — `/` DEĞİL.
+## A12. Uptime monitor kurulumu — 3.8a'da, 3.8b'de DEĞİL
+
+**Önemli sıra düzeltmesi:** Aşağıdaki "İlk 48 Saat" geçiş kriteri "kesintisiz 48 saat uptime"
+şartı koşuyor — bu monitor 3.8b'ye ertelenirse 3.8a'yı hiç bitiremezsin (3.8a'yı bitirmek için
+3.8b'de kurulacak bir aracın 48 saatlik verisine ihtiyacın olurdu, kendi kendini bloke eden bir
+döngü). Bu yüzden uptime monitor'ü **şimdi, burada** kur — yedekleme ve dead-man's switch
+(Bölüm B'nin geri kalanı) hâlâ 3.8b'de.
+
+- [ ] UptimeRobot ya da healthchecks.io'da ücretsiz bir hesap aç.
+- [ ] Yeni bir HTTP(S) monitörü `https://randevum.com/actuator/health` adresine, 5 dakikalık
+  kontrol aralığıyla kur.
+- [ ] Bildirim e-postanı ekle.
+
+**Kanıt:** Monitör panelinde ilk kontrol **`UP`** (yeşil) görünmeli. İstersen kasıtlı olarak
+`docker compose stop backend` ile kısa bir kesinti yaratıp (birkaç dakika içinde geri
+`docker compose start backend`) monitörün gerçekten `DOWN` bildirimi gönderdiğini de görebilirsin
+— bu, "İlk 48 Saat" penceresi başlamadan ÖNCE yapılırsa sayacı bozmaz.
 
 **3.8a burada biter.** Yukarıdaki her kutucuk işaretlenmeden 3.8b'ye geçilmez.
 
@@ -519,12 +544,8 @@ gerçekten bağımsız çalışan bir yedek var mı" sorusuna cevap vermek, mevc
   yeterli değil — gerçek bir kesinti anında "ne kadar sürede ayağa kaldırabiliyorum" bilgisi
   olmadan bu sayı bir işe yaramaz.
 
-## B5. İzleme — minimum üçlü, hedefi NET
+## B5. İzleme — kalan ikili (uptime monitor zaten A12'de kuruldu)
 
-- [ ] UptimeRobot/healthchecks.io: **`https://randevum.com/actuator/health`**'e (A11'de karar
-  verildi, açık kalıyor) 5 dakikada bir ping, düşerse mail. **`/` DEĞİL** — Caddy ayakta olduğu
-  sürece statik ana sayfa, backend/Postgres tamamen ölse bile 200 döner; bunu `/`'a kurarsan
-  günlerce "her şey yolunda" maili alıp uygulamanın çöktüğünü bir müşteriden öğrenirsin.
 - [ ] Disk doluluk uyarısı — basit bir cron + `df` eşiği + mail, ya da sağlayıcının kendi paneli.
 - [ ] B3'teki dead-man's switch aktif ve en az bir kez gerçek bir alarmla (kasıtlı olarak cron'u
   durdurup) test edilmiş olmalı.
@@ -594,9 +615,19 @@ yazılmalı").
 
 # DEPLOY SONRASI İLK 48 SAAT
 
-Monitoring (Bölüm B) sadece "ölü mü canlı mı" sorusuna cevap verir — "garip bir şey mi oluyor"
+Monitoring (A12) sadece "ölü mü canlı mı" sorusuna cevap verir — "garip bir şey mi oluyor"
 sorusuna cevap vermez. 404 yağmuru, tuhaf user-agent'lar, yavaş sorgular hiçbir alarm
 tetiklemeden günlerce sürebilir. İlk 48 saat elle bakılacak.
+
+## Bu pencerede GERÇEK işletme verisi YOK
+
+Sistem ayakta olacak ama **yedeklemesiz** — 3.8b (restore provası) henüz kanıtlanmadı. Bu
+pencerede sisteme giren HERHANGİ bir veri, restore edilebilirliği kanıtlanana kadar korumasız.
+- [ ] Sadece kendi test hesaplarınla dolaş (kayıt, randevu, foto yükleme dahil).
+- [ ] **Tanıdığın bir işletmeye "gel dene" DEME** — 3.8b'nin B4 kabul kriteri (restore edilip
+  randevu+foto geldiğini gösterme) kanıtlanmadan gerçek bir işletmenin verisini bu sisteme
+  koydurma. Restore provası geçmeden buraya giren gerçek veri, bir kesinti anında geri
+  getirilemez.
 
 ## İlk gün — elle log izleme
 
@@ -624,7 +655,9 @@ A1.5'teki kurulumun gerçekten işlediğinin kanıtı.
 
 ## Ne zaman "stabil" sayılır — 3.8b'ye geçiş kriteri
 
-Aşağıdakilerin HEPSİ, **kesintisiz 48 saat** boyunca doğru olmalı:
+48 saatlik sayaç, A12'de uptime monitor kurulup ilk `UP` göründüğü andan başlar (A10'da prod
+CA'ya zaten geçilmiş olacağı için bu, gerçek prod ortamının ilk 48 saati). Aşağıdakilerin HEPSİ,
+**kesintisiz 48 saat** boyunca doğru olmalı:
 
 - [ ] Uptime monitor (`/actuator/health`) 48 saat boyunca **tek bir düşüş bildirmedi**.
 - [ ] `docker compose ps` — üç servis de hâlâ `Up`, hiçbiri restart döngüsüne girmemiş
@@ -634,9 +667,15 @@ Aşağıdakilerin HEPSİ, **kesintisiz 48 saat** boyunca doğru olmalı:
   kayıt, giriş, işletme arama, randevu talebi — hepsi hatasız çalıştı.
 - [ ] `df -h` — disk kullanımı 48 saatte anormal bir sıçrama göstermedi (log/build cache
   birikimi kontrolsüzse burada görünür).
+- [ ] **HSTS `max-age`'i yükselt.** 48 saat sorunsuz geçtiyse, `frontend/Caddyfile`'daki
+  `Strict-Transport-Security "max-age=300"` satırını `"max-age=31536000; includeSubDomains"`e
+  çevir, `docker compose build caddy && docker compose up -d caddy` ile yeniden dağıt. Bu 48
+  saatlik pencere TAM OLARAK bu yükseltmenin GÜVENLE yapılabileceği an — daha erken yükseltip
+  sonra bir HTTPS sorunu çıkarsa, uzun `max-age` zaten cache'lenmiş tarayıcılarda geri
+  dönülemez bir duruma yol açar.
 - [ ] Yukarıdaki log/fail2ban incelemesi en az bir kez yapıldı, hiçbir açıklanamayan davranış
   bulunmadı.
 
-Bu beş madde de 48 saat kesintisiz sağlanmadan **3.8b'ye (yedekleme/izleme) geçilmez** — henüz
+Bu altı madde de sağlanmadan **3.8b'ye (yedekleme/izleme) geçilmez** — henüz
 stabil olmayan bir sistemin yedeğini almanın bir anlamı yok, önce sistemin kendisinin ayakta
 kaldığından emin olunur.

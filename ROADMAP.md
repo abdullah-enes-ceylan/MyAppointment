@@ -530,10 +530,14 @@ testler için geçici eklenen dosya) hiçbir commit'e girmediği `git log --all 
 kabul kriterlerini takip eder — komut sırası ve "ne görmeliyim" kanıt satırları runbook'ta.
 
 **İki alt faza bölündü, 3.8b'ye 3.8a bitmeden geçilmeyecek:**
-- **3.8a** — sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama turu + **48 saat
-  kesintisiz stabilite** (elle log/fail2ban incelemesi, tek bir uptime düşüşü yok, restart
-  döngüsü yok — somut kriter listesi RUNBOOK.md'nin sonunda, "Deploy Sonrası İlk 48 Saat").
-- **3.8b** — yedekleme + restore provası + izleme.
+- **3.8a** — sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama turu + **uptime
+  monitor kurulumu** (bilerek burada — 3.8b'ye ertelenirse 3.8a'nın kendi "48 saat kesintisiz
+  uptime" bitiş kriteri hiç sağlanamazdı, kendi kendini bloke eden bir sıra hatası olurdu) +
+  **48 saat kesintisiz stabilite** (elle log/fail2ban incelemesi, tek bir uptime düşüşü yok,
+  restart döngüsü yok — somut kriter listesi RUNBOOK.md'nin sonunda, "Deploy Sonrası İlk 48
+  Saat"; bu pencerede gerçek işletme verisi girilmez, sadece test hesapları).
+- **3.8b** — yedekleme + restore provası + kalan izleme (disk uyarısı + yedekleme cron'u için
+  dead-man's switch).
 
 Gerekçe: 3.8a olmadan gerçek trafik/veri yok, dolayısıyla yedekleyecek bir şey de yok — sırayı
 tersine çevirmenin (önce yedekleme altyapısı kurup sonra deploy etmek) hiçbir faydası yok, sadece
@@ -550,7 +554,7 @@ runbook'taki her madde ya **canlı sunucuda doğrulanacak** olarak açıkça iş
 doğrulanabilen (ör. `docker compose ps`, timezone testi) gerçek bir kanıtla destekleniyor — hiçbir
 adımda "muhtemelen çalışır" cümlesi yok.
 
-#### Beta öncesi kapanması ZORUNLU üç soru — 3.8a'ya girmeden kapatıldı
+#### Beta öncesi kapanması ZORUNLU sorular — 3.8a'ya girmeden kapatıldı
 
 **A. `DatabaseSeeder` prod'da çalışır mı? Hayır — canlı, DB'ye doğrudan bakarak kanıtlandı.**
 `@Profile("dev")` class-level anotasyonu var (kontrol edildi) — ama "kod okudum" yeterli
@@ -581,7 +585,17 @@ uçtan uca ilk gerçek denemesi olacaktı. Postgres volume'u tamamen silinip pro
 sıfırdan kalkış yapıldı, `flyway_schema_history` doğrudan sorgulandı: **14 migration'ın hepsi
 `success=true`**, `\dt` ile 14 uygulama tablosunun hepsi gerçekten oluşmuş görüldü, uygulama bu
 şema üzerinde normal yanıt verdi. RUNBOOK.md'nin A8 adımı, sunucudaki ilk gerçek deploy'da bunu
-bir kez daha (bu sefer gerçek donanımda) doğrulayacak.
+bir kez daha (bu sefer gerçek donanımda) doğrulayacak — yerel test zincirin GEÇERLİ olduğunu
+kanıtladı ama sunucudaki asıl çalıştırmanın yerini almıyor, o kontrol A8'de zorunlu bir adım.
+
+**D. Outbound e-posta/SMS gönderen bir kod yolu var mı? Hayır — kontrol edildi, sıfır.**
+`pom.xml`'de mail/SMTP/Twilio bağımlılığı yok, hiçbir `.properties` dosyasında mail/smtp config
+yok, kod tabanında `JavaMailSender`/`MimeMessage`/`Twilio` hiç kullanılmıyor. `NotificationPort`'un
+şu anki tek iki implementasyonu `InAppNotificationAdapter` (DB'ye yazıyor) ve
+`LoggingNotificationAdapter` (sadece loglıyor) — ikisi de dışarı ağ çağrısı yapmıyor (Faz 3.4'ün
+"kanal kararı ertelendi" kararıyla tutarlı). Yani prod'da eksik bir SMTP kimlik bilgisinden
+kaynaklanan bir sessiz-yutma/exception riski **bugün için yok** — bu risk ancak Faz 3.4'te bir
+kanal seçilip gerçek bir adapter yazıldığında gündeme gelecek.
 
 #### Mevcut 5 maddede düzeltmeler
 
@@ -643,7 +657,10 @@ bir kez daha (bu sefer gerçek donanımda) doğrulayacak.
    yedekleme cron'u için **dead-man's switch** (healthchecks.io'nun cron-izleme özelliği — cron
    başarıyla bitince ping atar, ping gelmezse alarm verir; sessizce durmuş bir yedekleme, hiç
    olmayandan daha kötü çünkü "var" sanılır). Yukarıdaki B maddesindeki crash-loop senaryosu da
-   TAM OLARAK bu health-ping ile yakalanır.
+   TAM OLARAK bu health-ping ile yakalanır. **Sıra düzeltmesi (dördüncü geçiş):** health ping'i
+   3.8b'de değil **3.8a'da** kuruluyor — 3.8a'nın kendi "48 saat kesintisiz uptime" bitiş
+   kriteri, henüz kurulmamış bir aracın verisine bağlı olamazdı, kendi kendini bloke eden bir
+   sıra hatası olurdu. Disk uyarısı ve dead-man's switch 3.8b'de kalıyor.
 9. **Timezone — canlı test edildi, sorun YOK.** Container'ın OS saati UTC (jammy'nin varsayılanı,
    doğrulandı) ama `TimeConfig`'teki `Clock.system(ZoneId.of("Europe/Istanbul"))` + `TimeZone.
    setDefault(...)` bunu JVM seviyesinde geçersiz kılıyor — container OS'unun TZ'si Java
