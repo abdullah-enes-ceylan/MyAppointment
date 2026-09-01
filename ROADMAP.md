@@ -725,45 +725,73 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
   kopya değil, kontrol edildi) — User'ın alanları anonimleşince herkese açık yorumlardaki isim
   de otomatik değişir, ayrı bir kod değişikliği gerekmiyor.
 
-  **Akış — gecikmeli anonimleştirme (bekleme süresi configurable, `application.properties`,
-  varsayılan 30 gün — koda gömülmez, `AppointmentPolicyProperties` deseniyle aynı):**
+  **Akış — gecikmeli anonimleştirme, 30 gün boyunca HİÇBİR ŞEY DEĞİŞMEZ (bekleme süresi
+  configurable, `application.properties`, varsayılan 30 gün — koda gömülmez,
+  `AppointmentPolicyProperties` deseniyle aynı). Tasarım bir kez düzeltildi — aşağıdaki
+  "Düzeltme" notuna bakınız, önceki taslak hesabı anında kilitliyordu, bu geri dönüşü
+  imkansız kılardı.**
   1. `DELETE /api/users/me` — şifre tekrar istenir (geri alınamaz bir işlem, ele geçirilmiş bir
      oturumla tetiklenmesin). Sadece `Role.USER` — `BUSINESS_OWNER`/`ADMIN` isteği reddedilir
      ("işletme hesapları için ayrı bir akış geliyor").
-  2. `User.deletionRequestedAt = now()` yazılır (yeni alan). Gerçek anonimleştirme HEMEN
-     olmuyor.
-  3. Spring Security'nin `UserDetails`'ine `enabled=false` bağlanıyor
-     (`deletionRequestedAt != null` iken) — kütüphanenin kendi `DisabledException` mekanizması
-     devreye giriyor, `CustomUserDetailsService`'e elle "silinmiş mi" kontrolü yazmaya gerek
-     kalmıyor. **İstek anında oturum kapanıyor, bekleme süresi kullanıcı için değil sistem
-     için** (ör. bir uyuşmazlık/inceleme penceresi) — bu süre boyunca hesaba tekrar giriş
-     yapıp isteği iptal etme akışı YOK (email kanalı hiç kurulmadığı için "linke tıkla iptal
-     et" gibi bir mekanizma zaten mümkün değil, bkz. Faz 3.4).
-  4. Bu andan itibaren kullanıcının bitmemiş randevuları (`PENDING` + gelecekteki `APPROVED`)
-     mevcut `AppointmentService.changeStatus(..., Action.CANCEL)` yolu ile `CANCELLED`'a
-     geçiriliyor — yeni bir durum icat edilmiyor, zaten var olan mekanizma.
-  5. **`AccountDeletionScheduler`** (yeni, `AppointmentLifecycleScheduler` ile aynı desende) —
+  2. `User.deletionRequestedAt = now()` yazılır (yeni alan). **Bunun DIŞINDA hiçbir şey
+     değişmez** — giriş kapanmıyor, randevular iptal edilmiyor, hesap normal çalışmaya devam
+     ediyor. Giriş yapınca ekranda "Hesabınız [tarih]'te silinecek — İptal Et" bandı görünür.
+  3. **`POST /api/users/me/cancel-deletion`** (yeni) — normal, kimlik doğrulamalı bir istek,
+     `deletionRequestedAt`'i `null`'a çeker. Bu, hesap ele geçirilip silme tetiklenirse gerçek
+     sahibinin kurtarma yolu: hesap 30 gün boyunca TAM OLARAK bırakıldığı gibi durduğu için
+     (hiçbir randevu iptal edilmemiş, hiçbir alan değişmemiş), giriş yapıp iptal ettiğinde
+     hesabını nasıl bıraktıysa öyle bulur. Bu akış bir e-posta linkine değil, normal şifreyle
+     girişe dayanıyor — outbound e-posta/SMS zaten yok (Faz 3.8'de doğrulandı), ama zaten
+     gerekmiyor da: iptal, hesabın KENDİSİNE giriş yaparak yapılıyor.
+  4. **`AccountDeletionScheduler`** (yeni, `AppointmentLifecycleScheduler` ile aynı desende) —
      periyodik olarak `deletionRequestedAt IS NOT NULL AND anonymizedAt IS NULL AND
-     deletionRequestedAt <= now() - gracePeriod` olan kullanıcıları bulup:
+     deletionRequestedAt <= now() - gracePeriod` olan kullanıcıları bulup, TÜM aşağıdaki
+     adımları AYNI ANDA (30. günde, tek seferde) uyguluyor — 2. adımdan bu yana ilk kez bir
+     şey değişiyor:
+     - Kullanıcının bitmemiş randevuları (`PENDING` + gelecekteki `APPROVED`) mevcut
+       `AppointmentService.changeStatus(..., Action.CANCEL)` yolu ile `CANCELLED`'a geçirilir.
      - `name`/`surName` → "Silinmiş Kullanıcı", `email` → `deleted-user-{id}@deleted.local`
        (ID kullanmak benzersizliği garanti ediyor, ayrı bir token üretmeye gerek yok),
-       `phone` → placeholder, `password` → rastgele/kullanılamaz bir hash (savunma derinliği —
-       giriş zaten `enabled=false` ile kapalı ama eski gerçek hash'in DB/yedeklerde süresiz
-       durmasının bir anlamı yok).
+       `phone` → placeholder, `password` → rastgele/kullanılamaz bir hash.
+     - Spring Security'nin `UserDetails`'ine `enabled=false` bağlanır (`anonymizedAt != null`
+       iken) — artık gerçekten giriş kapanıyor, bu noktadan sonra geri dönüş yok zaten.
      - `User.anonymizedAt = now()` yazılır (işlemin tamamlandığının kaydı).
      - Favoriler hard-delete edilir (başka hiçbir satır bağımlı değil, saklama değeri yok).
      - Randevu/yorum/bildirim kayıtlarına DOKUNULMAZ — anonimleşmiş `User` satırına FK ile
        bağlı kalmaya devam ederler, işletmenin operasyonel geçmişi bozulmaz.
-  6. **Fatura/muhasebe kaydı bu akışın DIŞINDA** — bu uygulama şu an ödeme/fatura işlemiyor,
+  5. **Fatura/muhasebe kaydı bu akışın DIŞINDA** — bu uygulama şu an ödeme/fatura işlemiyor,
      ileride eklenirse o veri ayrı bir saklama kuralına tabi olacak, anonimleştirme ona hiç
      dokunmayacak.
 
-  **Açık, dürüstçe kabul edilen sınır:** Kullanıcıya silme isteğinin alındığına veya ne zaman
-  kesinleşeceğine dair bir bildirim gönderilemiyor — outbound e-posta/SMS hiç yok (Faz 3.8
-  planlamasında doğrulandı, `NotificationPort`'un iki adaptörü de dışarı ağ çağrısı yapmıyor).
-  Tek geri bildirim, `DELETE` isteği başarılı olduğu anda frontend'in gösterdiği tek seferlik
-  bir ekran mesajı ("Hesabınız silinme sürecine alındı, [tarih]'te kalıcı olarak silinecek")
-  olabilir — bundan sonrası tamamen sessiz.
+  **Düzeltme (önceki taslaktan) — geri dönüş neden 30 gün boyunca TAM olmalı.** İlk taslakta
+  hesap istek ANINDA `enabled=false` ile kilitleniyordu ("bekleme süresi kullanıcı için değil
+  sistem için" diye gerekçelendirilmişti) — bu YANLIŞTI. Asıl senaryo şu: hesabı ele geçiren
+  biri silme isteğini tetiklerse, gerçek sahibi bu pencerede giriş yapıp iptal edebilmeli VE
+  hesabını AYNEN bıraktığı gibi bulmalı. İlk gün herhangi bir şey (giriş kilidi, randevu
+  iptali) uygulanırsa bu geri dönüş imkansızlaşır. Düzeltilmiş tasarımda 30 gün boyunca
+  GERÇEKTEN hiçbir şey değişmiyor — sadece tek bir zaman damgası yazılıyor, geri kalan her
+  şey (giriş kapama, randevu iptali, alan scrub'ı) 30. günde TEK seferde, atomik olarak
+  uygulanıyor.
+
+  **Anonimleştirme gerçekten geri döndürülemez mi? Kod tabanında kontrol edildi: canlı
+  veritabanında evet, yedeklerde HAYIR (dürüstçe kabul edilen tek sınır).**
+  - `NotificationLog`/`InAppNotification` tabloları kontrol edildi: ikisi de kullanıcıyı
+    sadece `recipientUserId` (FK) ile tutuyor, isim/e-posta/telefon KOPYASI yok. Bildirim
+    metinleri şablon (`"{işletme adı} işletmesinde randevunuz yaklaşıyor"` gibi) — müşterinin
+    KENDİ adını hiç içermiyor. Normal (hata dışı) hiçbir `log.info/warn/debug` satırı
+    `getEmail()`/`getName()`/`getPhone()` basmıyor (grep ile tüm kod tabanı tarandı, sıfır
+    sonuç). Yani canlı DB dışında, uygulamanın kendi tablolarında veya normal loglarında
+    gizli bir PII kopyası YOK — anonimleştirme çalıştığında canlı sistemde gerçekten iz
+    kalmıyor.
+  - **Ama yedekler ayrı bir gerçek.** Faz 3.8'in yedekleme planı ("7 günlük + 4 haftalık
+    saklama") anonimleştirmeden ÖNCE alınmış bir `pg_dump`'ı hâlâ tutuyor olabilir — o
+    yedeğin içinde kullanıcının gerçek adı/e-postası/telefonu, o yedek kendi rotasyon
+    süresiyle (en fazla ~4 hafta) silinene kadar durur. Bu, bu projeye özgü bir eksiklik
+    değil — "silinen veri yedeklerde bir süre daha durur" KVKK/GDPR uygulamalarında genel
+    kabul gören bir sınır, yedekleri geriye dönük düzenlemek (compressed arşiv dosyalarını
+    tek tek işlemek) pratik değil. Dürüst özet: **canlı sistemde anonimleştirme anında ve
+    geri döndürülemez; TÜM kopyalar (yedekler dahil) üzerinden tam silinme, o yedeklerin
+    kendi rotasyon takvimine göre ek ~4 hafta sürebilir.**
 
   **`BUSINESS_OWNER` silme akışı — bilerek bu planın dışında.** Kapsamı çok daha büyük: kendi
   işletmeleri, o işletmelere ait randevular/personel/hizmetler, müşterilerin yazdığı yorumlar.
