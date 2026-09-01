@@ -546,6 +546,30 @@ runbook'taki her madde ya **canlı sunucuda doğrulanacak** olarak açıkça iş
 doğrulanabilen (ör. `docker compose ps`, timezone testi) gerçek bir kanıtla destekleniyor — hiçbir
 adımda "muhtemelen çalışır" cümlesi yok.
 
+#### Beta öncesi kapanması ZORUNLU iki soru — 3.8a'ya girmeden kapatıldı
+
+**A. `DatabaseSeeder` prod'da çalışır mı? Hayır — canlı, DB'ye doğrudan bakarak kanıtlandı.**
+`@Profile("dev")` class-level anotasyonu var (kontrol edildi) — ama "kod okudum" yeterli
+sayılmadı: `SPRING_PROFILES_ACTIVE=prod` ile tamamen taze bir stack açılıp `psql` ile doğrudan
+`users`/`businesses` tabloları sorgulandı, ikisi de **0 satır**, loglarda seeder'a ait hiçbir iz
+yok. API yanıtına değil DB'nin kendisine bakıldığı için "seeder çalışmadı ama başka bir yoldan
+sahte veri girdi" ihtimali de kapandı. Detay: CLAUDE.md karar tablosu.
+
+**B. Flyway migration ortada patlarsa ne olur? Canlı test edildi: temiz ama sonsuz döngü.**
+Bilerek bozuk bir migration (V15, var olmayan bir tabloyu ALTER eden) eklenip tamamen boş bir
+DB'ye ilk kalkış denendi. Sonuç:
+- Postgres DDL'i transactional olduğu için **şema hiç yarım kalmadı** — `"Changes successfully
+  rolled back"`, `flyway_schema_history` temiz şekilde bir önceki başarılı sürümde kaldı.
+- Ama Spring Boot context'i başlatamayınca JVM çöktü, `restart: unless-stopped/on-failure`
+  container'ı yeniden başlattı, o da AYNI bozuk migration'ı tekrar deneyip tekrar çöktü —
+  **gerçek bir crash-loop, canlı gözlemlendi** (log'da V15 iki kez art arda aynı hatayla).
+- **Kurtarma yolu temiz:** şema hiçbir zaman bozulmadığı için, bozuk migration dosyası
+  düzeltilip/kaldırılıp container yeniden başlatıldığında sistem sorunsuz devam ediyor (bu da
+  test edildi — dosya silinip rebuild edildi, temiz şekilde V15'e geçti).
+- **Asıl risk crash-loop'un SESSİZCE sürmesi** — bu yüzden izleme maddesi (aşağıda, madde 8)
+  kritik: `/actuator/health`'i izleyen bir uptime-monitor bu durumu ANINDA yakalar (health hiç
+  `200` dönmeyecek çünkü uygulama hiç ayağa kalkmıyor).
+
 #### Mevcut 5 maddede düzeltmeler
 
 1. **Storage adaptörü — bu bir "karar" değil, zaten kapalı bir madde.** `BusinessPhotoStorage`
@@ -575,23 +599,38 @@ adımda "muhtemelen çalışır" cümlesi yok.
    gerçek sertifika denemesine geçilmez.
 6. **Build stratejisi ve sunucu specs.** CI/registry altyapısı yok (kurmak bu ölçekte orantısız
    karmaşıklık) — build **sunucuda**, `docker compose build` ile yapılacak. Bu makinede ölçülen
-   GERÇEK çalışma-zamanı bellek kullanımı (idle, yeni açılmış): Caddy ~10MB, backend ~347MB,
-   Postgres ~57MB → toplam ~414MB — mevcut önerilen **Hetzner CX22 (2 vCPU/4GB/40GB)** için
-   bolca yer var. Build ANI ayrı bir risk (Maven+Node aynı anda bellek tüketebilir) — bu, `docker
-   stats`'ın yakalayamadığı geçici BuildKit süreçleri olduğu için burada ölçülemedi. Önlem: **2GB
-   swap dosyası zorunlu** (maliyeti sıfır, kurulumu 2 dakika, build sırasında olası bir bellek
-   sıçramasını OOM'a çevirmeden yutuyor). Sunucuyu küçültmeyin (4GB altı önerilmez), ama mevcut
-   CX22 + swap ile ilerlemek makul.
+   GERÇEK çalışma-zamanı bellek kullanımı (idle, yeni açılmış, eski container'lar rebuild
+   sırasında hâlâ ayaktayken): Caddy ~10MB, backend ~347-361MB, Postgres ~42-57MB → toplam
+   ~410-430MB — mevcut önerilen **Hetzner CX22 (2 vCPU/4GB/40GB)** için bolca yer var.
+   **Build ANININ tepe belleği DENENDİ ama ÖLÇÜLEMEDİ** — bu, "muhtemelen X MB" diye bir tahmin
+   değil, gerçek bir ölçüm girişiminin başarısız olduğu anlamına geliyor: `docker stats` VE
+   `docker ps -a` ile 40 saniye boyunca saniyede bir kontrol edildi, Maven'in gerçekten
+   çalıştığı (log'da "Compiling 131 source files" görüldü) o pencerede **hiçbir build
+   container'ı hiçbir zaman görünmedi** — bu Docker Desktop kurulumunda BuildKit'in build
+   süreci host'un container listesine hiç yansımıyor. Bu yüzden gerçek tepe değeri **sadece
+   sunucuda, `free -m`'i build sırasında saniyede bir örnekleyerek** ölçülebilir (RUNBOOK.md'de
+   bu adım var, ölçülen gerçek sayı oraya yazılacak). Önlem: **2GB swap dosyası zorunlu**
+   (maliyeti sıfır, kurulumu 2 dakika, ölçülemeyen bir sıçramayı OOM'a çevirmeden yutmak için).
+   Sunucuyu küçültmeyin (4GB altı önerilmez).
 7. **Rollback.** Image'lar `latest` yerine git SHA ile etiketlenecek (`docker tag`, registry
    gerekmeden, salt SSH komutlarıyla) — bozuk bir deploy'da bir önceki SHA'ya dönülebilsin.
    **Sınır, açıkça yazılacak:** bu SADECE kod/image seviyesinde geri dönüş sağlar; Flyway
    migration'ları geriye alınmıyor (bu projede hiç yapılmadı) — bir deploy şema değişikliği
    içeriyorsa rollback'in kapsamı ona göre daralır. Runbook'un **son** bölümü.
-8. **İzleme — faz başlığında vardı, maddelerde yoktu.** Minimum üçlü: `/actuator/health` için
-   dış ping (UptimeRobot, zaten "Önerilen kurulum" tablosunda vardı), disk doluluk uyarısı,
-   ve yedekleme cron'u için **dead-man's switch** (healthchecks.io'nun cron-izleme özelliği —
-   cron başarıyla bitince ping atar, ping gelmezse alarm verir; sessizce durmuş bir yedekleme,
-   hiç olmayandan daha kötü çünkü "var" sanılır).
+8. **İzleme — faz başlığında vardı, maddelerde yoktu. Hedef netleştirildi: `/`'i DEĞİL,
+   `/actuator/health`'i izle.** İlk önerilen "uptime monitor `/`'a pinglesin" tasarımı YANLIŞ
+   olurdu — Caddy ayakta olduğu sürece statik `index.html` her zaman 200 döner, backend/Postgres
+   tamamen ölü olsa bile. Canlı doğrulandı: Postgres durdurulup `/actuator/health` denendiğinde
+   **503** ve `{"status":"DOWN"}` döndü (Spring'in health aggregator'ı `show-details=never`
+   olsa bile HTTP durum kodunu DB indicator'ına göre veriyor — body'de detay yok ama status code
+   zaten yeterli sinyal); Postgres geri gelince tekrar 200/UP'a döndü. Bu yüzden monitor'ün
+   **kesinlikle `/actuator/health`'i** hedeflemesi gerekiyor, madde 11'deki karar bunu zorunlu
+   kılıyor (health dışarı kapalıysa bu izleme deseni de kurulamaz). Minimum üçlü: bu health
+   ping'i (UptimeRobot, zaten "Önerilen kurulum" tablosunda vardı), disk doluluk uyarısı, ve
+   yedekleme cron'u için **dead-man's switch** (healthchecks.io'nun cron-izleme özelliği — cron
+   başarıyla bitince ping atar, ping gelmezse alarm verir; sessizce durmuş bir yedekleme, hiç
+   olmayandan daha kötü çünkü "var" sanılır). Yukarıdaki B maddesindeki crash-loop senaryosu da
+   TAM OLARAK bu health-ping ile yakalanır.
 9. **Timezone — canlı test edildi, sorun YOK.** Container'ın OS saati UTC (jammy'nin varsayılanı,
    doğrulandı) ama `TimeConfig`'teki `Clock.system(ZoneId.of("Europe/Istanbul"))` + `TimeZone.
    setDefault(...)` bunu JVM seviyesinde geçersiz kılıyor — container OS'unun TZ'si Java
@@ -615,18 +654,29 @@ adımda "muhtemelen çalışır" cümlesi yok.
     sunucuya taşınmıyor — `openssl rand -base64 32` (JWT) ve benzeri komutlarla sunucuda taze
     üretilip `.env`'e yazılıyor (`chmod 600`). Komutlar RUNBOOK.md'de.
 
-#### Karar: `/actuator/health` dışarıya açık kalsın mı?
+#### Karar: `/actuator/health` dışarıya açık kalsın mı? — ✅ ONAYLANDI, açık kalacak
 
-Bilinçli karar bekleyen açık madde (unutkanlıkla değil):
 - **Açık bırakmanın artısı:** dış bir uptime-monitor (UptimeRobot/healthchecks.io) periyodik
   ping atıp düşüşü mail ile bildirebilir — Docker'ın kendi `HEALTHCHECK`'i sadece container
   içinden çalışıyor, dışarıdan "site tamamen erişilemez" durumunu (ör. Caddy'nin kendisi
   çökerse) YAKALAYAMAZ.
-- **Artısı olmayan taraf:** Docker'ın kendi `HEALTHCHECK`'i zaten container içi liveness'ı
-  karşılıyor; risk zaten düşük (`show-details` hiç ayarlanmamış, yanıt sadece `{"status":"UP"}`,
-  DB/disk detayı hiç sızmıyor, defalarca canlı doğrulandı).
-- **Öneri:** açık bırakmak (risk düşük, dış izleme faydası gerçek) — ama bu senin kararın,
-  RUNBOOK.md'de "onaylıyorum" diye işaretlenecek bir adım olarak duruyor.
+- **Artısı olmayan taraf:** risk zaten düşük (`show-details` hiç ayarlanmamış, body detayı hiç
+  sızmıyor). Ama bu ayrıntı önemli: `show-details=never` sadece GÖVDEYİ (`components` alanını)
+  gizliyor — **HTTP durum kodu yine de DB durumuna göre değişiyor** (canlı doğrulandı: Postgres
+  durunca `/actuator/health` **503** + `{"status":"DOWN"}` döndü). Yani dışarı açık health,
+  izlemenin gerçek anlamda işe yaraması için ZORUNLU — kapalı olsaydı dış monitor'ün DB'nin
+  çöktüğünü fark etmesinin bir yolu kalmazdı.
+- **Karar: açık kalıyor.** Madde 8'deki izleme, doğrudan bu health endpoint'ini hedefleyecek.
+
+#### Not (bloklayıcı değil) — `InMemoryRateLimiter`'ın ölçek sınırı
+
+`InMemoryRateLimiter` (Faz 3.5) her deploy'da (container yeniden başladığında) sayaçları
+sıfırlıyor ve **birden fazla backend instance'ı olursa tamamen bozuluyor** (her instance kendi
+belleğinde ayrı sayıyor — saldırgan farklı instance'lara denk gelerek limiti aşabilir). Beta
+ölçeğinde (tek instance, tek sunucu) sorun değil — ama sistem ölçeklenip ikinci bir backend
+instance'ı eklenirse bu **sessizce** işe yaramaz hale gelir, sürpriz olmasın diye buraya not
+düşülüyor. O noktada `RateLimitPort` arayüzü sayesinde Redis'e geçiş tek implementasyon
+değişikliği (aynı `BusinessPhotoStorage`/S3 deseni).
 
 ### 3.9 — KVKK ve hukuki metinler `[SEN]`
 Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.

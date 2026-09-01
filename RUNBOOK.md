@@ -28,6 +28,23 @@ kanıtı görmeden işaretleme.
 - **3.8b** (bu dosyanın "Bölüm B"si) — yedekleme, restore provası, izleme. **3.8a tamamen
   bitmeden ve doğrulama turu geçmeden başlanmaz.**
 
+## Ön koşul — 3.8a başlamadan ÖNCE kapatılmış iki soru
+
+Bunlar runbook'a değil, buraya yazılıyor çünkü zaten canlı kanıtla kapatıldı — sunucuda tekrar
+denemene gerek yok, ama NEDEN güvenle ilerleyebildiğimizi bilmen için:
+
+1. **`DatabaseSeeder` prod'da hiç çalışmaz.** `@Profile("dev")` ile sınırlı — tamamen taze bir
+   `SPRING_PROFILES_ACTIVE=prod` stack'inde `psql` ile doğrudan `users`/`businesses` tabloları
+   sorgulandı, ikisi de 0 satır. Beta'ya davet edeceğin işletme uygulamayı ilk açtığında sahte
+   Istanbul işletmeleri GÖRMEYECEK.
+2. **Flyway migration ortada patlarsa şema yarım kalmıyor, ama sessiz kalırsa fark edilmez.**
+   Bilerek bozuk bir migration ile test edildi: Postgres DDL transactional olduğu için başarısız
+   migration tam olarak geri alınıyor (`Changes successfully rolled back`), şema hiçbir zaman
+   yarım/bozuk durumda kalmıyor. Ama uygulama context'i başlatamayıp çöküyor, `restart:
+   unless-stopped` onu tekrar tekrar deniyor — **gerçek bir crash-loop** (canlı gözlemlendi).
+   Bunun sessizce sürmemesi TAMAMEN A9'daki `/actuator/health` izlemesine bağlı — bu yüzden
+   izleme (Bölüm B) atlanabilir bir "sonra yaparım" maddesi değil.
+
 ---
 
 # BÖLÜM A — Sunucu kurulumu, sertleştirme, DNS, ilk deploy
@@ -47,16 +64,26 @@ Bu makinede ölçülen gerçek çalışma-zamanı bellek kullanımı (üç servi
 
 4 GB'lık bir sunucuda çalışma zamanı için bolca yer var. Asıl belirsizlik **build anı**: Maven
 (`mvn package`) ve Node/Vite (`npm run build`) aynı `docker compose build` çağrısında sırayla
-çalışıyor, ikisi de geçici bellek sıçraması yapabilir — bu, `docker stats`'ın yakalayamadığı
-geçici BuildKit süreçleri olduğu için bu oturumda ölçülemedi.
+çalışıyor, ikisi de geçici bellek sıçraması yapabilir.
+
+**Bu, bu makinede ÖLÇÜLMEYE ÇALIŞILDI ve ölçülemedi — tahmin değil, başarısız bir ölçüm
+girişimi.** Maven'in gerçekten derlediği (log'da "Compiling 131 source files" görülen) pencerede
+`docker stats` ve `docker ps -a` saniyede bir, 40 saniye boyunca kontrol edildi — hiçbir build
+container'ı hiçbir zaman listede görünmedi. Bu Docker Desktop kurulumunda BuildKit'in build
+süreci host'un container listesine hiç yansımıyor; bu yüzden gerçek tepe bellek değeri
+**sadece sunucuda** ölçülebilir — aşağıda A8'de bunun için bir adım var, **atlama, sonucu bu
+dosyaya geri yaz.**
 
 Bu proje ölçeğinde (tek Spring Boot uygulaması, tek React SPA — 131 Java kaynak dosyası, 152
-frontend modülü, ~558 KB'lık tek bir JS bundle) build'in 1-2 GB'ı aşması beklenmez, ama **build
-sunucuda yapılacağı** (CI/registry altyapısı yok, kurmak bu ölçekte orantısız karmaşıklık olurdu)
-için ucuz bir sigorta gerekiyor: **2 GB swap dosyası zorunlu** (aşağıda A2). Bunu atlama.
+frontend modülü, ~558 KB'lık tek bir JS bundle) build'in 1-2 GB'ı aşması beklenmez, ama gerçek
+sayı ölçülene kadar bu bir varsayım. **Build sunucuda yapılacağı** (CI/registry altyapısı yok,
+kurmak bu ölçekte orantısız karmaşıklık olurdu) için ucuz bir sigorta gerekiyor: **2 GB swap
+dosyası zorunlu** (aşağıda A1.7). Bunu atlama.
 
 Sunucuyu bundan küçük almayı düşünüyorsan durup tekrar konuşalım — 4 GB + swap altına inmek bu
 planın varsayımlarını geçersiz kılar.
+
+**Ölçülen gerçek build tepe değeri (A8'den sonra buraya yaz):** `___ MB` (henüz ölçülmedi)
 
 ## A1. İlk bağlantı ve sertleştirme
 
@@ -147,11 +174,24 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker deploy
+sudo systemctl enable docker
 ```
+
+`systemctl enable docker` OLMADAN, A6'daki `restart: unless-stopped` hiçbir işe yaramaz — reboot
+sonrası Docker DAEMON'unun kendisi kalkmazsa, container'ların restart politikası devreye hiç
+girmez. Çoğu dağıtımda Docker paketleri bunu zaten varsayılan yapar ama elle doğrula.
+
+**`deploy` kullanıcısı `docker` grubunda — bunun pratik anlamını bil:** `docker` grubu üyeliği,
+pratikte root'a EŞDEĞERDİR (bir container'ı host'un kök dizinini mount ederek çalıştırıp oradan
+host dosya sistemine tam erişim sağlamak mümkün). Bu, `deploy` kullanıcısını sudo'suz "güvenli"
+bir kullanıcı gibi görmemen gerektiği anlamına geliyor — A1'deki SSH sertleştirmesi (key-only,
+root login kapalı) bu yüzden gerçek bir güvenlik sınırı, "docker grubu = sudo değil" yanılgısı
+değil.
 
 Bu adımdan sonra **çıkış yapıp tekrar SSH ile bağlan** (grup üyeliğinin geçmesi için).
 
 **Kanıt:** `docker run hello-world` → "Hello from Docker!" mesajı, `sudo` olmadan çalışmalı.
+`systemctl is-enabled docker` → `enabled` dönmeli.
 
 ## A3. DNS — Caddy'nin ACME denemesinden ÖNCE
 
@@ -202,8 +242,10 @@ göründüğünden emin ol.
 cat .env
 ```
 → `JWT_SECRET` ve `POSTGRES_PASSWORD` rastgele karakter dizileri olmalı, **dev'deki
-`xmcU1nTSzObx7z9SDUvOZxEGVSyE...` değeri OLMAMALI**. `ls -la .env` → izin `-rw-------` (600)
-olmalı.
+`xmcU1nTSzObx7z9SDUvOZxEGVSyE...` değeri OLMAMALI**. `ls -la .env` → izin `-rw-------` (600),
+**sahip `deploy` kullanıcısı olmalı** (root değil — `git clone`'u `deploy` kullanıcısıyla
+yaptıysan bu zaten doğru çıkar, ama `sudo` ile herhangi bir adım atladıysan sahiplik root'a
+kayabilir, kontrol et).
 
 ## A6. `restart: unless-stopped` — kontrol et, eksikse ekle
 
@@ -246,16 +288,43 @@ görünür ama mekanizmanın çalıştığını kanıtlamak için yeterli.
 }
 ```
 
+**Bu build, gerçek tepe bellek ölçümünü yapacağın build — atlamadan önce ikinci bir terminal aç**
+ve `docker compose build`'i başlatmadan hemen önce orada şunu çalıştır:
+
+```bash
+while true; do date; free -m; echo "---"; sleep 1; done | tee ~/build-memory-log.txt
+```
+
+Sonra ilk terminalde:
+
 ```bash
 docker compose build
 docker compose up -d
 ```
 
-`docker compose build` birkaç dakika sürebilir (Maven + Node) — bu sırada başka bir terminalden
-`free -h`'ı izlemek istersen swap'ın devreye girip girmediğini görürsün, bu normal.
+Build bitince ikinci terminaldeki döngüyü `Ctrl+C` ile durdur.
+`grep -A 2 "Mem:" ~/build-memory-log.txt | sort -k3 -n -r | head -5` ile en yüksek `used` değerini
+bul — bu, A0'daki "Ölçülen gerçek build tepe değeri" satırına yazılacak sayı. **Bu adımı atlama**
+— A0'da açıkça işaretlendiği gibi bu proje ölçeğinde bu değer yerelde hiç ölçülemedi, tek fırsat
+burası.
 
 **Kanıt:** `docker compose ps` → üç servis de `Up` (backend ve caddy `healthy` durumunda,
-postgres'in kendi healthcheck'i zaten var).
+postgres'in kendi healthcheck'i zaten var). Build sırasında ölçülen tepe `used` değeri, sunucunun
+toplam RAM'inin (4096 MB) altında kalmalı — swap'a taşmış olması (yani `Swap:` satırındaki
+`used` değerinin 0'dan büyük çıkması) tek başına felaket değil ama "ne kadar yakın gittiğimizi"
+gösterir, not al.
+
+## A8.1 — Disk temizliği (her build'den sonra rutin)
+
+Build cache ve eski (dangling) image'lar aylar içinde 40 GB'lık diski doldurabilir — disk
+uyarısına (Bölüm B) güvenip bunu ihmal etme, her deploy'un sonuna ekle:
+
+```bash
+docker image prune -f
+```
+
+**Kanıt:** `docker system df` → `Images` satırındaki `RECLAIMABLE` sütunu düşük kalmalı,
+zamanla büyümemeli.
 
 ## A9. Doğrulama turu
 
@@ -344,12 +413,16 @@ docker compose up -d caddy
 yeşil/normal, sertifika veren "Let's Encrypt" (tarayıcının sertifika detayından kontrol
 edilebilir).
 
-## A11. Karar: `/actuator/health` dışarıda kalsın mı?
+## A11. Karar: `/actuator/health` dışarıda kalsın mı? — ✅ ONAYLANDI, açık kalıyor
 
-- [ ] **Onaylıyorum, açık kalsın** — dış uptime-monitor (aşağıda 3.8b) buna ping atacak.
-- [ ] **Hayır, kapatıyorum** — `management.endpoints.web.exposure.include=health` satırını
-  kaldır, Caddyfile'daki `/actuator` handle bloğundan health de dahil her şey default-deny'e
-  düşer, izleme başka bir yolla (ör. Docker healthcheck'i harici bir script'le okuma) kurulur.
+Gerekçe: `show-details=never` sadece gövdeyi (`components`) gizliyor, HTTP durum kodu yine de
+DB durumuna göre değişiyor — canlı doğrulandı, Postgres durdurulunca `/actuator/health` **503**
++ `{"status":"DOWN"}` döndü. Dışarı kapalı olsaydı dış bir monitor'ün bunu fark etmesinin yolu
+kalmazdı. Bölüm B'deki uptime monitor bu endpoint'i hedefleyecek — `/` (statik ana sayfa) DEĞİL,
+çünkü Caddy ayakta kaldığı sürece `/` backend/Postgres tamamen ölse bile 200 döner.
+
+- [ ] Uptime monitor (UptimeRobot/healthchecks.io) `https://randevum.com/actuator/health`'e
+  kuruldu (Bölüm B5) — `/` DEĞİL.
 
 **3.8a burada biter.** Yukarıdaki her kutucuk işaretlenmeden 3.8b'ye geçilmez.
 
@@ -387,19 +460,28 @@ sağlayıcının kendi sorunu) yedek de ölür — bu bir yedek değil, yanılsa
 
 ## B4. Kabul kriteri — "script yazıldı" YETERLİ DEĞİL
 
-Bu madde şu ADIM fiilen yapılıp kanıtlanmadan işaretlenmeyecek:
+Bu madde şu ADIM fiilen yapılıp kanıtlanmadan işaretlenmeyecek. **Restore, canlı sistemin
+ÜZERİNE değil, tamamen AYRI bir stack'e yapılır** (yeni bir geçici VPS, ya da en azından bu
+sunucuda farklı bir dizin + farklı Docker Compose proje adıyla ayrı volume'lar) — amaç "elimizde
+gerçekten bağımsız çalışan bir yedek var mı" sorusuna cevap vermek, mevcut prod'u riske atmadan.
 
 - [ ] Test verisiyle gerçek bir randevu + gerçek bir işletme fotoğrafı oluştur.
 - [ ] Yedek scriptini elle bir kez çalıştır, R2'ye gerçekten yüklendiğini gör.
-- [ ] **Ayrı, boş bir stack'e** (yeni bir VPS'e ya da aynı sunucuda volume'ları tamamen silip
-  sıfırdan) o yedeği geri yükle.
+- [ ] **Saat tut** (`date` komutuyla başlangıç/bitiş): ayrı, boş bir stack'e o yedeği geri
+  yükle — sıfırdan container ayağa kaldırmaktan, `pg_dump` restore'undan, foto volume'unu
+  doldurmaktan, uygulamanın erişilebilir hâle gelmesine kadar geçen SÜREYİ ölç.
 - [ ] **Kanıt:** restore edilen sistemde o randevu VE o fotoğraf görünüyor mu? İkisi de
   görünmeden bu madde kapanmaz.
+- [ ] **Ölçülen restore süresi buraya yazılacak:** `___ dakika`. "Yedek restore edilebiliyor"
+  yeterli değil — gerçek bir kesinti anında "ne kadar sürede ayağa kaldırabiliyorum" bilgisi
+  olmadan bu sayı bir işe yaramaz.
 
-## B5. İzleme — minimum üçlü
+## B5. İzleme — minimum üçlü, hedefi NET
 
-- [ ] UptimeRobot/healthchecks.io: `/actuator/health`'e (ya da A11'de kapatıldıysa alternatif
-  bir mekanizmaya) 5 dakikada bir ping, düşerse mail.
+- [ ] UptimeRobot/healthchecks.io: **`https://randevum.com/actuator/health`**'e (A11'de karar
+  verildi, açık kalıyor) 5 dakikada bir ping, düşerse mail. **`/` DEĞİL** — Caddy ayakta olduğu
+  sürece statik ana sayfa, backend/Postgres tamamen ölse bile 200 döner; bunu `/`'a kurarsan
+  günlerce "her şey yolunda" maili alıp uygulamanın çöktüğünü bir müşteriden öğrenirsin.
 - [ ] Disk doluluk uyarısı — basit bir cron + `df` eşiği + mail, ya da sağlayıcının kendi paneli.
 - [ ] B3'teki dead-man's switch aktif ve en az bir kez gerçek bir alarmla (kasıtlı olarak cron'u
   durdurup) test edilmiş olmalı.
