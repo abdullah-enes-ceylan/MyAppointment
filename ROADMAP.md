@@ -400,11 +400,11 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
   turda ayrica canli yakalanan bir surum-spesifik hata: **Postgres 18+ imaji artik
   `/var/lib/postgresql/data` DEGIL `/var/lib/postgresql`'in kendisine mount bekliyor** (eski
   konvansiyonla container "unused mount/volume" hatasiyla acilista cikti).
-- **`business-photo-storage` volume karari: bind mount** (named volume degil) — tek sunucu
-  varsayimiyla tutarli, host'ta gercek bir klasor olmasi manuel yedeklemeyi kolaylastiriyor. BU
-  KARAR CLAUDE.md'deki asil riski (deploy platformunun host diskinin kalici olup olmadigi)
-  COZMUYOR, sadece container'in ephemeral dosya sistemiyle host diski arasinda kopru kuruyor —
-  platform karari hala Faz 3.8'in isi.
+- **`business-photo-storage` volume karari: named volume** ("gozle gorulebilir olsun" diye
+  ONCE bind mount seciliydi, canli test sonrasi bu karar TERSINE cevrildi — asagida "dorduncu
+  gecis"e bakiniz, gerekce ve kanit orada). BU KARAR CLAUDE.md'deki asil riski (deploy
+  platformunun host diskinin kalici olup olmadigi) COZMUYOR, sadece container'in ephemeral
+  dosya sistemiyle host diski arasinda kopru kuruyor — platform karari hala Faz 3.8'in isi.
 - **Sir sizintisi canli dogrulandi** — "ignore ettim, herhalde girmedi" degil: build edilen
   image'in icinde `find`/`grep` ile `application-dev.properties`, `.env`, `.git`, gercek dev
   sifresi/JWT secret'i ARANDI, bulunamadi. Tek bulunan sey zararsiz `application-dev.properties.example`
@@ -520,14 +520,43 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
 - **`TempRemoteAddrController.java`'nın hiçbir commit'e girmediği doğrulandı** —
   `git log --all --full-history` ile sıfır sonuç, `git show --stat HEAD` dosya listesinde de yok.
 
+**Dördüncü geçiş — bir önceki raporun kendi kendini ele veren bir cümlesi + gerçek stored-XSS
+riski (2026-09-01):**
+- **"Bind mount, Postgres'inkiyle aynı sınıf koruma" cümlesi YANLIŞTI — düzeltildi, karar
+  tersine çevrildi.** Postgres named volume kullanıyordu, `business-photo-storage` bind mount'tu
+  — ikisi aynı şey değil. Gerçek risk: taze bir Linux sunucuda host'ta önceden `business-photo-
+  storage` klasörü yoksa Docker onu **root:root** olarak oluşturur, `appuser` (UID 1000) yazamaz
+  → ilk fotoğraf yüklemesi `Permission denied`. **Bu, Postgres 5432 yanılgısıyla BİREBİR AYNI
+  desendi**: Windows/Docker Desktop'ta host dosya izinleri container'a gerçek anlamda
+  yansımadığı için sorun hiç görünmedi, gerçek Linux sunucuda ortaya çıkardı. Named volume'a
+  geçilerek kapatıldı (yukarıdaki "volume kararı" maddesine bakınız) — canlı test edildi: taze
+  bir named volume, image'da zaten `chown`'lanmış `/app/business-photo-storage` yolundan
+  sahipliği otomatik alıyor, appuser hiçbir manuel adım olmadan yazabiliyor. Aynı stack üzerinde
+  gerçek foto yükleyip `down && up` sonrası hâlâ servis edildiği ayrıca doğrulandı.
+- **`.gitignore`/`.dockerignore` kontrolü** — `/business-photo-storage/` ikisinde de zaten
+  vardı (bu, yerel `mvnw spring-boot:run` ile Docker'sız geliştirmede hâlâ kullanılan gerçek
+  host klasörü için önemini koruyor; named volume kararı sadece docker-compose'un kullandığı
+  depolamayı değiştiriyor).
+- **Same-origin + kullanıcı dosyası yüklemesi = yeni bir stored-XSS yüzeyi sorusu — kontrol
+  edildi, zaten kapalıydı.** `BusinessPhotoService.validateAndGetWidth`, istemcinin
+  Content-Type/uzantı iddiasına HİÇ bakmıyor — `ImageIO.getImageReaders` dosyanın kendi
+  baytlarına (magic bytes) bakıyor, JDK'nın okuyucuları SVG/HTML'yi hiç tanımadığı için ikisi de
+  reddediliyor. Ayrıca (planda vardı, kontrol edildi) her yükleme `Thumbnails.outputFormat("jpg")`
+  ile SIFIRDAN yeniden çiziliyor ve servis eden uç Content-Type'ı sabit `MediaType.IMAGE_JPEG`
+  dönüyor — orijinal baytlar hiç saklanmıyor/servis edilmiyor. **Canlı doğrulandı:** hem gerçek
+  bir `<script>` içeren SVG hem aynı dosyanın `.jpg` uzantısıyla gönderilen hâli, ikisi de 409
+  "Desteklenmeyen veya bozuk görsel dosyası" ile reddedildi. Bu maddeye kod yazmaya gerek
+  kalmadı, zaten doğru kurulmuştu — sadece canlı kanıtla teyit edildi.
+
 ### 3.8 — Deploy, yedekleme, izleme `[DevOps]` `[SEN]`
 Detaylar aşağıdaki bölümde.
-- [ ] **`business-photo-storage` host klasörü izinleri** — Faz 3.7'de Windows + Docker Desktop'ta
-  test edilemedi (host klasörü Unix UID semantiği taşımıyor). Deploy günü, sunucuda: host'ta
-  `mkdir -p business-photo-storage && chown 1000:1000 business-photo-storage` çalıştırılıp
-  **gerçek bir foto yüklenip container'ın (appuser, UID 1000) diske gerçekten yazabildiği
-  canlı doğrulanmalı** — sadece komutu çalıştırmak yetmez, yükleme denenmeden bu madde
-  işaretlenmemeli.
+- [x] **`business-photo-storage` izin sorunu — kapandı, madde artık gerekmiyor.** ~~Bind mount +
+  elle `chown 1000:1000`~~ yerine **named volume**'a geçildi (bkz. Faz 3.7 "üçüncü geçiş").
+  Canlı test edildi: Docker, boş bir named volume'u ilk mount'ta image'daki (Dockerfile'ın zaten
+  `chown` ettiği) `/app/business-photo-storage` yolunun sahipliğinden dolduruyor — appuser hiçbir
+  manuel adım olmadan yazabiliyor. Sunucuda unutulabilecek bir `chown` adımına artık gerek yok.
+  **Yeni sonuç:** yedekleme artık doğrudan `rsync`/`cd` ile değil, volume'u mount eden küçük bir
+  yardımcı container üzerinden yapılmalı (aşağıdaki DB yedekleme maddesiyle birlikte kurulacak).
 - **Storage adaptörü kararı** (kalıcı disk volume mu, S3/R2 mi) — CLAUDE.md'deki bilinen risk:
   deploy platformunun disk sistemi kalıcı değilse (bazı PaaS'lerde ephemeral disk) tüm işletme
   fotoğrafları sessizce kaybolur, uygulama hata vermez. `BusinessPhotoStorage` arayüzü sayesinde
@@ -535,7 +564,11 @@ Detaylar aşağıdaki bölümde.
   edilirse veri kaybı geri getirilemez.
 - **DB yedekleme, gerçek kullanıcı verisi girmeden ÖNCE kurulu ve en az bir kez geri yükleyerek
   test edilmiş olmalı** (bkz. Dikkat edilecekler → Yedekleme). Beta'nın ilk gününden itibaren
-  gerçek müşteri/randevu verisi işlenmeye başlıyor — "sonra kurarım" diye ertelenemez.
+  gerçek müşteri/randevu verisi işlenmeye başlıyor — "sonra kurarım" diye ertelenemez. **Kapsam:
+  sadece `pg_dump` değil, `business_photo_storage` named volume'u da yedeğe dahil olmalı** —
+  şu an (Faz 3.7 itibarıyla) hiçbir yedekleme scripti/cron'u henüz YAZILMADI (`pg_dump`/`rclone`
+  şimdiye kadar sadece bu dosyadaki bir plandı, gerçek bir iş değil) — o yazılırken foto dizini
+  unutulursa, DB restore ettiğinde kırık resim linkleriyle karşılaşırsın.
 - **Rate limiting'in gerçek istemci IP'sini gördüğünün doğrulanması** (bkz. Faz 3.5'teki risk
   notu) — deploy sonrası ilk kontrollerden biri, **farklı cihazlardan** gelen isteklerin
   sunucu loglarında **farklı IP** olarak göründüğünü teyit etmek olmalı. Doğrulanmazsa, Caddy

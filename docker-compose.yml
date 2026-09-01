@@ -57,21 +57,35 @@ services:
     expose:
       - "8080"
     volumes:
-      # Bind mount -- named volume degil: tek sunucu varsayimiyla ilerliyoruz
-      # (bkz. CLAUDE.md, rate limiting "tek instance" karari ile ayni mantik),
-      # host'ta gercek bir klasor olmasi manuel yedeklemeyi (rsync/tar) ve
-      # "bu veri nerede duruyor" sorusunu gozle cevaplanabilir kiliyor. BU
-      # KARAR CLAUDE.md'deki asil riski (deploy platformunun host diskinin
-      # kalici olup olmadigi) COZMUYOR -- sadece container'in kendi ephemeral
-      # dosya sistemi ile host diski arasinda bir kopru kuruyor. Platform
-      # karari hala Faz 3.8'in isi.
+      # ONCE bind mount olarak yazilmisti, canli test sonrasi named volume'a
+      # CEVRILDI -- bu bir duzeltme, ikisi "ayni sinif koruma" degildi.
+      # Bind mount'ta host'taki ./business-photo-storage klasoru appuser'in
+      # UID'siyle (1000, bkz. Dockerfile) uyumlu olmazsa yazma "Permission
+      # denied" ile patlar; taze bir Linux sunucuda Docker bu klasoru
+      # root:root olarak olusturur, appuser asla yazamaz. Bu HATA WINDOWS'TA
+      # HIC GORUNMEZ (Docker Desktop'ta host FS izinleri container'a ayni
+      # sekilde yansimiyor) -- tipki Postgres 5432 yanilgisindaki gibi, temiz
+      # gorunen bir test kirli bir ortam yuzunden gercegi gizliyordu.
       #
-      # ONEMLI: host'taki ./business-photo-storage klasoru, container'daki
-      # appuser'in UID'siyle (1000, bkz. Dockerfile) uyumlu olmali yoksa
-      # yazma "Permission denied" ile patlar -- linux host'ta ilk kurulumda
-      # `mkdir -p business-photo-storage && chown 1000:1000 business-photo-storage`
-      # calistirilmali (Faz 3.8 kurulum adimina yazilacak).
-      - ./backend/business-photo-storage:/app/business-photo-storage
+      # Named volume'a gecince bu sinif hata TAMAMEN ortadan kalkiyor: canli
+      # test edildi -- Docker, BOS bir named volume'u ilk mount'ta o path'teki
+      # (image'da Dockerfile'in RUN chown ile zaten appuser'a verdigi
+      # /app/business-photo-storage) mevcut icerik/izinlerden dolduruyor.
+      # Hicbir manuel chown olmadan appuser hemen yazabiliyor -- host
+      # dizininin sunucuda dogru hazirlanmasini "unutmayiz" diye umut etmeye
+      # gerek kalmiyor.
+      #
+      # Bedeli: veri artik ./backend altinda gozle gorulebilir bir klasor
+      # DEGIL, Docker'in kendi yonettigi depolama (host'ta genelde
+      # /var/lib/docker/volumes/<isim>/_data, `docker volume inspect` ile
+      # bulunur). Yedekleme buna gore: dogrudan rsync degil, kucuk bir
+      # yardimci container'in volume'u mount edip disariya kopyalamasi
+      # gerekiyor (Faz 3.8, pg_dump/rclone job'iyla birlikte kurulacak).
+      #
+      # BU KARAR CLAUDE.md'deki asil riski (deploy platformunun host
+      # diskinin kalici olup olmadigi) COZMUYOR -- named volume da sonunda
+      # host diskine yaziyor, platform karari hala Faz 3.8'in isi.
+      - business_photo_storage:/app/business-photo-storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -128,3 +142,4 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  business_photo_storage:
