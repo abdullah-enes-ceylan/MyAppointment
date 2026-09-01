@@ -713,8 +713,8 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
 - Aydınlatma metni, açık rıza akışı, gizlilik politikası, kullanım şartları
 - VERBİS kayıt yükümlülüğü eşiğini kontrol et
 - İşletmelerle veri işleyen sözleşmesi (sen veri sorumlususun, işletme de öyle)
-- **Hesap ve veri silme akışı (unutulma hakkı) — sadece `USER` (müşteri) için, plan hazır,
-  onay bekliyor. `BUSINESS_OWNER` silme akışı ayrı, sonraki bir plan (aşağıda not).**
+- **Hesap ve veri silme akışı (unutulma hakkı) — `USER` VE `BUSINESS_OWNER` için, ikisi de
+  plan hazır, onay bekliyor.**
 
   **Tespit edilen teknik kısıt:** Hiçbir migration'da `ON DELETE CASCADE`/`SET NULL` yok — hepsi
   düz `REFERENCES` (Postgres varsayılanı `RESTRICT`). Yani randevusu/favorisi olan bir
@@ -731,8 +731,9 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
   "Düzeltme" notuna bakınız, önceki taslak hesabı anında kilitliyordu, bu geri dönüşü
   imkansız kılardı.**
   1. `DELETE /api/users/me` — şifre tekrar istenir (geri alınamaz bir işlem, ele geçirilmiş bir
-     oturumla tetiklenmesin). Sadece `Role.USER` — `BUSINESS_OWNER`/`ADMIN` isteği reddedilir
-     ("işletme hesapları için ayrı bir akış geliyor").
+     oturumla tetiklenmesin). `Role.USER` için akış budur; `Role.BUSINESS_OWNER` için AYNI uç,
+     aşağıdaki ek adımlarla birlikte çalışır (bkz. "BUSINESS_OWNER silme akışı"). `Role.ADMIN`
+     isteği reddedilir — operatör hesapları self-servis silinmiyor.
   2. `User.deletionRequestedAt = now()` yazılır (yeni alan). **Bunun DIŞINDA hiçbir şey
      değişmez** — giriş kapanmıyor, randevular iptal edilmiyor, hesap normal çalışmaya devam
      ediyor. Giriş yapınca ekranda "Hesabınız [tarih]'te silinecek — İptal Et" bandı görünür.
@@ -803,9 +804,67 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
     sütun olarak tutulduğunu doğruluyor — "kim anonimleşmiş" sorusunu restore sonrası tekrar
     sormak için gereken tek bilgi bu.
 
-  **`BUSINESS_OWNER` silme akışı — bilerek bu planın dışında.** Kapsamı çok daha büyük: kendi
-  işletmeleri, o işletmelere ait randevular/personel/hizmetler, müşterilerin yazdığı yorumlar.
-  Bu plan onaylanıp yazıldıktan sonra ayrı bir plan olarak hazırlanıp buraya eklenecek.
+  **`BUSINESS_OWNER` silme akışı — plan hazır, onay bekliyor.**
+
+  **Veri modeli tespiti.** `Business.owner` `@ManyToOne` — **bir sahip N işletme
+  yönetebiliyor** (`BusinessRepository.findByOwnerId` → `List<Business>`, CLAUDE.md karar
+  tablosuyla tutarlı). `Staff` ve `ServiceItem` doğrudan `Business`'a bağlı (`business_id`),
+  `User`'a değil — `Staff`'ın kendi `name` alanı var, sisteme hiç kayıtlı bir kullanıcı değil
+  (bir berber dükkânındaki çalışan, platformun kendi hesabı olmak zorunda değil). **Bu yüzden
+  personel kayıtlarına HİÇ dokunulmuyor** — sahibin kendi hesap silme isteğiyle ilgisizler.
+  `Business.serviceItems`'ta Hibernate seviyesinde `cascade=ALL` var ama DB'deki gerçek FK
+  (`appointments.service_id REFERENCES service_items`) yine düz `RESTRICT` — yani randevu
+  geçmişi olan bir işletme de, `User` gibi, hard-delete edilemez. Aynı kısıt bir seviye
+  yukarıda da geçerli.
+
+  **Randevu zamanlaması — iki ayrı sayaç, ikisi de `AccountDeletionProperties`'e config
+  olarak eklenir (koda gömülmez):**
+  - `app.account-deletion.business-immediate-cancel-window` (varsayılan **3 gün**)
+  - `app.account-deletion.business-decision-window` (varsayılan **2 gün**)
+
+  Bu iki süre, kimlik anonimleştirmesinin 30 günlük `gracePeriod`'undan BİLEREK AYRI ve KISA —
+  randevu iptalinin gerçek dünyada aciliyeti var (müşteri kapalı bir dükkâna gitmemeli), kimlik
+  silmenin yok (30 gün boyunca hesabı "olduğu gibi" bırakma garantisi USER akışıyla aynı kalıyor,
+  sadece randevu kaderleri çok daha erken netleşiyor).
+
+  **Akış:**
+  1. `DELETE /api/users/me` (USER akışıyla AYNI uç, rol bazlı dallanma) — şifre tekrar istenir,
+     `User.deletionRequestedAt = now()` yazılır.
+  2. **Aynı istek içinde, senkron olarak (bekletilmeden):**
+     - Sahibin TÜM işletmeleri (`findByOwnerId`) yeni bir `Business.suspendedAt = now()`
+       alanıyla işaretlenir — arama/listeleme/yeni randevu almadan HEMEN düşerler (kapanacağı
+       belirsiz bir işletmeye yeni müşteri gelmesin). `GET /api/businesses` ve ilgili arama
+       sorgularına `suspendedAt IS NULL` filtresi eklenir.
+     - Bu işletmelere ait, tarihi `now() + 3 gün` içine düşen TÜM randevular (`PENDING` +
+       `APPROVED`) mevcut `AppointmentService.changeStatus(..., Action.CANCEL)` ile
+       `CANCELLED`'a geçirilir. Yeni bir durum icat edilmiyor.
+  3. **`business-decision-window` (2 gün) dolunca** — `AccountDeletionScheduler`'a eklenen
+     yeni bir tik: `deletionRequestedAt` hâlâ dolu (yani iptal edilmemiş) olan
+     `BUSINESS_OWNER`'ların işletmelerindeki KALAN TÜM bitmemiş randevular (`PENDING` +
+     `APPROVED`, tarihi ne olursa olsun) aynı `CANCEL` yoluyla topluca iptal edilir. Doğal
+     olarak idempotent — ikinci bir tick'te sorgu zaten sadece `PENDING`/`APPROVED` aradığı
+     için (bunlar bir önceki tick'te `CANCELLED`'a döndüğü için) tekrar bir şey bulmaz, ayrı
+     bir "yapıldı mı" bayrağı gerekmiyor.
+  4. **`POST /api/users/me/cancel-deletion`** (USER akışıyla AYNI uç) — `deletionRequestedAt`'i
+     temizler VE sahibin işletmelerindeki `suspendedAt`'i de temizler (yeniden listelenirler).
+     **Dürüstçe kabul edilen sınır:** 2. veya 3. adımda ZATEN iptal edilmiş randevular GERİ
+     GELMEZ — o karar geri alınamaz (slot başka birine gitmiş olabilir), sadece hesabın ve
+     işletmenin kendisi normale döner. Bu, USER akışında "iptal edilen randevu geri gelmez"
+     ile aynı, önceden kabul edilmiş maliyet.
+  5. **30. günde (`gracePeriod`, USER akışıyla PAYLAŞILAN aynı süre)** —
+     `AccountDeletionScheduler`'ın mevcut anonimleştirme adımı: `User` satırı (isim/e-posta/
+     telefon/şifre) USER akışındaki AYNI şekilde scrub edilir, giriş kapanır.
+
+  **Açık soru — Business'ın KENDİ alanları da anonimleşsin mi? Karar bekliyor, hukuki bir
+  nüans.** Bir şahıs işletmesinde `Business.phone` sahibin kişisel telefonu OLABİLİR — bu
+  durumda sadece `User` satırını scrub edip `Business.name`/`phone`/`address`'i olduğu gibi
+  bırakmak, sahibin kişisel verisinin bir kısmının kalıcı olarak açık kalması anlamına
+  gelebilir. **Eğilimim: Business'ın kendi alanlarına DOKUNMAMAK** — müşterinin geçmiş
+  randevusunun "hangi işletmede" olduğunu görme hakkı (Review/Appointment'a hiç dokunmama
+  gerekçesiyle aynı mantık) `Business.name`'in kalmasını gerektiriyor, ve `phone`/`address`
+  zaten yeni müşteri alamayan (`suspendedAt` dolu) bir işletme için pratik risk düşük. Ama bu
+  gerçek bir KVKK yorumu gerektiriyor (şahıs işletmesi telefonu = kişisel veri mi, ticari veri
+  mi) — kesin karar sana ait, `[SEN]` etiketinin tam burada anlamı var.
 
 - Log erişim kontrolü ve saklama süresi: kim (hangi rol) sunucu loglarına erişebilir, loglar
   ne kadar süre tutulur, rotasyon/silme politikası var mı. Faz 3.6'da `PiiMasker` ile
