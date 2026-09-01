@@ -713,7 +713,62 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
 - Aydınlatma metni, açık rıza akışı, gizlilik politikası, kullanım şartları
 - VERBİS kayıt yükümlülüğü eşiğini kontrol et
 - İşletmelerle veri işleyen sözleşmesi (sen veri sorumlususun, işletme de öyle)
-- Hesap ve veri silme akışı (unutulma hakkı) — teknik olarak da uygulanmalı
+- **Hesap ve veri silme akışı (unutulma hakkı) — sadece `USER` (müşteri) için, plan hazır,
+  onay bekliyor. `BUSINESS_OWNER` silme akışı ayrı, sonraki bir plan (aşağıda not).**
+
+  **Tespit edilen teknik kısıt:** Hiçbir migration'da `ON DELETE CASCADE`/`SET NULL` yok — hepsi
+  düz `REFERENCES` (Postgres varsayılanı `RESTRICT`). Yani randevusu/favorisi olan bir
+  `users` satırını hard-delete etmek şu an zaten mümkün değil, DB FK ihlaliyle reddediyor.
+  Bu yüzden **hard delete değil, anonimleştirme** — KVKK/GDPR'ın da standart çözümü, hem FK
+  sorununu çözüyor hem işletmenin randevu geçmişi gibi meşru çıkarını koruyor. `ReviewMapper`
+  yorumcu adını HER SEFERİNDE canlı `appointment.getCustomer().getName()`'den okuyor (dondurulmuş
+  kopya değil, kontrol edildi) — User'ın alanları anonimleşince herkese açık yorumlardaki isim
+  de otomatik değişir, ayrı bir kod değişikliği gerekmiyor.
+
+  **Akış — gecikmeli anonimleştirme (bekleme süresi configurable, `application.properties`,
+  varsayılan 30 gün — koda gömülmez, `AppointmentPolicyProperties` deseniyle aynı):**
+  1. `DELETE /api/users/me` — şifre tekrar istenir (geri alınamaz bir işlem, ele geçirilmiş bir
+     oturumla tetiklenmesin). Sadece `Role.USER` — `BUSINESS_OWNER`/`ADMIN` isteği reddedilir
+     ("işletme hesapları için ayrı bir akış geliyor").
+  2. `User.deletionRequestedAt = now()` yazılır (yeni alan). Gerçek anonimleştirme HEMEN
+     olmuyor.
+  3. Spring Security'nin `UserDetails`'ine `enabled=false` bağlanıyor
+     (`deletionRequestedAt != null` iken) — kütüphanenin kendi `DisabledException` mekanizması
+     devreye giriyor, `CustomUserDetailsService`'e elle "silinmiş mi" kontrolü yazmaya gerek
+     kalmıyor. **İstek anında oturum kapanıyor, bekleme süresi kullanıcı için değil sistem
+     için** (ör. bir uyuşmazlık/inceleme penceresi) — bu süre boyunca hesaba tekrar giriş
+     yapıp isteği iptal etme akışı YOK (email kanalı hiç kurulmadığı için "linke tıkla iptal
+     et" gibi bir mekanizma zaten mümkün değil, bkz. Faz 3.4).
+  4. Bu andan itibaren kullanıcının bitmemiş randevuları (`PENDING` + gelecekteki `APPROVED`)
+     mevcut `AppointmentService.changeStatus(..., Action.CANCEL)` yolu ile `CANCELLED`'a
+     geçiriliyor — yeni bir durum icat edilmiyor, zaten var olan mekanizma.
+  5. **`AccountDeletionScheduler`** (yeni, `AppointmentLifecycleScheduler` ile aynı desende) —
+     periyodik olarak `deletionRequestedAt IS NOT NULL AND anonymizedAt IS NULL AND
+     deletionRequestedAt <= now() - gracePeriod` olan kullanıcıları bulup:
+     - `name`/`surName` → "Silinmiş Kullanıcı", `email` → `deleted-user-{id}@deleted.local`
+       (ID kullanmak benzersizliği garanti ediyor, ayrı bir token üretmeye gerek yok),
+       `phone` → placeholder, `password` → rastgele/kullanılamaz bir hash (savunma derinliği —
+       giriş zaten `enabled=false` ile kapalı ama eski gerçek hash'in DB/yedeklerde süresiz
+       durmasının bir anlamı yok).
+     - `User.anonymizedAt = now()` yazılır (işlemin tamamlandığının kaydı).
+     - Favoriler hard-delete edilir (başka hiçbir satır bağımlı değil, saklama değeri yok).
+     - Randevu/yorum/bildirim kayıtlarına DOKUNULMAZ — anonimleşmiş `User` satırına FK ile
+       bağlı kalmaya devam ederler, işletmenin operasyonel geçmişi bozulmaz.
+  6. **Fatura/muhasebe kaydı bu akışın DIŞINDA** — bu uygulama şu an ödeme/fatura işlemiyor,
+     ileride eklenirse o veri ayrı bir saklama kuralına tabi olacak, anonimleştirme ona hiç
+     dokunmayacak.
+
+  **Açık, dürüstçe kabul edilen sınır:** Kullanıcıya silme isteğinin alındığına veya ne zaman
+  kesinleşeceğine dair bir bildirim gönderilemiyor — outbound e-posta/SMS hiç yok (Faz 3.8
+  planlamasında doğrulandı, `NotificationPort`'un iki adaptörü de dışarı ağ çağrısı yapmıyor).
+  Tek geri bildirim, `DELETE` isteği başarılı olduğu anda frontend'in gösterdiği tek seferlik
+  bir ekran mesajı ("Hesabınız silinme sürecine alındı, [tarih]'te kalıcı olarak silinecek")
+  olabilir — bundan sonrası tamamen sessiz.
+
+  **`BUSINESS_OWNER` silme akışı — bilerek bu planın dışında.** Kapsamı çok daha büyük: kendi
+  işletmeleri, o işletmelere ait randevular/personel/hizmetler, müşterilerin yazdığı yorumlar.
+  Bu plan onaylanıp yazıldıktan sonra ayrı bir plan olarak hazırlanıp buraya eklenecek.
+
 - Log erişim kontrolü ve saklama süresi: kim (hangi rol) sunucu loglarına erişebilir, loglar
   ne kadar süre tutulur, rotasyon/silme politikası var mı. Faz 3.6'da `PiiMasker` ile
   bilinen call site'lardaki e-posta sızıntısı kapatıldı (bkz. CLAUDE.md karar tablosu,
