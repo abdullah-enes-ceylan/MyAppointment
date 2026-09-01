@@ -530,13 +530,17 @@ testler için geçici eklenen dosya) hiçbir commit'e girmediği `git log --all 
 kabul kriterlerini takip eder — komut sırası ve "ne görmeliyim" kanıt satırları runbook'ta.
 
 **İki alt faza bölündü, 3.8b'ye 3.8a bitmeden geçilmeyecek:**
-- **3.8a** — sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama turu.
+- **3.8a** — sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama turu + **48 saat
+  kesintisiz stabilite** (elle log/fail2ban incelemesi, tek bir uptime düşüşü yok, restart
+  döngüsü yok — somut kriter listesi RUNBOOK.md'nin sonunda, "Deploy Sonrası İlk 48 Saat").
 - **3.8b** — yedekleme + restore provası + izleme.
 
 Gerekçe: 3.8a olmadan gerçek trafik/veri yok, dolayısıyla yedekleyecek bir şey de yok — sırayı
 tersine çevirmenin (önce yedekleme altyapısı kurup sonra deploy etmek) hiçbir faydası yok, sadece
-kafa karıştırır. 3.8b bitmeden beta onboarding'e (ve dolayısıyla 3.9/3.10/3.11'e) geçilmeyecek —
-gerçek müşteri verisi, yedeği kanıtlanmamış bir sistemde asla işlenmeyecek.
+kafa karıştırır. Ayrıca henüz stabil olmadığı kanıtlanmamış bir sistemin yedeğini almanın bir
+anlamı yok — 48 saatlik gözlem penceresi bu yüzden 3.8b'nin önünde. 3.8b bitmeden beta
+onboarding'e (ve dolayısıyla 3.9/3.10/3.11'e) geçilmeyecek — gerçek müşteri verisi, yedeği
+kanıtlanmamış bir sistemde asla işlenmeyecek.
 
 **Windows/Docker Desktop yerel testlerinin kanıt değeri düşük — bu fazda özellikle önemli.**
 Faz 3.7'de iki kez aynı desen yaşandı: Postgres 5432 host'tan erişilebilir göründü (aslında bu
@@ -546,7 +550,7 @@ runbook'taki her madde ya **canlı sunucuda doğrulanacak** olarak açıkça iş
 doğrulanabilen (ör. `docker compose ps`, timezone testi) gerçek bir kanıtla destekleniyor — hiçbir
 adımda "muhtemelen çalışır" cümlesi yok.
 
-#### Beta öncesi kapanması ZORUNLU iki soru — 3.8a'ya girmeden kapatıldı
+#### Beta öncesi kapanması ZORUNLU üç soru — 3.8a'ya girmeden kapatıldı
 
 **A. `DatabaseSeeder` prod'da çalışır mı? Hayır — canlı, DB'ye doğrudan bakarak kanıtlandı.**
 `@Profile("dev")` class-level anotasyonu var (kontrol edildi) — ama "kod okudum" yeterli
@@ -569,6 +573,15 @@ DB'ye ilk kalkış denendi. Sonuç:
 - **Asıl risk crash-loop'un SESSİZCE sürmesi** — bu yüzden izleme maddesi (aşağıda, madde 8)
   kritik: `/actuator/health`'i izleyen bir uptime-monitor bu durumu ANINDA yakalar (health hiç
   `200` dönmeyecek çünkü uygulama hiç ayağa kalkmıyor).
+
+**C. V1→V14 zinciri TAMAMEN BOŞ bir veritabanında baştan sona gerçekten çalışıyor mu?
+Evet — ayrıca, özel olarak kanıtlandı.** Dev veritabanı zaten migrate edilmiş durumda olduğu
+için bu yol günlük kullanımda hiç sınanmıyordu — prod'daki ilk kalkış bu zincirin sıfırdan
+uçtan uca ilk gerçek denemesi olacaktı. Postgres volume'u tamamen silinip prod profiliyle
+sıfırdan kalkış yapıldı, `flyway_schema_history` doğrudan sorgulandı: **14 migration'ın hepsi
+`success=true`**, `\dt` ile 14 uygulama tablosunun hepsi gerçekten oluşmuş görüldü, uygulama bu
+şema üzerinde normal yanıt verdi. RUNBOOK.md'nin A8 adımı, sunucudaki ilk gerçek deploy'da bunu
+bir kez daha (bu sefer gerçek donanımda) doğrulayacak.
 
 #### Mevcut 5 maddede düzeltmeler
 

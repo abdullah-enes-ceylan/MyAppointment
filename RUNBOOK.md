@@ -44,6 +44,24 @@ denemene gerek yok, ama NEDEN güvenle ilerleyebildiğimizi bilmen için:
    unless-stopped` onu tekrar tekrar deniyor — **gerçek bir crash-loop** (canlı gözlemlendi).
    Bunun sessizce sürmemesi TAMAMEN A9'daki `/actuator/health` izlemesine bağlı — bu yüzden
    izleme (Bölüm B) atlanabilir bir "sonra yaparım" maddesi değil.
+3. **V1→V14 zincirinin TAMAMEN BOŞ bir veritabanında baştan sona çalıştığı ayrıca kanıtlandı.**
+   Dev veritabanı zaten migrate edilmiş durumda olduğu için bu yol günlük kullanımda hiç
+   sınanmıyor — prod'daki ilk kalkış, bu zincirin sıfırdan uçtan uca ilk gerçek denemesi.
+   Postgres volume'u tamamen silinip (`docker volume rm`) prod profiliyle sıfırdan kalkış
+   yapıldı, sonra doğrudan `flyway_schema_history` sorgulandı:
+   ```
+    installed_rank | version | description                 | success
+   ----------------+---------+-----------------------------+---------
+                  1 | 1       | baseline                    | t
+                  2 | 2       | working hours               | t
+                  ...
+                 14 | 14      | in app notifications        | t
+   ```
+   14 satırın hepsi `success=t`, `\dt` ile 14 uygulama tablosunun hepsi gerçekten oluşmuş
+   görüldü, ve uygulama bu şema üzerinde `/api/businesses` ve `/actuator/health`'e normal
+   yanıt verdi. Bu sunucuda TEKRARLANMASI GEREKMEYEN bir test — ama A8'deki ilk deploy da
+   yapısal olarak birebir aynı senaryo (boş volume + prod profili + V1-V14), o yüzden A8'in
+   kanıt satırı zaten bunu bir kez daha, gerçek sunucuda doğrulayacak.
 
 ---
 
@@ -198,14 +216,21 @@ Bu adımdan sonra **çıkış yapıp tekrar SSH ile bağlan** (grup üyeliğinin
 Alan adı sağlayıcında (Cloudflare, vs.) bir **A kaydı** ekle: `randevum.com` (ya da gerçek
 domain'in) → sunucunun IP'si. Alt domain de istiyorsan (`www`) ayrı bir A kaydı.
 
-**Kanıt:** Kendi makinenden:
+**Kanıt — HARİCİ bir resolver'a sor, yerel/ISS resolver'ına DEĞİL.** Yerel resolver'ın kendi
+önbelleği "hazır" gibi görünüp asıl yayılma tamamlanmadan seni yanıltabilir. Kendi makinenden:
 ```bash
-dig +short randevum.com
+dig @8.8.8.8 +short randevum.com
 ```
-→ sunucunun IP'si dönmeli. Dönmüyorsa veya eski bir IP dönüyorsa **bekle** — DNS yayılması
-dakikalar ile saatler arasında sürebilir, yayılmadan bir sonraki adıma (A6, ACME) geçme. Prod
-CA'nın (A6'dan sonra) saatte 5 hata limiti var, yayılmayı beklemeden denemek bu limiti gereksiz
-yere tüketir.
+Ayrıca **sunucunun kendisinden**, dış dünyanın onu nasıl gördüğünü kontrol et (sunucu kendi
+DNS'ini farklı görüyor olabilir):
+```bash
+dig @8.8.8.8 +short randevum.com
+curl -s ifconfig.me
+```
+İkisi de sunucunun gerçek IP'siyle eşleşmeli. Eşleşmiyorsa ya da eski bir IP dönüyorsa **bekle**
+— DNS yayılması dakikalar ile saatler arasında sürebilir, yayılmadan A8'deki (ACME) adıma geçme.
+Prod CA'nın saatte 5 hata limiti var, yayılmayı beklemeden denemek bu limiti gereksiz yere
+tüketir.
 
 ## A4. Kod sunucuya
 
@@ -401,6 +426,16 @@ Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan ma
 
 ## A10. Staging'den production CA'ya geçiş
 
+**Manuel sertifika temizliği GEREKMİYOR — Caddy bunu kendi başına doğru yapıyor.** Caddy,
+sertifikaları `<data>/certificates/<ca-endpoint>/<domain>` yoluna, CA'nın kendi adresine göre
+AYRI klasörlerde saklıyor — staging (`acme-staging-v02.api.letsencrypt.org-directory/...`) ve
+production (`acme-v02.api.letsencrypt.org-directory/...`) sertifikaları hiç çakışmıyor
+([Caddy Community](https://caddy.community/t/differences-between-acme-ca-and-cert-issuer/24672)).
+`acme_ca` satırını kaldırıp Caddy'nin varsayılan (production) CA'sına dönünce, Caddy o yeni
+namespace'te hiç sertifika bulamayıp KENDİLİĞİNDEN prod CA'dan taze bir tane istiyor —
+`caddy_data` volume'unu silmene gerek yok, eski staging sertifikası orada durur ama hiç
+kullanılmaz.
+
 Yukarıdaki doğrulama turu geçtiyse, `frontend/Caddyfile`'ın başına eklediğin `acme_ca` bloğunu
 **kaldır**, sonra:
 
@@ -409,9 +444,17 @@ docker compose build caddy
 docker compose up -d caddy
 ```
 
-**Kanıt:** Tarayıcıda `https://randevum.com` — artık "güvenli değil" uyarısı YOK, kilit simgesi
-yeşil/normal, sertifika veren "Let's Encrypt" (tarayıcının sertifika detayından kontrol
-edilebilir).
+**Kanıt — sertifikanın GERÇEKTEN production CA'dan geldiğini doğrula, sadece "kilit yeşil mi"
+diye bakma:**
+```bash
+echo | openssl s_client -connect randevum.com:443 -servername randevum.com 2>/dev/null \
+  | openssl x509 -noout -issuer
+```
+**Beklenen:** `issuer=C=US, O=Let's Encrypt, CN=R...` (gerçek bir intermediate adı, ör. `R10`,
+`R11`, `E5` vb.) — **`STAGING` veya `Fake LE Intermediate` GEÇMEMELİ**, geçiyorsa hâlâ staging
+sertifikası servis ediliyor demektir, `docker compose logs caddy` ile ACME denemesinin gerçekten
+tetiklendiğini kontrol et. Tarayıcıda da `https://randevum.com` — "güvenli değil" uyarısı YOK,
+kilit simgesi normal.
 
 ## A11. Karar: `/actuator/health` dışarıda kalsın mı? — ✅ ONAYLANDI, açık kalıyor
 
@@ -492,6 +535,22 @@ gerçekten bağımsız çalışan bir yedek var mı" sorusuna cevap vermek, mevc
 
 Deploy sonrası bir şey bozulursa:
 
+## Adım 0 — ÖNCE teşhis et, "bekleyelim düzelir mi" YOK
+
+```bash
+docker compose logs backend --tail 100 | grep -i "flyway\|migration"
+```
+
+**Flyway hatası görüyorsan ("FlywayMigrateException", "Migration ... failed") beklemek bir
+seçenek DEĞİL.** Ön koşul bölümünde canlı kanıtlandı: bozuk bir migration'da uygulama KALICI
+olarak ölü kalıyor, `restart: unless-stopped` aynı hatayı sonsuza kadar tekrar dener — "biraz
+bekleyelim düzelir mi" davranışı asla düzelmez, sadece downtime'ı uzatır. Flyway hatası
+görüyorsan **doğrudan aşağıdaki "Gerçek rollback" adımına geç**, container'ın kendi kendine
+toparlanmasını bekleme.
+
+Flyway hatası YOKSA (uygulama başladı ama başka bir şey bozuk — ör. bir endpoint 500 veriyor,
+beklenmeyen bir davranış var), asıl soruna göre karar ver — rollback tek çözüm olmayabilir.
+
 ## Önleyici adım (HER deploy'dan önce yapılır, rollback'in kendisi değil)
 
 ```bash
@@ -528,4 +587,56 @@ değişikliği içeriyorsa, image'ı eski SHA'ya döndürmek YETMEZ — eski kod
 uyumsuz kalabilir. Böyle bir durumda rollback'ten önce migration'ın geri alınabilir olup
 olmadığı ayrıca değerlendirilmeli; genel kural olarak "geriye dönük uyumlu migration yaz"
 disiplini (yeni kolon NULL'a izin versin, eski kod onu hiç kullanmasın gibi) bu riski en
-baştan azaltır.
+baştan azaltır — bu artık CLAUDE.md'de kalıcı bir kural (bkz. "Migration'lar geriye uyumlu
+yazılmalı").
+
+---
+
+# DEPLOY SONRASI İLK 48 SAAT
+
+Monitoring (Bölüm B) sadece "ölü mü canlı mı" sorusuna cevap verir — "garip bir şey mi oluyor"
+sorusuna cevap vermez. 404 yağmuru, tuhaf user-agent'lar, yavaş sorgular hiçbir alarm
+tetiklemeden günlerce sürebilir. İlk 48 saat elle bakılacak.
+
+## İlk gün — elle log izleme
+
+```bash
+docker compose logs -f backend
+```
+
+Birkaç kez (sabah, öğlen, akşam), birkaç dakikalığına gerçek trafiği canlı izle. Aranacak
+şeyler: beklenmeyen `404` yığılması (kırık bir link mi paylaşılıyor, tarayan bir bot mu var),
+alışılmadık `User-Agent` değerleri, `/actuator`/`/wp-admin`/`.env` gibi yollara yapılan
+otomatik tarama denemeleri (zararsız ama fail2ban'ın bunları yakaladığını görmek için iyi bir
+işaret), ve tekrar eden `WARN`/`ERROR` satırları.
+
+## `fail2ban` loglarını kontrol et
+
+```bash
+sudo fail2ban-client status sshd
+sudo journalctl -u fail2ban --since "1 hour ago"
+```
+
+İlk saatlerde ne kadar hızlı taranmaya başlandığını gör — bir sunucu internete açıldıktan
+dakikalar içinde otomatik SSH tarama denemeleri almaya başlar, bu normaldir; `fail2ban`'ın
+bunları gerçekten yasakladığını (`Currently banned` sayısının 0'dan büyük olması) görmek,
+A1.5'teki kurulumun gerçekten işlediğinin kanıtı.
+
+## Ne zaman "stabil" sayılır — 3.8b'ye geçiş kriteri
+
+Aşağıdakilerin HEPSİ, **kesintisiz 48 saat** boyunca doğru olmalı:
+
+- [ ] Uptime monitor (`/actuator/health`) 48 saat boyunca **tek bir düşüş bildirmedi**.
+- [ ] `docker compose ps` — üç servis de hâlâ `Up`, hiçbiri restart döngüsüne girmemiş
+  (`docker compose ps` çıktısındaki `STATUS` sütununda "Restarting" görülmemiş olmalı; ayrıca
+  `docker inspect randevum-backend-1 --format '{{.RestartCount}}'` ile sayı kontrol edilebilir).
+- [ ] En az bir kez, gerçek bir cihazdan (kendi telefonun) uçtan uca gerçek bir akış denendi:
+  kayıt, giriş, işletme arama, randevu talebi — hepsi hatasız çalıştı.
+- [ ] `df -h` — disk kullanımı 48 saatte anormal bir sıçrama göstermedi (log/build cache
+  birikimi kontrolsüzse burada görünür).
+- [ ] Yukarıdaki log/fail2ban incelemesi en az bir kez yapıldı, hiçbir açıklanamayan davranış
+  bulunmadı.
+
+Bu beş madde de 48 saat kesintisiz sağlanmadan **3.8b'ye (yedekleme/izleme) geçilmez** — henüz
+stabil olmayan bir sistemin yedeğini almanın bir anlamı yok, önce sistemin kendisinin ayakta
+kaldığından emin olunur.
