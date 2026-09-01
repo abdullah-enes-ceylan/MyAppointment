@@ -1,0 +1,55 @@
+# Domain, ortam degiskeninden geliyor -- docker-compose.yml'de DOMAIN olarak
+# gecirilecek (yerel testte ":80" gibi bir deger de calisir, Caddy bunu HTTP
+# icin bir port olarak yorumlar; gercek bir domain verilince otomatik HTTPS
+# devreye girer, ayrica bir sertifika adimi gerekmez).
+{$DOMAIN} {
+	# Guvenlik header'lari -- Caddy bunlari OTOMATIK EKLEMIYOR, sadece
+	# otomatik HTTPS/HTTP->HTTPS yonlendirmesi yapiyor. Ayri ayri gerekce:
+	#   Strict-Transport-Security: tarayiciya "bu domain'e bir daha ASLA
+	#     duz HTTP ile gitme" der -- ilk ziyarette bile downgrade/mitm
+	#     saldirisini zorlastirir. Sadece HTTPS baglaminda anlamli, duz
+	#     HTTP'de tarayici bu header'i zaten yok sayar (yerel testte
+	#     zararsiz).
+	#   X-Content-Type-Options: tarayicinin, sunucunun bildirdigi
+	#     Content-Type'i "tahmin ederek" degistirmesini (MIME sniffing)
+	#     engeller -- ornegin bir kullanicinin yukledigi dosyanin
+	#     calistirilabilir bir tur gibi yorumlanmasini onler.
+	#   X-Frame-Options: bu siteyi baska bir sitenin <iframe>'i icine
+	#     gomulmekten korur (clickjacking).
+	#   Referrer-Policy: baska bir siteye giden linklerde tam URL yerine
+	#     sadece origin gonderilir -- query string/path'teki hassas
+	#     bilgi (ornegin token) 3. taraf sitelere sizmaz.
+	# X-XSS-Protection BILEREK eklenmedi -- modern tarayicilarda kaldirilan,
+	# artik CSP ile cozulen eski bir mekanizma; onermek yanlis olurdu.
+	# Content-Security-Policy da bilerek eklenmedi -- bu uygulamaya ozel
+	# dikkatli ayarlanmasi gereken ayri bir is (inline script/style,
+	# font kaynaklari vb. tek tek gozden gecirilmeli), yanlis/gevsek bir
+	# CSP hicbir sey eklemez, cok siki bir CSP ise siteyi bozar.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# API ve actuator istekleri backend container'ina -- docker-compose'un
+	# ic agi uzerinden servis adiyla (postgres:5432 ile ayni desen).
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+	handle /actuator/* {
+		reverse_proxy backend:8080
+	}
+
+	# Geri kalan her sey statik frontend build'i. try_files, dogrudan
+	# /randevularim gibi bir SPA route'una gidildiginde (sayfa yenileme,
+	# yer imi, dogrudan link) Caddy'nin bunu gercek bir dosya sanip 404
+	# donmesini engelliyor -- eslesen dosya yoksa index.html'e duser,
+	# React Router orada devreye girip dogru sayfayi render eder.
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+}

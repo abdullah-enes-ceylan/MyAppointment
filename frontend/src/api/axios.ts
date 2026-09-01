@@ -7,7 +7,15 @@ import axios from "axios";
 // Ayrıca export ediliyor: backend'in döndürdüğü göreceli görsel yolları
 // (ör. "/api/business-photos/xxx-card.jpg") <img src> için mutlak hale
 // getirilirken kullanılıyor -- bkz. utils/photo.ts.
-export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8080";
+//
+// `??` KASITLI, `||` DEĞİL: Faz 3.7'de Caddy aynı origin'den hem frontend'i
+// hem backend'i sunuyor, bu yüzden prod build'de VITE_API_URL BİLEREK boş
+// string olarak veriliyor (göreli yol, "/api/..." doğrudan aynı origin'e
+// gider). `||` boş string'i "tanımsız" sayıp yerel geliştirme adresine
+// düşerdi -- prod build'i sessizce yanlış (hiç var olmayan) bir backend'e
+// bağlardı. `??` sadece null/undefined'da fallback'e düşüyor, boş string'i
+// olduğu gibi bırakıyor.
+export const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
 const api = axios.create({
   baseURL: API_BASE_URL,

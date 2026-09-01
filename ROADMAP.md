@@ -386,7 +386,7 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
   üçüncü taraf servis/hesap, deploy kararından (Faz 3.8) önce bağlanırsa gereksiz erken bir
   bağımlılık olur. Faz 3.8 deploy tamamlanıp gerçek trafik başlayınca yeniden değerlendirilecek.
 
-### 3.7 — Konteynerleştirme `[DevOps]` `[AI]` — backend/konteyner tarafı ✅, env+frontend devam ediyor
+### 3.7 — Konteynerleştirme `[DevOps]` `[AI]` ✅ tamamlandı
 - **Backend `Dockerfile`** — multi-stage: `maven:3.9-eclipse-temurin-21` build asamasi (testler
   BILEREK burada calismiyor, Testcontainers Docker-in-Docker gerektirirdi), `jarmode=tools` ile
   katman cikarma (`dependencies`/`spring-boot-loader`/`snapshot-dependencies`/`application` —
@@ -417,14 +417,50 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
   Windows/NTFS sahipliginde gorundu (Unix UID semantigi yok) — gercek Linux sunucudaki izin
   uyusmazligi senaryosu burada BIREBIR uretilemedi. Bu yuzden Faz 3.8'e somut, isaretlenecek bir
   madde olarak eklendi (asagida).
-- Frontend static build → Caddy veya Cloudflare Pages, build'de `VITE_API_URL` gerçek backend
-  domain'ine ayarlanır (yereldeki `.env`'deki `localhost:8080` değeri prod'a asla sızmaz)
-- **Ortam değişkeni yönetimi + dev/prod profil ayrımı**: `application-dev.properties` sadece
-  yerelde kalır, `application-prod.properties` tüm sırları (`SPRING_DATASOURCE_PASSWORD`,
-  `JWT_SECRET` vb.) ortam değişkeninden okur — repoda düz metin şifre kalmadığı doğrulanır
-  (bkz. Dikkat edilecekler → Secret yönetimi)
-- **CORS**'a prod frontend domain'i eklenir, `localhost:*` kalıbı prod profilinde tamamen kapatılır
-  (bkz. Dikkat edilecekler → CORS)
+- **Frontend hosting kararı: Caddy ile aynı VPS'te self-host** (Cloudflare Pages değil) —
+  gerekçe: aynı origin, CORS'u tamamen ortadan kaldırıyor (localhost:* + allowCredentials(true)
+  riskiyle uğraşmaya gerek kalmıyor deployed frontend için), rate limiting'in gerçek IP'yi
+  görmesi zaten Caddy'ye bağlıydı, tek platform beta ölçeğinde daha az bakım.
+- **`axios.ts` düzeltmesi** — `API_BASE_URL`, `||` yerine `??` ile okunuyor artık. Aynı origin
+  mimarisinde prod build'de `VITE_API_URL=""` (göreli yol) veriliyor; `||` boş string'i
+  "tanımsız" sayıp yerel geliştirme adresine düşerdi, prod build'i sessizce yanlış backend'e
+  bağlardı. `??` sadece null/undefined'da fallback'e düşüyor.
+- **`frontend/Dockerfile`** — multi-stage: `node:22-alpine` build asamasi (`VITE_API_URL` build
+  ARG'i, BILEREK bos), final asama `caddy:2-alpine` — Node/npm/kaynak kod final image'da yok.
+  Canlı doğrulandı: image'da `.env`/`.git`/node_modules kalıntısı yok, sadece derlenmiş statik
+  dosyalar var.
+- **Source map kontrolü** — prod build'de `.map` dosyası ÜRETİLMİYOR (Vite'ın varsayılanı,
+  proje bunu override etmiyor), gerçek bir `npm run build` çalıştırılıp `dist/` klasörü
+  incelenerek doğrulandı; ayrıca JS bundle'ında `sourceMappingURL` yorum satırı da yok.
+- **`frontend/Caddyfile`** — `/api/*` ve `/actuator/*` backend'e reverse proxy, geri kalanı
+  statik dosyalar + `try_files {path} /index.html` (SPA routing). Güvenlik header'ları ELLE
+  eklendi (Caddy bunları otomatik EKLEMİYOR, sadece otomatik HTTPS/yönlendirme yapıyor):
+  `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+  `Server` header'ı kaldırıldı (`-Server`). `X-XSS-Protection` bilerek eklenmedi (modern
+  tarayıcılarda kaldırılmış, artık anlamsız). `Content-Security-Policy` bilerek eklenmedi —
+  bu uygulamaya özel dikkatli ayarlanması gereken ayrı bir iş, yanlış ayarlanırsa siteyi bozar.
+- **Caddy sertifika kalıcılığı** — `caddy_data`/`caddy_config` named volume (business-photo-
+  storage'daki "gözle görülebilir olsun" gerekçesi burada geçerli değil, bu insan tarafından
+  okunacak bir veri değil). Volume olmadan her container yeniden oluşturmasında Let's Encrypt'ten
+  yeniden sertifika istenir — haftalık domain başına sertifika sınırını zorlayabilir.
+- **Backend artık host'a port açmıyor** (`expose: 8080`, `ports` değil) — tek genel giriş noktası
+  Caddy (80/443). Rate limiting/CORS gibi korumaları es geçip backend'e doğrudan istek atma
+  yolu, bir port unutkanlığına bağlı olmadan, en baştan yok.
+- **Uçtan uca canlı doğrulama (gerçek `docker compose up` ile)**: gerçek kayıt+giriş Caddy
+  üzerinden (port 80) çalıştı; `/randevularim` gibi bir alt yola DOĞRUDAN gidince 404 değil
+  `index.html` döndüğü (SPA routing) doğrulandı; foto yükleyip `/api/business-photos/...`
+  üzerinden Caddy proxy'siyle servis edildiği doğrulandı; güvenlik header'larının gerçekten
+  yanıtta olduğu `curl -I` ile görüldü.
+- **CORS — kod değişmedi, sadece değer değişecek.** Aynı origin'de deployed frontend'in kendi
+  istekleri CORS kontrolüne hiç girmiyor, ama mevcut fail-fast `CORS_ALLOWED_ORIGINS` mekanizması
+  KALDIRILMADI — JWT `Authorization` header'ı localStorage'da tutulduğu için "başka bir sitenin
+  JS'i kurbanın token'ıyla API'ye istek atıp yanıtı okuyabilmesi" tehdidine karşı hâlâ koruma
+  sağlıyor, ileride cross-origin bir istemci (mobil uygulama vb.) gelirse de hazır. Sadece
+  değeri gerçek prod domain'i olacak.
+- **`.env` yönetimi**: kök dizine `.env.example` (Postgres, JWT_SECRET, CORS_ALLOWED_ORIGINS,
+  DOMAIN) + kök `.gitignore` (`.env`) eklendi — önceden kökte hiç `.gitignore` yoktu. Gerçek
+  `.env` sunucuya ELLE kopyalanacak (tek sunucu ölçeğinde bir secrets-manager gereksiz
+  karmaşıklık); docker-compose'un kendi `${VAR:?...}` fail-fast'i zaten güvenlik ağı.
 - **`DatabaseSeeder` prod profilinde devre dışı** ✅ zaten yapılmış — `@Profile("dev")` ile
   sınırlı (Faz 3.7'de fark edildi, ayrı bir iş gerekmedi).
 
@@ -605,7 +641,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.4 Bildirim altyapısı (kanal-bağımsız) — fe8e547
 - [x] 3.5 Rate limiting ve kötüye kullanım koruması — b201bb7
 - [x] 3.6 Loglama, izleme ve hata takibi
-- [ ] 3.7 Konteynerleştirme
+- [x] 3.7 Konteynerleştirme
 - [ ] 3.8 Deploy, yedekleme, izleme
 - [ ] 3.9 KVKK ve hukuki metinler
 - [ ] 3.10 E-posta doğrulama (3.4'e bağımlı, açık kayıt öncesi şart)

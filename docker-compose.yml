@@ -1,9 +1,8 @@
-# Bu turda SADECE backend + postgres var. Caddy/reverse-proxy ve gercek env/
-# secret yonetimi (ornegin bir .env dosyasinin production'da nasil doldurulacagi)
-# bilerek disarida -- ayri bir turda ele alinacak (bkz. ROADMAP 3.7). Asagidaki
-# ${...} degiskenler simdilik yerel bir .env dosyasindan (docker-compose'un
-# otomatik okudugu) veya kabuk ortamindan geliyor -- bu SADECE yerel test
-# iskeleti, gercek deploy'da secret enjeksiyonu Faz 3.8'de netlesecek.
+# backend + postgres + caddy (frontend'i de sunan reverse proxy). Asagidaki
+# ${...} degiskenler bir .env dosyasindan (docker-compose'un otomatik okudugu,
+# repo'ya girmez) ya da kabuk ortamindan geliyor -- gercek deploy'da bu dosya
+# sunucuya ELLE kopyalanacak (tek sunucu olcegi, ayri bir secrets-manager
+# gereksiz karmasiklik olurdu).
 services:
   postgres:
     image: postgres:18-alpine
@@ -38,8 +37,13 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET gerekli}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
-    ports:
-      - "8080:8080"
+    # ONEMLI: host'a port ACILMIYOR. Tek genel giris noktasi Caddy (80/443) --
+    # backend sadece docker'in ic agi uzerinden "backend:8080" adresiyle
+    # erisilebilir. Boylece rate limiting/CORS gibi korumalari es gecip
+    # backend'e dogrudan istek atma yolu, ta bastan yok -- bir port
+    # unutkanligina bagli degil.
+    expose:
+      - "8080"
     volumes:
       # Bind mount -- named volume degil: tek sunucu varsayimiyla ilerliyoruz
       # (bkz. CLAUDE.md, rate limiting "tek instance" karari ile ayni mantik),
@@ -63,5 +67,35 @@ services:
     # olursa diye ek guvence -- healthcheck zaten ana korumayi sagliyor.
     restart: on-failure
 
+  caddy:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # BILEREK BOS: Caddy ayni origin'den hem frontend'i hem backend'i
+        # sundugu icin frontend "/api/..." gibi GORELI bir yola istek atiyor
+        # -- ayri bir backend adresi gerekmiyor (bkz. axios.ts, Caddyfile).
+        VITE_API_URL: ""
+    environment:
+      DOMAIN: ${DOMAIN:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Sertifika/TLS state -- named volume (business-photo-storage'taki
+      # "gozle gorulebilir olsun" gerekcesi burada gecerli degil, bu veri
+      # insan tarafindan okunacak bir sey degil). Bu OLMADAN her container
+      # yeniden olusturmasinda Caddy Let's Encrypt'ten YENIDEN sertifika
+      # ister -- Let's Encrypt'in domain basina haftalik sertifika siniri
+      # var, sik yeniden olusturma bu siniri zorlayabilir.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: on-failure
+
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:

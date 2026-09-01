@@ -61,4 +61,11 @@ USER appuser
 
 EXPOSE 8080
 
+# Caddy'nin depends_on: condition: service_healthy ile backend'i GERCEKTEN
+# hazir olana kadar beklemesi icin (bkz. docker-compose.yml) -- ayni mantik
+# postgres'in kendi healthcheck'inde de var. /actuator/health zaten
+# kimlik dogrulamasiz erisilebilir (bkz. SecurityConfig).
+HEALTHCHECK --interval=5s --timeout=3s --start-period=20s --retries=5 \
+    CMD curl -f http://localhost:8080/actuator/health || exit 1
+
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]

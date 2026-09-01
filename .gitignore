@@ -1,0 +1,3 @@
+# docker-compose.yml'in okudugu gercek sirlar burada durur, git'e girmez.
+# Sablon icin .env.example'a bak.
+.env
