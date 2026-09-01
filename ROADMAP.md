@@ -817,54 +817,84 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
   geçmişi olan bir işletme de, `User` gibi, hard-delete edilemez. Aynı kısıt bir seviye
   yukarıda da geçerli.
 
-  **Randevu zamanlaması — iki ayrı sayaç, ikisi de `AccountDeletionProperties`'e config
-  olarak eklenir (koda gömülmez):**
-  - `app.account-deletion.business-immediate-cancel-window` (varsayılan **3 gün**)
-  - `app.account-deletion.business-decision-window` (varsayılan **2 gün**)
+  **Randevu zamanlaması — iki ayrı eşik, KARIŞTIRILMAMASI gereken iki farklı kavram. İkisi de
+  `AccountDeletionProperties`'e config olarak eklenir (koda gömülmez):**
+  - **Haber verme payı** — `app.account-deletion.business-notice-period` (varsayılan **72
+    saat**). Talep ANINDA, önümüzdeki 72 saat içindeki randevular iptal edilir + müşteriye
+    bildirim. Hiçbir müşteri randevusuna saatler kala öğrenmemeli.
+  - **Geri dönüş penceresi** — `app.account-deletion.business-reversal-window` (varsayılan
+    **48 saat**). Talep 48 saat içinde geri alınmazsa, KALAN tüm gelecek randevular iptal
+    edilir + bildirim.
 
-  Bu iki süre, kimlik anonimleştirmesinin 30 günlük `gracePeriod`'undan BİLEREK AYRI ve KISA —
-  randevu iptalinin gerçek dünyada aciliyeti var (müşteri kapalı bir dükkâna gitmemeli), kimlik
-  silmenin yok (30 gün boyunca hesabı "olduğu gibi" bırakma garantisi USER akışıyla aynı kalıyor,
-  sadece randevu kaderleri çok daha erken netleşiyor).
+  **Matematiksel zorunluluk — `reversal-window` HER ZAMAN `notice-period`'dan küçük veya eşit
+  olmalı (48 ≤ 72).** Bu tesadüf değil, tasarımın kendisi: 48. saatte topluca iptal edilen
+  "kalan tüm randevular" tanım gereği talep anında 72 saatten UZAKTA olan randevulardı (72
+  saatten yakın olanlar zaten 0. saatte ayrı ayrı iptal edilmişti) — yani 48. saatte hâlâ en
+  az `72−48=24` saat, çoğunlukla çok daha fazla payları var. Bu ilişki TERSİNE dönerse (ör.
+  `reversal-window=96s`, `notice-period=72s` olsaydı) 72-96 saat arasına düşen bir randevu
+  HİÇBİR aşamada zamanında yakalanamaz, müşteri randevu gününe kadar sistemin hiç
+  cevaplamadığı bir talep bekler. Bu yüzden `AccountDeletionProperties`'in `@PostConstruct`
+  doğrulaması `reversalWindow > noticePeriod` durumunu reddedip güvenli varsayılana düşecek
+  (aynı `AvailabilityCalculator.effectiveGranularity` deseni) — bu, koda gömülü bir sabit
+  değil, YANLIŞ configure edilebilecek iki ayrı değer arasındaki bir İLİŞKİ, o yüzden ayrıca
+  doğrulanması gerekiyor.
+
+  **Kimlik anonimleştirmesi (30 günlük `gracePeriod`) bu ikisinden TAMAMEN AYRI ve
+  DEĞİŞMEDİ** — randevu kaderleri 48-72 saat içinde netleşiyor, ama `User` satırının kendisi
+  (isim/e-posta/telefon) hâlâ USER akışındaki AYNI 30 günlük pencereyi bekliyor, hesap hâlâ
+  giriş yapılabilir durumda kalıyor. (Bunu böyle anlıyorum — "sonra anonimleştirme akışı
+  işler" ifadeni "randevular çözüldükten sonra, zaten çalışmakta olan 30 günlük sayaç kendi
+  akışında ilerlemeye devam eder" diye okudum; eğer kastın kimlik anonimleştirmesinin de
+  48 saate çekilmesiyse bu farklı bir karar olur, düzelt.)
+
+  **Bildirim — yeni bir `NotificationType`.** Her iki dalgada da (72s anında iptal, 48s toplu
+  iptal) etkilenen müşteriye in-app bildirim gidiyor — mevcut `NotificationType` enum'ında
+  buna uyan bir değer yok, yeni bir tür eklenmesi gerekiyor (ör.
+  `APPOINTMENT_CANCELLED_BUSINESS_CLOSED`), `APPOINTMENT_EXPIRED` ile aynı desende
+  (`InAppNotificationAdapter` üzerinden, `NotificationLog` ile idempotent).
 
   **Akış:**
   1. `DELETE /api/users/me` (USER akışıyla AYNI uç, rol bazlı dallanma) — şifre tekrar istenir,
      `User.deletionRequestedAt = now()` yazılır.
   2. **Aynı istek içinde, senkron olarak (bekletilmeden):**
      - Sahibin TÜM işletmeleri (`findByOwnerId`) yeni bir `Business.suspendedAt = now()`
-       alanıyla işaretlenir — arama/listeleme/yeni randevu almadan HEMEN düşerler (kapanacağı
-       belirsiz bir işletmeye yeni müşteri gelmesin). `GET /api/businesses` ve ilgili arama
-       sorgularına `suspendedAt IS NULL` filtresi eklenir.
-     - Bu işletmelere ait, tarihi `now() + 3 gün` içine düşen TÜM randevular (`PENDING` +
+       alanıyla işaretlenir.
+     - Bu işletmelere ait, tarihi `now() + 72 saat` içine düşen TÜM randevular (`PENDING` +
        `APPROVED`) mevcut `AppointmentService.changeStatus(..., Action.CANCEL)` ile
-       `CANCELLED`'a geçirilir. Yeni bir durum icat edilmiyor.
-  3. **`business-decision-window` (2 gün) dolunca** — `AccountDeletionScheduler`'a eklenen
+       `CANCELLED`'a geçirilir + müşteriye bildirim.
+  3. **`business-reversal-window` (48 saat) dolunca** — `AccountDeletionScheduler`'a eklenen
      yeni bir tik: `deletionRequestedAt` hâlâ dolu (yani iptal edilmemiş) olan
      `BUSINESS_OWNER`'ların işletmelerindeki KALAN TÜM bitmemiş randevular (`PENDING` +
-     `APPROVED`, tarihi ne olursa olsun) aynı `CANCEL` yoluyla topluca iptal edilir. Doğal
-     olarak idempotent — ikinci bir tick'te sorgu zaten sadece `PENDING`/`APPROVED` aradığı
-     için (bunlar bir önceki tick'te `CANCELLED`'a döndüğü için) tekrar bir şey bulmaz, ayrı
-     bir "yapıldı mı" bayrağı gerekmiyor.
+     `APPROVED`, tarihi ne olursa olsun) aynı `CANCEL` yoluyla topluca iptal edilir + bildirim.
+     Doğal olarak idempotent — ikinci bir tick'te sorgu zaten sadece `PENDING`/`APPROVED`
+     aradığı için (bunlar bir önceki tick'te `CANCELLED`'a döndüğü için) tekrar bir şey
+     bulmaz, ayrı bir "yapıldı mı" bayrağı gerekmiyor.
   4. **`POST /api/users/me/cancel-deletion`** (USER akışıyla AYNI uç) — `deletionRequestedAt`'i
      temizler VE sahibin işletmelerindeki `suspendedAt`'i de temizler (yeniden listelenirler).
      **Dürüstçe kabul edilen sınır:** 2. veya 3. adımda ZATEN iptal edilmiş randevular GERİ
      GELMEZ — o karar geri alınamaz (slot başka birine gitmiş olabilir), sadece hesabın ve
      işletmenin kendisi normale döner. Bu, USER akışında "iptal edilen randevu geri gelmez"
      ile aynı, önceden kabul edilmiş maliyet.
-  5. **30. günde (`gracePeriod`, USER akışıyla PAYLAŞILAN aynı süre)** —
-     `AccountDeletionScheduler`'ın mevcut anonimleştirme adımı: `User` satırı (isim/e-posta/
-     telefon/şifre) USER akışındaki AYNI şekilde scrub edilir, giriş kapanır.
+  5. **30. günde (`gracePeriod`, USER akışıyla PAYLAŞILAN aynı süre, yukarıdaki notu bakınız)**
+     — `AccountDeletionScheduler`'ın mevcut anonimleştirme adımı: `User` satırı (isim/
+     e-posta/telefon/şifre) USER akışındaki AYNI şekilde scrub edilir, giriş kapanır.
 
-  **Açık soru — Business'ın KENDİ alanları da anonimleşsin mi? Karar bekliyor, hukuki bir
-  nüans.** Bir şahıs işletmesinde `Business.phone` sahibin kişisel telefonu OLABİLİR — bu
-  durumda sadece `User` satırını scrub edip `Business.name`/`phone`/`address`'i olduğu gibi
-  bırakmak, sahibin kişisel verisinin bir kısmının kalıcı olarak açık kalması anlamına
-  gelebilir. **Eğilimim: Business'ın kendi alanlarına DOKUNMAMAK** — müşterinin geçmiş
-  randevusunun "hangi işletmede" olduğunu görme hakkı (Review/Appointment'a hiç dokunmama
-  gerekçesiyle aynı mantık) `Business.name`'in kalmasını gerektiriyor, ve `phone`/`address`
-  zaten yeni müşteri alamayan (`suspendedAt` dolu) bir işletme için pratik risk düşük. Ama bu
-  gerçek bir KVKK yorumu gerektiriyor (şahıs işletmesi telefonu = kişisel veri mi, ticari veri
-  mi) — kesin karar sana ait, `[SEN]` etiketinin tam burada anlamı var.
+  **Business'ın KENDİ alanları — KARAR VERİLDİ: dokunulmuyor.** Ad/telefon/adres ticari veri,
+  zaten kamuya açıktı — anonimleştirme sadece `User` satırını kapsıyor.
+
+  **Ama silinmiş bir işletmenin profili HİÇBİR YOLLA görüntülenemeyecek — "aramada
+  görünmüyor" yeterli değil, üç ayrı yol da kapatılmalı:**
+  - **Arama/listeleme:** `GET /api/businesses` ve konum/kategori sorguları `suspendedAt IS
+    NULL` filtreler (zaten plandaydı).
+  - **Doğrudan URL:** `GET /api/businesses/{id:\d+}` (detay ucu) `suspendedAt != null` ise
+    **404** döner (403 değil — path traversal'daki gibi, "var ama erişemiyorsun" ile "böyle
+    bir şey yok" arasında fark belli edilmez). Şu an bu uç `suspendedAt` kavramını hiç
+    bilmiyor, kontrol eklenmesi gerekiyor.
+  - **Eski randevu detayında tıklanabilir link:** Backend'in 404'ü zaten gerçek güvenlik
+    sınırı (frontend ne yaparsa yapsın tıklanınca 404 alınır) — ama frontend'de de `Business
+    Summary`'nin (`AppointmentResponse.business`) taşıdığı bilgiye `suspendedAt`/`active`
+    gibi bir alan eklenip, geçmiş randevu ekranlarında işletme adı `suspendedAt` doluysa
+    tıklanabilir link DEĞİL düz metin olarak gösterilmeli — kırık bir link gibi görünmesin.
 
 - Log erişim kontrolü ve saklama süresi: kim (hangi rol) sunucu loglarına erişebilir, loglar
   ne kadar süre tutulur, rotasyon/silme politikası var mı. Faz 3.6'da `PiiMasker` ile
