@@ -387,172 +387,148 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
   bağımlılık olur. Faz 3.8 deploy tamamlanıp gerçek trafik başlayınca yeniden değerlendirilecek.
 
 ### 3.7 — Konteynerleştirme `[DevOps]` `[AI]` ✅ tamamlandı
-- **Backend `Dockerfile`** — multi-stage: `maven:3.9-eclipse-temurin-21` build asamasi (testler
-  BILEREK burada calismiyor, Testcontainers Docker-in-Docker gerektirirdi), `jarmode=tools` ile
-  katman cikarma (`dependencies`/`spring-boot-loader`/`snapshot-dependencies`/`application` —
-  jar'i gercekten build edip icini actarak dogrulandi, varsayimla yazilmadi), final asama
-  `eclipse-temurin:21-jre-jammy` (alpine DEGIL — Thumbnailator/ImageIO'nun musl libc ile bilinen
-  uyumsuzluk gecmisi var, foto yukleme bu urunun gercek ozelligi). Root olmayan kullanici
-  (`appuser`, sabit UID/GID 1000).
-- **`docker-compose.yml`** — su an SADECE backend + postgres (Caddy ayri turda, env/frontend'le
-  birlikte). Postgres `healthcheck` (`pg_isready`) + backend'de `depends_on: condition:
-  service_healthy` — canli dogrulandi: backend, Postgres "Healthy" olmadan hic baslamiyor. Bu
-  turda ayrica canli yakalanan bir surum-spesifik hata: **Postgres 18+ imaji artik
-  `/var/lib/postgresql/data` DEGIL `/var/lib/postgresql`'in kendisine mount bekliyor** (eski
-  konvansiyonla container "unused mount/volume" hatasiyla acilista cikti).
-- **`business-photo-storage` volume karari: named volume** ("gozle gorulebilir olsun" diye
-  ONCE bind mount seciliydi, canli test sonrasi bu karar TERSINE cevrildi — asagida "dorduncu
-  gecis"e bakiniz, gerekce ve kanit orada). BU KARAR CLAUDE.md'deki asil riski (deploy
-  platformunun host diskinin kalici olup olmadigi) COZMUYOR, sadece container'in ephemeral
-  dosya sistemiyle host diski arasinda kopru kuruyor — platform karari hala Faz 3.8'in isi.
-- **Sir sizintisi canli dogrulandi** — "ignore ettim, herhalde girmedi" degil: build edilen
-  image'in icinde `find`/`grep` ile `application-dev.properties`, `.env`, `.git`, gercek dev
-  sifresi/JWT secret'i ARANDI, bulunamadi. Tek bulunan sey zararsiz `application-dev.properties.example`
-  (icerigi acilip kontrol edildi — sadece placeholder). Bkz. CLAUDE.md, "src/main/resources
-  image'a girer" notu.
-- **Non-root + bind mount izin testi canli yapildi** — gercek bir kullanici/isletme/foto
-  yukleme akisi uctan uca calistirildi: `appuser` (UID 1000) host'taki bind mount'a gercekten
-  yazabildi, container restart sonrasi hem dosya hem DB kaydi (`coverPhotoCardUrl`) kaldigi
-  dogrulandi. **Onemli cekince: bu test Windows + Docker Desktop'ta yapildi**, host klasoru
-  Windows/NTFS sahipliginde gorundu (Unix UID semantigi yok) — gercek Linux sunucudaki izin
-  uyusmazligi senaryosu burada BIREBIR uretilemedi. Bu yuzden Faz 3.8'e somut, isaretlenecek bir
-  madde olarak eklendi (asagida).
-- **Frontend hosting kararı: Caddy ile aynı VPS'te self-host** (Cloudflare Pages değil) —
-  gerekçe: aynı origin, CORS'u tamamen ortadan kaldırıyor (localhost:* + allowCredentials(true)
-  riskiyle uğraşmaya gerek kalmıyor deployed frontend için), rate limiting'in gerçek IP'yi
-  görmesi zaten Caddy'ye bağlıydı, tek platform beta ölçeğinde daha az bakım.
-- **`axios.ts` düzeltmesi** — `API_BASE_URL`, `||` yerine `??` ile okunuyor artık. Aynı origin
-  mimarisinde prod build'de `VITE_API_URL=""` (göreli yol) veriliyor; `||` boş string'i
-  "tanımsız" sayıp yerel geliştirme adresine düşerdi, prod build'i sessizce yanlış backend'e
-  bağlardı. `??` sadece null/undefined'da fallback'e düşüyor.
-- **`frontend/Dockerfile`** — multi-stage: `node:22-alpine` build asamasi (`VITE_API_URL` build
-  ARG'i, BILEREK bos), final asama `caddy:2-alpine` — Node/npm/kaynak kod final image'da yok.
-  Canlı doğrulandı: image'da `.env`/`.git`/node_modules kalıntısı yok, sadece derlenmiş statik
-  dosyalar var.
-- **Source map kontrolü** — prod build'de `.map` dosyası ÜRETİLMİYOR (Vite'ın varsayılanı,
-  proje bunu override etmiyor), gerçek bir `npm run build` çalıştırılıp `dist/` klasörü
-  incelenerek doğrulandı; ayrıca JS bundle'ında `sourceMappingURL` yorum satırı da yok.
-- **`frontend/Caddyfile`** — `/api/*` ve `/actuator/*` backend'e reverse proxy, geri kalanı
-  statik dosyalar + `try_files {path} /index.html` (SPA routing). Güvenlik header'ları ELLE
-  eklendi (Caddy bunları otomatik EKLEMİYOR, sadece otomatik HTTPS/yönlendirme yapıyor):
-  `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
-  `Server` header'ı kaldırıldı (`-Server`). `X-XSS-Protection` bilerek eklenmedi (modern
-  tarayıcılarda kaldırılmış, artık anlamsız). `Content-Security-Policy` bilerek eklenmedi —
-  bu uygulamaya özel dikkatli ayarlanması gereken ayrı bir iş, yanlış ayarlanırsa siteyi bozar.
-- **Caddy sertifika kalıcılığı** — `caddy_data`/`caddy_config` named volume (business-photo-
-  storage'daki "gözle görülebilir olsun" gerekçesi burada geçerli değil, bu insan tarafından
-  okunacak bir veri değil). Volume olmadan her container yeniden oluşturmasında Let's Encrypt'ten
-  yeniden sertifika istenir — haftalık domain başına sertifika sınırını zorlayabilir.
-- **Backend artık host'a port açmıyor** (`expose: 8080`, `ports` değil) — tek genel giriş noktası
-  Caddy (80/443). Rate limiting/CORS gibi korumaları es geçip backend'e doğrudan istek atma
-  yolu, bir port unutkanlığına bağlı olmadan, en baştan yok.
-- **Uçtan uca canlı doğrulama (gerçek `docker compose up` ile)**: gerçek kayıt+giriş Caddy
-  üzerinden (port 80) çalıştı; `/randevularim` gibi bir alt yola DOĞRUDAN gidince 404 değil
-  `index.html` döndüğü (SPA routing) doğrulandı; foto yükleyip `/api/business-photos/...`
-  üzerinden Caddy proxy'siyle servis edildiği doğrulandı; güvenlik header'larının gerçekten
-  yanıtta olduğu `curl -I` ile görüldü.
-- **CORS — kod değişmedi, sadece değer değişecek.** Aynı origin'de deployed frontend'in kendi
-  istekleri CORS kontrolüne hiç girmiyor, ama mevcut fail-fast `CORS_ALLOWED_ORIGINS` mekanizması
-  KALDIRILMADI — JWT `Authorization` header'ı localStorage'da tutulduğu için "başka bir sitenin
-  JS'i kurbanın token'ıyla API'ye istek atıp yanıtı okuyabilmesi" tehdidine karşı hâlâ koruma
-  sağlıyor, ileride cross-origin bir istemci (mobil uygulama vb.) gelirse de hazır. Sadece
-  değeri gerçek prod domain'i olacak.
-- **`.env` yönetimi**: kök dizine `.env.example` (Postgres, JWT_SECRET, CORS_ALLOWED_ORIGINS,
-  DOMAIN) + kök `.gitignore` (`.env`) eklendi — önceden kökte hiç `.gitignore` yoktu. Gerçek
-  `.env` sunucuya ELLE kopyalanacak (tek sunucu ölçeğinde bir secrets-manager gereksiz
-  karmaşıklık); docker-compose'un kendi `${VAR:?...}` fail-fast'i zaten güvenlik ağı.
-- **`DatabaseSeeder` prod profilinde devre dışı** ✅ zaten yapılmış — `@Profile("dev")` ile
-  sınırlı (Faz 3.7'de fark edildi, ayrı bir iş gerekmedi).
 
-**İkinci geçiş — dışarıdan bir gözden geçirme sonrası bulunan/düzeltilen gerçek boşluklar
-(2026-09-01):**
-- **Bare `/actuator` yolu SPA fallback'ine düşüyordu.** Caddyfile'daki `handle /actuator/*`,
-  sonunda `/` olmayan çıplak `/actuator`'a uymuyordu — bu yol `index.html`'e (200) düşüyordu.
-  Veri sızmıyordu (gerçek actuator verisine hiç ulaşılmıyordu) ama tutarsızdı. Named matcher
-  (`@actuator path /actuator /actuator/*`) ile düzeltildi, canlı doğrulandı: artık ikisi de
-  backend'e gidip 401/200 tutarlı dönüyor.
-- **Caddy'nin capability'leri kısıtlandı** — `cap_drop: [ALL]` + `cap_add: [NET_BIND_SERVICE]`
-  + `security_opt: no-new-privileges:true`. Root kalıyor (resmi image'ın gerektirdiği gibi,
-  80/443'e bind için) ama yetkisi SADECE ayrıcalıklı porta bağlanmakla sınırlı. Canlı doğrulandı,
-  Caddy hâlâ normal çalışıyor.
-- **Docker log driver'a sınır kondu** (`max-size: 10m`, `max-file: 3`, tüm servisler) — önceden
-  hiç yoktu, sınırsız büyürdü.
-- **`VITE_API_URL` tamamen kaldırıldı.** Vite dev sunucusuna (`vite.config.js`) `/api` ve
-  `/actuator`'ı backend'e (8080) yönlendiren bir proxy eklendi — artık dev'de de prod'daki gibi
-  aynı origin modeli geçerli. Bu sayede ayrı bir taban-URL değişkenine hiç gerek kalmadı;
-  `axios.ts`'te `baseURL` set edilmiyor, `frontend/.env`/`.env.example` silindi (tek içerikleri
-  bu değişkendi). Canlı doğrulandı: Vite dev sunucusu (5173) üzerinden gerçek kayıt+giriş
-  backend'e (8080) proxy'lenerek çalıştı.
-- **Üç iddia, canlı kanıtla doğrulandı (önceden sadece config dosyasına bakılarak "var" denmişti):**
-  (1) `docker compose exec backend env` ile secret'ların gerçekten container'a ulaştığı görüldü;
-  (2) gerçek bir işletme oluşturulup `docker compose down && up` (volume korunarak) yapıldı,
-  veri hâlâ oradaydı — named volume kalıcılığı kanıtlandı; (3) Caddy'ye sahte bir
-  `X-Forwarded-For` header'ı gönderildi, backend'in gördüğü IP değişmedi — spoofing'e kapalı
-  olduğu doğrulandı (ayrıntı ve çekince için Faz 3.8'deki rate-limiting IP maddesine bakınız).
+**Mevcut durum (güncel):** `docker-compose.yml` üç servis çalıştırıyor — `postgres`, `backend`,
+`caddy` (frontend'i de sunan reverse proxy). Bu üçü dışında hiçbir servis host'a port açmıyor;
+tek genel giriş noktası Caddy'nin 80/443'ü. Aşağıdaki liste, birkaç ayrı gözden geçirme turunda
+bulunup düzeltilen gerçek hatalar dahil, şu anki NİHAİ hâli anlatıyor — geçmiş yanlış kararlar
+(ör. bind mount) ayrıca not düşülmüyor, sadece doğru sonuç yazılıyor; öğretici olan iki gerçek
+yanılgı (Postgres port testi, bind mount izin sorunu) altta ayrı vurgulanıyor çünkü aynı deseni
+tekrar etmemek için bilinmesi gerekiyor.
 
-**Üçüncü geçiş — bir önceki raporun cevapsız bıraktığı iki soru + gözden kaçan asıl konu
-(2026-09-01):**
-- **Güvenlik header'ları — zaten vardı, önceki rapor sadece teyit etmeyi unuttu.** Caddyfile'da
-  `header` bloğu ilk Caddy turunda eklenmişti (`Strict-Transport-Security`,
-  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `-Server`) —
-  yukarıdaki ilk geçişte zaten yazılı, canlı doğrulanmıştı. Ayrı bir iş gerekmedi.
-- **`show-details` — okundu: hiçbir dosyada set edilmemiş, yani Spring'in güvenli varsayılanı
-  (`never`) geçerli.** Bu bir "3.8'e ertelenecek karar" değil, zaten doğru duran bir okumaydı —
-  canlı yanıt da bunu defalarca doğruladı (`{"status":"UP","groups":[...]}`, hiçbir zaman DB
-  bağlantısı/disk detayı içermedi).
-- **Fotoğraf yükleme dizini — gerçekten atlanmıştı, Postgres'le AYNI sınıf bir risk.**
-  `docker-compose.yml`'de `./backend/business-photo-storage:/app/business-photo-storage` zaten
-  bir BIND MOUNT (named volume değil, ilk Caddy turunda kurulmuştu) ama Postgres'e yapılan
-  `down && up` testi bu dizine hiç uygulanmamıştı. Şimdi yapıldı: gerçek bir fotoğraf yüklendi,
-  `docker compose down` (volume/bind mount etkilenmeden) + `up` sonrası dosya host'ta duruyordu
-  ve `/api/business-photos/...` üzerinden hâlâ servis ediliyordu.
-- **Backend container'ın UID'si canlı teyit edildi:** `docker compose exec backend id` →
-  `uid=1000(appuser)`, root değil (Dockerfile'daki `USER appuser` satırı zaten oradaydı, ilk
-  container turunda eklenmişti — şimdi ayrıca çalışan bir compose stack'inde de doğrulandı).
-- **Caddy'de govde boyutu siniri yoktu — gercek bir bosluk, eklendi.** `spring.servlet.
-  multipart.max-file-size=8MB` sadece istek backend'e ULAŞTIKTAN sonra devreye giriyordu; Caddy
-  tarafında hiçbir sınır olmaması, çok daha büyük bir gövdenin (ör. 500MB) backend'e taşınmasına
-  izin verip ucuz bir bant genişliği/bellek tüketen DoS deseni oluşturuyordu.
-  `/api/*` handle bloğuna `request_body { max_size 10MB }` eklendi — 8MB servlet sınırının
-  hafifçe üstünde (aynı "her katman bir öncekinden gevşek" mantığı: 5MB iş kuralı < 8MB servlet
-  < 10MB Caddy). Canlı doğrulandı: 12MB'lik bir gövde Caddy'den 413 ile geri döndü, backend'e hiç
-  ulaşmadı.
-- **`TempRemoteAddrController.java`'nın hiçbir commit'e girmediği doğrulandı** —
-  `git log --all --full-history` ile sıfır sonuç, `git show --stat HEAD` dosya listesinde de yok.
+**Backend `Dockerfile`** — multi-stage: `maven:3.9-eclipse-temurin-21` build aşaması (testler
+BİLEREK burada çalışmıyor, Testcontainers Docker-in-Docker gerektirirdi), `jarmode=tools` ile
+katman çıkarma (`dependencies`/`spring-boot-loader`/`snapshot-dependencies`/`application` —
+jar'ı gerçekten build edip içini açarak doğrulandı, varsayımla yazılmadı), final aşama
+`eclipse-temurin:21-jre-jammy` (alpine DEĞİL — Thumbnailator/ImageIO'nun musl libc ile bilinen
+uyumsuzluk geçmişi var, foto yükleme bu ürünün gerçek özelliği). Root olmayan kullanıcı
+(`appuser`, sabit UID/GID 1000) — canlı teyit edildi (`docker compose exec backend id`).
+`HEALTHCHECK` ile `/actuator/health`'i kontrol ediyor, Caddy'nin `depends_on: condition:
+service_healthy` ile backend'i beklemesi bunun üzerine kurulu.
 
-**Dördüncü geçiş — bir önceki raporun kendi kendini ele veren bir cümlesi + gerçek stored-XSS
-riski (2026-09-01):**
-- **"Bind mount, Postgres'inkiyle aynı sınıf koruma" cümlesi YANLIŞTI — düzeltildi, karar
-  tersine çevrildi.** Postgres named volume kullanıyordu, `business-photo-storage` bind mount'tu
-  — ikisi aynı şey değil. Gerçek risk: taze bir Linux sunucuda host'ta önceden `business-photo-
-  storage` klasörü yoksa Docker onu **root:root** olarak oluşturur, `appuser` (UID 1000) yazamaz
-  → ilk fotoğraf yüklemesi `Permission denied`. **Bu, Postgres 5432 yanılgısıyla BİREBİR AYNI
-  desendi**: Windows/Docker Desktop'ta host dosya izinleri container'a gerçek anlamda
-  yansımadığı için sorun hiç görünmedi, gerçek Linux sunucuda ortaya çıkardı. Named volume'a
-  geçilerek kapatıldı (yukarıdaki "volume kararı" maddesine bakınız) — canlı test edildi: taze
-  bir named volume, image'da zaten `chown`'lanmış `/app/business-photo-storage` yolundan
-  sahipliği otomatik alıyor, appuser hiçbir manuel adım olmadan yazabiliyor. Aynı stack üzerinde
-  gerçek foto yükleyip `down && up` sonrası hâlâ servis edildiği ayrıca doğrulandı.
-- **`.gitignore`/`.dockerignore` kontrolü** — `/business-photo-storage/` ikisinde de zaten
-  vardı (bu, yerel `mvnw spring-boot:run` ile Docker'sız geliştirmede hâlâ kullanılan gerçek
-  host klasörü için önemini koruyor; named volume kararı sadece docker-compose'un kullandığı
-  depolamayı değiştiriyor).
-- **Same-origin + kullanıcı dosyası yüklemesi = yeni bir stored-XSS yüzeyi sorusu — kontrol
-  edildi, zaten kapalıydı.** `BusinessPhotoService.validateAndGetWidth`, istemcinin
-  Content-Type/uzantı iddiasına HİÇ bakmıyor — `ImageIO.getImageReaders` dosyanın kendi
-  baytlarına (magic bytes) bakıyor, JDK'nın okuyucuları SVG/HTML'yi hiç tanımadığı için ikisi de
-  reddediliyor. Ayrıca (planda vardı, kontrol edildi) her yükleme `Thumbnails.outputFormat("jpg")`
-  ile SIFIRDAN yeniden çiziliyor ve servis eden uç Content-Type'ı sabit `MediaType.IMAGE_JPEG`
-  dönüyor — orijinal baytlar hiç saklanmıyor/servis edilmiyor. **Canlı doğrulandı:** hem gerçek
-  bir `<script>` içeren SVG hem aynı dosyanın `.jpg` uzantısıyla gönderilen hâli, ikisi de 409
-  "Desteklenmeyen veya bozuk görsel dosyası" ile reddedildi. Bu maddeye kod yazmaya gerek
-  kalmadı, zaten doğru kurulmuştu — sadece canlı kanıtla teyit edildi.
+**`frontend/Dockerfile`** — multi-stage: `node:22-alpine` build aşaması (`VITE_API_URL` build
+ARG'i BİLEREK boş, aşağıya bakınız), final aşama `caddy:2-alpine` — Node/npm/kaynak kod final
+image'da yok. Prod build'de `.map` dosyası ÜRETİLMİYOR (Vite'ın varsayılanı, proje override
+etmiyor — gerçek bir `npm run build` çalıştırılıp doğrulandı, JS bundle'ında `sourceMappingURL`
+yorumu da yok).
+
+**`postgres` servisi** — `postgres_data` named volume, `/var/lib/postgresql`'in KENDİSİNE mount
+(Postgres 18+ imajı artık `/var/lib/postgresql/data` değil bunu bekliyor — eski konvansiyonla
+container "unused mount/volume" hatasıyla açılışta çıktı, canlı yakalanıp düzeltildi).
+`healthcheck` (`pg_isready`), host'a port açmıyor.
+
+**`backend` servisi** — host'a port AÇMIYOR (`expose: 8080`, `ports` değil) — backend'e
+doğrudan istek atma yolu, bir port unutkanlığına bağlı olmadan en baştan yok. `depends_on
+postgres: condition: service_healthy` (düz `depends_on` sadece Postgres konteynerinin
+başladığını garanti ederdi, gerçekten bağlantı kabul ettiğini değil). `business_photo_storage`
+**named volume** olarak `/app/business-photo-storage`'a mount (aşağıdaki "Öğretici iki yanılgı"
+bölümü, madde 2'ye bakınız — bu, ilk seçilip sonra yanlış çıktığı için değiştirilen bir karar).
+
+**`caddy` servisi** — `frontend/Dockerfile` + `Caddyfile`'dan build, 80/443'ü host'a açan tek
+servis. `depends_on backend: condition: service_healthy`. Root ÇALIŞIYOR (resmi Caddy image'ının
+gerektirdiği gibi — 80/443 gibi ayrıcalıklı portlara bind etmek bunu istiyor) ama
+`cap_drop: [ALL]` + `cap_add: [NET_BIND_SERVICE]` + `security_opt: no-new-privileges:true` ile
+yetkisi SADECE port bağlamakla sınırlandı (canlı doğrulandı, bu kısıtlamayla hâlâ normal
+çalışıyor). Non-root'a TAM geçiş (host portu ayrıcalıksız bir porta çevirip Caddy'yi orada
+dinletmek) otomatik HTTPS/ACME akışını bozup bozmadığı gerçek bir domain'le doğrulanmadan
+denenmeyecek (Faz 3.8). `caddy_data`/`caddy_config` named volume — TLS sertifika/state kalıcılığı
+için (olmadan her container yeniden oluşturmasında Let's Encrypt'ten yeniden sertifika istenir,
+haftalık domain başına sınırı zorlayabilir).
+
+**Tüm servisler** — ortak `x-logging` YAML anchor ile Docker'ın json-file log driver'ına sınır
+(`max-size: 10m`, `max-file: 3`) — önceden hiç yoktu, sınırsız büyürdü.
+
+**`Caddyfile`** — `/api/*` ve `/actuator` + `/actuator/*` (named matcher — çıplak `/actuator`
+`/actuator/*` kalıbına UYMUYOR, bu yüzden ayrı yazıldı; ilk denemede bare path SPA fallback'ine
+düşüp `index.html` döndürüyordu, canlı yakalanıp düzeltildi) backend'e reverse proxy. `/api/*`
+üzerinde `request_body { max_size 10MB }` — Spring'in kendi 8MB servlet sınırı sadece istek
+backend'e ULAŞTIKTAN sonra devreye girdiği için, önünde hiç sınır olmaması çok daha büyük bir
+gövdenin (ör. 500MB) backend'e taşınmasına izin veren ucuz bir DoS deseniydi (5MB iş kuralı <
+8MB servlet < 10MB Caddy — her katman bir öncekinden gevşek; canlı doğrulandı: 12MB'lik gövde
+Caddy'den 413 ile geri döndü, backend'e hiç ulaşmadı). Güvenlik header'ları ELLE eklendi (Caddy
+bunları otomatik EKLEMİYOR, sadece otomatik HTTPS/yönlendirme yapıyor): `Strict-Transport-
+Security`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`,
+`Server` header'ı kaldırıldı (`-Server`) — hepsi `curl -I` ile canlı doğrulandı.
+`X-XSS-Protection` bilerek eklenmedi (modern tarayıcılarda kaldırılmış, artık anlamsız).
+`Content-Security-Policy` bilerek eklenmedi — bu uygulamaya özel dikkatli ayarlanması gereken
+ayrı bir iş, yanlış ayarlanırsa siteyi bozar. Geri kalan her şey statik dosyalar +
+`try_files {path} /index.html` (SPA routing — canlı doğrulandı, `/randevularim` gibi bir alt
+yola doğrudan gidince 404 değil `index.html` dönüyor).
+
+**Frontend hosting kararı: Caddy ile aynı VPS'te self-host** (Cloudflare Pages değil) —
+gerekçe: aynı origin, CORS'u deployed frontend için tamamen gereksiz kılıyor, rate limiting'in
+gerçek IP'yi görmesi zaten Caddy'ye bağlıydı, tek platform beta ölçeğinde daha az bakım.
+Dev'de de AYNI model: `vite.config.js`'teki `server.proxy`, `/api` ve `/actuator`'ı backend'e
+(8080) yönlendiriyor (canlı doğrulandı: 5173 üzerinden gerçek kayıt+giriş çalıştı). Bu yüzden
+`VITE_API_URL` TAMAMEN KALDIRILDI — `axios.ts`'te `baseURL` hiç set edilmiyor, `utils/photo.ts`
+artık no-op, `frontend/.env`/`.env.example`/`vite-env.d.ts`'teki tip tanımı silindi (tek
+içerikleri bu değişkendi).
+
+**CORS — kod değişmedi, sadece değer değişecek.** Aynı origin'de deployed frontend'in kendi
+istekleri CORS kontrolüne hiç girmiyor, ama mevcut fail-fast `CORS_ALLOWED_ORIGINS` mekanizması
+KALDIRILMADI — JWT `Authorization` header'ı localStorage'da tutulduğu için "başka bir sitenin
+JS'i kurbanın token'ıyla API'ye istek atıp yanıtı okuyabilmesi" tehdidine karşı hâlâ koruma
+sağlıyor, ileride cross-origin bir istemci (mobil uygulama vb.) gelirse de hazır.
+
+**`.env` yönetimi**: kök dizine `.env.example` (Postgres, JWT_SECRET, CORS_ALLOWED_ORIGINS,
+DOMAIN) + kök `.gitignore` (`.env`) eklendi. Gerçek `.env` sunucuya ELLE kopyalanacak (tek
+sunucu ölçeğinde bir secrets-manager gereksiz karmaşıklık); docker-compose'un kendi
+`${VAR:?...}` fail-fast'i zaten güvenlik ağı.
+
+**`DatabaseSeeder` prod profilinde devre dışı** ✅ zaten yapılmış — `@Profile("dev")` ile sınırlı,
+ayrı bir iş gerekmedi.
+
+**Sır sızıntısı canlı doğrulandı** — build edilen her iki image'ın (backend, frontend/Caddy)
+içinde `find`/`grep` ile `application-dev.properties`, `.env`, `.git`, gerçek dev şifresi/JWT
+secret'ı ARANDI, bulunamadı. Tek bulunan şey zararsız `application-dev.properties.example`
+(içeriği açılıp kontrol edildi — sadece placeholder; bkz. CLAUDE.md, "src/main/resources
+image'a girer" notu).
+
+**Upload güvenliği canlı doğrulandı.** Same-origin mimarisi + kullanıcı dosyası yüklemesi
+birlikte yeni bir stored-XSS sorusu açıyordu (kötü niyetli bir SVG/HTML aynı origin'den servis
+edilirse JS çalışır, JWT localStorage'dan çalınabilir). Kontrol edildi, zaten kapalıydı:
+`BusinessPhotoService`, istemcinin Content-Type/uzantı iddiasına HİÇ bakmıyor —
+`ImageIO.getImageReaders` dosyanın kendi baytlarına (magic bytes) bakıyor, SVG/HTML JDK'nın
+okuyucuları tarafından hiç tanınmadığı için doğal olarak reddediliyor; ayrıca her yükleme
+`Thumbnails.outputFormat("jpg")` ile SIFIRDAN yeniden çiziliyor ve servis eden uç Content-Type'ı
+sabit `MediaType.IMAGE_JPEG` dönüyor — orijinal baytlar hiç saklanmıyor. Canlı doğrulandı: gerçek
+bir `<script>` içeren SVG hem kendi uzantısıyla hem `.jpg` kılığında gönderildi, ikisi de 409
+ile reddedildi. Tam çözüm (JWT'yi httpOnly cookie'ye taşımak) Faz 3.11'de; bu arada ek bir kod
+değişikliği gerekmedi çünkü mevcut doğrulama zaten yeterliydi.
+
+**Uçtan uca canlı doğrulama (gerçek `docker compose up` ile, sadece config okuyarak değil):**
+gerçek kayıt+giriş Caddy üzerinden çalıştı; `docker compose exec backend env` ile secret'ların
+gerçekten container'a ulaştığı görüldü; Postgres VE fotoğraf depolaması için ayrı ayrı gerçek
+veri oluşturulup `docker compose down` (volume korunarak) + `up` sonrası hâlâ orada olduğu
+doğrulandı; Caddy'ye sahte bir `X-Forwarded-For` header'ı gönderildi, backend'in gördüğü IP
+değişmedi (spoofing'e kapalı) — ama gözlenen IP `172.18.0.1` (Docker bridge gateway'i) çıktı,
+bu muhtemelen Windows/Docker Desktop'ın NAT katmanına özgü, gerçek Linux sunucuda farklı
+davranabilir (bkz. Faz 3.8'deki rate-limiting IP maddesi); `TempRemoteAddrController.java` (bu
+testler için geçici eklenen dosya) hiçbir commit'e girmediği `git log --all --full-history` ve
+`git show --stat` ile doğrulandı.
+
+**Öğretici iki yanılgı — aynı desenin iki farklı yerde tekrarı:**
+1. **Postgres port testi.** Host'tan `localhost:5432`'ye bağlanmayı denedim, bağlandı — ama
+   sebep docker-compose'un port açması değildi (açmıyor, `docker compose ps` ile doğrulandı);
+   bu geliştirme makinesinde zaten ayrı, yerel bir Postgres servisi 5432'yi dinliyordu.
+2. **`business-photo-storage` bind mount izin hatası.** Aynı hatayı tekrar ettim: bind mount
+   seçip "Postgres'inkiyle aynı sınıf koruma" dedim — YANLIŞTI, Postgres named volume kullanıyor,
+   ikisi aynı şey değil. Gerçek risk: taze bir Linux sunucuda host'ta `business-photo-storage`
+   klasörü yoksa Docker onu `root:root` oluşturur, `appuser` (UID 1000) yazamaz →
+   `Permission denied`. **Windows/Docker Desktop'ta bu hiç görünmedi** çünkü orada host dosya
+   izinleri container'a gerçek anlamda yansımıyor — ikisi de "temiz görünen bir test, kirli
+   ortam yüzünden gerçeği gizliyor" deseninin aynı örneği. Named volume'a geçilerek kapatıldı:
+   canlı test edildi, taze bir named volume image'da zaten `chown`'lanmış mount yolundan
+   sahipliği otomatik alıyor, appuser hiçbir manuel adım olmadan yazabiliyor; gerçek foto
+   yükleyip `down && up` sonrası hâlâ servis edildiği ayrıca doğrulandı. Bedeli: veri artık
+   `./backend` altında gözle görülebilir bir klasör değil, Docker'ın yönettiği depolama —
+   yedekleme (Faz 3.8, henüz yazılmadı) buna göre bir yardımcı container üzerinden kurulmalı.
 
 ### 3.8 — Deploy, yedekleme, izleme `[DevOps]` `[SEN]`
 Detaylar aşağıdaki bölümde.
 - [x] **`business-photo-storage` izin sorunu — kapandı, madde artık gerekmiyor.** ~~Bind mount +
-  elle `chown 1000:1000`~~ yerine **named volume**'a geçildi (bkz. Faz 3.7 "üçüncü geçiş").
-  Canlı test edildi: Docker, boş bir named volume'u ilk mount'ta image'daki (Dockerfile'ın zaten
+  elle `chown 1000:1000`~~ yerine **named volume**'a geçildi (bkz. Faz 3.7, "Öğretici iki
+  yanılgı" bölümü, madde 2). Canlı test edildi: Docker, boş bir named volume'u ilk mount'ta image'daki (Dockerfile'ın zaten
   `chown` ettiği) `/app/business-photo-storage` yolunun sahipliğinden dolduruyor — appuser hiçbir
   manuel adım olmadan yazabiliyor. Sunucuda unutulabilecek bir `chown` adımına artık gerek yok.
   **Yeni sonuç:** yedekleme artık doğrudan `rsync`/`cd` ile değil, volume'u mount eden küçük bir
