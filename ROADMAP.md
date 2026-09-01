@@ -792,6 +792,16 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
     tek tek işlemek) pratik değil. Dürüst özet: **canlı sistemde anonimleştirme anında ve
     geri döndürülemez; TÜM kopyalar (yedekler dahil) üzerinden tam silinme, o yedeklerin
     kendi rotasyon takvimine göre ek ~4 hafta sürebilir.**
+  - **Restore sonrası tekrar anonimleştirme — 3.9 kapsamına giren ayrı bir madde.** Bir yedek
+    (ör. felaket kurtarma, veri bozulması) geri yüklendiğinde, o yedek anonimleştirmeden ÖNCEKİ
+    hâli taşıyorsa, restore işlemi silinen PII'yi **sessizce** geri getirir — bu, yedekleme
+    planının kendisinden ayrı, GERÇEK bir prosedür eksikliği. 3.9'a şu madde eklenmeli: her
+    restore sonrasında, `anonymizedAt IS NOT NULL` olan kullanıcıları bulup alanlarını
+    (`name`/`surName`/`email`/`phone`/`password`) YENİDEN scrub eden bir adım/script
+    çalıştırılacak — restore prosedürünün (RUNBOOK.md'nin B4'ü) son adımı olarak. Not: bu,
+    `anonymizedAt` zaman damgasının (adım 4'te zaten yazılıyor) tam olarak bu yüzden ayrı bir
+    sütun olarak tutulduğunu doğruluyor — "kim anonimleşmiş" sorusunu restore sonrası tekrar
+    sormak için gereken tek bilgi bu.
 
   **`BUSINESS_OWNER` silme akışı — bilerek bu planın dışında.** Kapsamı çok daha büyük: kendi
   işletmeleri, o işletmelere ait randevular/personel/hizmetler, müşterilerin yazdığı yorumlar.

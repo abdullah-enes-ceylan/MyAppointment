@@ -543,6 +543,12 @@ gerçekten bağımsız çalışan bir yedek var mı" sorusuna cevap vermek, mevc
 - [ ] **Ölçülen restore süresi buraya yazılacak:** `___ dakika`. "Yedek restore edilebiliyor"
   yeterli değil — gerçek bir kesinti anında "ne kadar sürede ayağa kaldırabiliyorum" bilgisi
   olmadan bu sayı bir işe yaramaz.
+- [ ] **Faz 3.9 gerçekleştirildikten SONRA, bu adım restore prosedürüne eklenecek:** yedek
+  anonimleştirmeden ÖNCEKİ bir ana aitse, restore silinen PII'yi sessizce geri getirir.
+  Restore'un SON adımı olarak, `anonymizedAt IS NOT NULL` olan kullanıcıları bulup
+  `name`/`surName`/`email`/`phone`/`password`'ini yeniden scrub eden bir script/adım
+  çalıştırılmalı (bkz. ROADMAP.md, 3.9 hesap silme akışı). Bu madde 3.9 yazılana kadar
+  boş bir hatırlatma olarak kalıyor.
 
 ## B5. İzleme — kalan ikili (uptime monitor zaten A12'de kuruldu)
 
