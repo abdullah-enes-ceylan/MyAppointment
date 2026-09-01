@@ -525,60 +525,108 @@ testler için geçici eklenen dosya) hiçbir commit'e girmediği `git log --all 
    yedekleme (Faz 3.8, henüz yazılmadı) buna göre bir yardımcı container üzerinden kurulmalı.
 
 ### 3.8 — Deploy, yedekleme, izleme `[DevOps]` `[SEN]`
-Detaylar aşağıdaki bölümde.
-- [x] **`business-photo-storage` izin sorunu — kapandı, madde artık gerekmiyor.** ~~Bind mount +
-  elle `chown 1000:1000`~~ yerine **named volume**'a geçildi (bkz. Faz 3.7, "Öğretici iki
-  yanılgı" bölümü, madde 2). Canlı test edildi: Docker, boş bir named volume'u ilk mount'ta image'daki (Dockerfile'ın zaten
-  `chown` ettiği) `/app/business-photo-storage` yolunun sahipliğinden dolduruyor — appuser hiçbir
-  manuel adım olmadan yazabiliyor. Sunucuda unutulabilecek bir `chown` adımına artık gerek yok.
-  **Yeni sonuç:** yedekleme artık doğrudan `rsync`/`cd` ile değil, volume'u mount eden küçük bir
-  yardımcı container üzerinden yapılmalı (aşağıdaki DB yedekleme maddesiyle birlikte kurulacak).
-- **Storage adaptörü kararı** (kalıcı disk volume mu, S3/R2 mi) — CLAUDE.md'deki bilinen risk:
-  deploy platformunun disk sistemi kalıcı değilse (bazı PaaS'lerde ephemeral disk) tüm işletme
-  fotoğrafları sessizce kaybolur, uygulama hata vermez. `BusinessPhotoStorage` arayüzü sayesinde
-  S3/R2'ye geçiş tek adaptör değişikliği — ama **karar deploy'dan önce verilmeli**, sonradan fark
-  edilirse veri kaybı geri getirilemez.
-- **DB yedekleme, gerçek kullanıcı verisi girmeden ÖNCE kurulu ve en az bir kez geri yükleyerek
-  test edilmiş olmalı** (bkz. Dikkat edilecekler → Yedekleme). Beta'nın ilk gününden itibaren
-  gerçek müşteri/randevu verisi işlenmeye başlıyor — "sonra kurarım" diye ertelenemez. **Kapsam:
-  sadece `pg_dump` değil, `business_photo_storage` named volume'u da yedeğe dahil olmalı** —
-  şu an (Faz 3.7 itibarıyla) hiçbir yedekleme scripti/cron'u henüz YAZILMADI (`pg_dump`/`rclone`
-  şimdiye kadar sadece bu dosyadaki bir plandı, gerçek bir iş değil) — o yazılırken foto dizini
-  unutulursa, DB restore ettiğinde kırık resim linkleriyle karşılaşırsın.
-- **Rate limiting'in gerçek istemci IP'sini gördüğünün doğrulanması** (bkz. Faz 3.5'teki risk
-  notu) — deploy sonrası ilk kontrollerden biri, **farklı cihazlardan** gelen isteklerin
-  sunucu loglarında **farklı IP** olarak göründüğünü teyit etmek olmalı. Doğrulanmazsa, Caddy
-  `X-Forwarded-For` göndermiyor ya da `server.forward-headers-strategy=native` yanlış
-  çalışıyor demektir — bu durumda rate limiting koruma olmaktan çıkıp TÜM kullanıcıları proxy'nin
-  tek IP'si üzerinden birbirine kilitleyen bir mekanizmaya döner. **Faz 3.7'de kısmen canlı
-  test edildi:** istemcinin gönderdiği sahte bir `X-Forwarded-For` header'ının Caddy tarafından
-  GERÇEKTEN reddedildiği/ezildiği doğrulandı (spoofing'e kapalı). Ama görülen IP `172.18.0.1`
-  (Docker bridge gateway'i) çıktı — bu, Windows/Docker Desktop'ın port yayınlama NAT katmanına
-  özgü bir maskeleme olabilir, gerçek bir Linux sunucuda farklı davranabilir. Yani spoofing
-  koruması doğrulandı ama gerçek-IP-doğruluğu HÂLÂ sadece gerçek sunucuda, gerçek farklı
-  istemcilerle kanıtlanabilir.
-- [ ] **Postgres port izolasyonu, gerçek sunucuda doğrulanmalı.** Faz 3.7'de bu makinede
-  denendi ama sonuç güvenilmez çıktı: bu geliştirme makinesinde zaten yerel bir Postgres servisi
-  5432'yi dinliyor, host'tan bağlanabilmek docker-compose'un port açmasından değil o yerel
-  servisten kaynaklandı (compose dosyasında `postgres` servisinin hiç `ports:` satırı yok,
-  `docker compose ps` ile doğrulandı). Deploy günü sunucudan `psql -h localhost -p 5432` (veya
-  `nc localhost 5432`) denenip **reddedildiği** görülmeli.
-- [ ] **`/actuator/health`'in dışarıya (Caddy üzerinden) hiç proxy'lenmesi gerekip gerekmediği
-  karara bağlanmalı.** Docker'ın kendi `HEALTHCHECK`'i zaten container içinden `localhost`
-  üzerinden erişiyor, dışarıya açmaya teknik olarak gerek yok. Dışarı açmanın tek gerçek faydası
-  dış bir uptime-monitor servisinin (ör. UptimeRobot) periyodik ping atabilmesi. Risk düşük
-  (`management.endpoint.health.show-details` hiç ayarlanmamış, Spring'in güvenli varsayılanı
-  geçerli — canlı yanıt sadece `{"status":"UP","groups":[...]}, DB/disk detayı YOK, defalarca
-  doğrulandı) ama karar yine de bilinçli verilmeli, unutkanlıkla açık kalmasın.
-- [ ] **JVM `mem_limit`/container bellek sınırı** — henüz hiç ayarlanmamış. Asıl mesele
-  `MaxRAMPercentage` DEĞİL, container'a bir `mem_limit` konulmamış olması: JVM heap şişerse
-  Linux OOM killer'ın hangi container'ı öldüreceği belirsizleşir, Postgres'i de seçebilir. JDK
-  zaten cgroup limitini kendiliğinden okuyor — **önce `mem_limit` konur (gerçek sunucunun
-  RAM'ine göre), sonra gerekirse `MaxRAMPercentage` ince ayarı yapılır**, sıra bu, tersi değil.
-- [ ] **Let's Encrypt: ilk denemede staging CA kullan.** Gerçek (production) CA'nın saatte 5
-  başarısız deneme sınırı var — Caddyfile/DNS ayarını ilk seferde doğru kurmayabilirsin, staging
-  CA'da bu sınıra takılmazsın. Caddy'nin `acme_ca` global seçeneğiyle geçici olarak staging
-  endpoint'ine yönlendirilip, çalıştığı görülünce production'a dönülür.
+
+Çalıştırılabilir adım adım prosedür: [RUNBOOK.md](RUNBOOK.md). Bu bölüm sadece kararları ve
+kabul kriterlerini takip eder — komut sırası ve "ne görmeliyim" kanıt satırları runbook'ta.
+
+**İki alt faza bölündü, 3.8b'ye 3.8a bitmeden geçilmeyecek:**
+- **3.8a** — sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama turu.
+- **3.8b** — yedekleme + restore provası + izleme.
+
+Gerekçe: 3.8a olmadan gerçek trafik/veri yok, dolayısıyla yedekleyecek bir şey de yok — sırayı
+tersine çevirmenin (önce yedekleme altyapısı kurup sonra deploy etmek) hiçbir faydası yok, sadece
+kafa karıştırır. 3.8b bitmeden beta onboarding'e (ve dolayısıyla 3.9/3.10/3.11'e) geçilmeyecek —
+gerçek müşteri verisi, yedeği kanıtlanmamış bir sistemde asla işlenmeyecek.
+
+**Windows/Docker Desktop yerel testlerinin kanıt değeri düşük — bu fazda özellikle önemli.**
+Faz 3.7'de iki kez aynı desen yaşandı: Postgres 5432 host'tan erişilebilir göründü (aslında bu
+makinedeki ayrı bir yerel Postgres servisiydi) ve `business-photo-storage` bind mount izin
+sorunu Windows'ta hiç görünmedi (host dosya izinleri container'a gerçek yansımıyor). Bu yüzden
+runbook'taki her madde ya **canlı sunucuda doğrulanacak** olarak açıkça işaretli ya da yerelde
+doğrulanabilen (ör. `docker compose ps`, timezone testi) gerçek bir kanıtla destekleniyor — hiçbir
+adımda "muhtemelen çalışır" cümlesi yok.
+
+#### Mevcut 5 maddede düzeltmeler
+
+1. **Storage adaptörü — bu bir "karar" değil, zaten kapalı bir madde.** `BusinessPhotoStorage`
+   arayüzü ve `LocalDiskBusinessPhotoStorage` implementasyonu **zaten mevcut** (kontrol edildi) —
+   platform da zaten seçildi (kendi VPS + Caddy, named volume). S3/R2'ye geçiş gerçekten tek bir
+   yeni implementasyon + bean değişikliği, ayrıca bir "karar" beklemiyor. 3.8'i bloke eden bir
+   madde olarak kaldırıldı.
+2. **Yedeklemenin kabul kriteri değişti — "script yazıldı" yeterli değil.** Kabul kriteri: **boş
+   bir stack'e (volume'lar sıfırlanmış) restore edilecek, randevular VE fotoğraflar geri
+   gelecek.** Bu fiilen yapılıp kanıtlanmadan 3.8b tamamlanmış sayılmayacak. Ayrıca: **rclone
+   hedefi aynı VPS'te OLMAYACAK** (Cloudflare R2/Backblaze B2 — sunucu ölürse yedek de ölür,
+   bu yedek değil, yanılsama). Detay: 3.8b, RUNBOOK.md.
+3. **Rate limiting ön koşulu — zaten var, sadece IP doğruluğu sunucuda kanıtlanmamış.** Caddy'nin
+   kendi rate limiting'i yok (doğru tespit — plugin/custom build gerekirdi) ama buna hiç gerek
+   yok: backend'de Faz 3.5'te elle yazılmış bir rate limiter (`InMemoryRateLimiter`) zaten var,
+   login'de hesap+IP bazlı brute-force koruması **zaten kodda ve çalışıyor** (Bucket4j değil,
+   bilinçli tercih — bkz. Faz 3.5 gerekçesi). Eksik olan şey yeni bir faz değil, sadece bu
+   korumanın gerçek istemci IP'sini gördüğünün sunucuda doğrulanması (aşağıda, RUNBOOK'ta).
+
+#### Yeni eklenen maddeler
+
+4. **Sunucu sertleştirmesi — listede hiç yoktu, 5 maddenin hepsinden acil.** Container'lar ne
+   kadar sıkı olursa olsun host düşerse hepsi düşer. SSH sadece key ile, root login kapalı,
+   parola auth kapalı, `ufw` ile sadece 22/80/443 açık, `fail2ban`, `unattended-upgrades`.
+   Runbook'un **ilk** bölümü.
+5. **Domain + DNS, ACME denemesinden önce.** A kaydı eklenip yayılması beklenmeden Caddy'nin
+   gerçek sertifika denemesine geçilmez.
+6. **Build stratejisi ve sunucu specs.** CI/registry altyapısı yok (kurmak bu ölçekte orantısız
+   karmaşıklık) — build **sunucuda**, `docker compose build` ile yapılacak. Bu makinede ölçülen
+   GERÇEK çalışma-zamanı bellek kullanımı (idle, yeni açılmış): Caddy ~10MB, backend ~347MB,
+   Postgres ~57MB → toplam ~414MB — mevcut önerilen **Hetzner CX22 (2 vCPU/4GB/40GB)** için
+   bolca yer var. Build ANI ayrı bir risk (Maven+Node aynı anda bellek tüketebilir) — bu, `docker
+   stats`'ın yakalayamadığı geçici BuildKit süreçleri olduğu için burada ölçülemedi. Önlem: **2GB
+   swap dosyası zorunlu** (maliyeti sıfır, kurulumu 2 dakika, build sırasında olası bir bellek
+   sıçramasını OOM'a çevirmeden yutuyor). Sunucuyu küçültmeyin (4GB altı önerilmez), ama mevcut
+   CX22 + swap ile ilerlemek makul.
+7. **Rollback.** Image'lar `latest` yerine git SHA ile etiketlenecek (`docker tag`, registry
+   gerekmeden, salt SSH komutlarıyla) — bozuk bir deploy'da bir önceki SHA'ya dönülebilsin.
+   **Sınır, açıkça yazılacak:** bu SADECE kod/image seviyesinde geri dönüş sağlar; Flyway
+   migration'ları geriye alınmıyor (bu projede hiç yapılmadı) — bir deploy şema değişikliği
+   içeriyorsa rollback'in kapsamı ona göre daralır. Runbook'un **son** bölümü.
+8. **İzleme — faz başlığında vardı, maddelerde yoktu.** Minimum üçlü: `/actuator/health` için
+   dış ping (UptimeRobot, zaten "Önerilen kurulum" tablosunda vardı), disk doluluk uyarısı,
+   ve yedekleme cron'u için **dead-man's switch** (healthchecks.io'nun cron-izleme özelliği —
+   cron başarıyla bitince ping atar, ping gelmezse alarm verir; sessizce durmuş bir yedekleme,
+   hiç olmayandan daha kötü çünkü "var" sanılır).
+9. **Timezone — canlı test edildi, sorun YOK.** Container'ın OS saati UTC (jammy'nin varsayılanı,
+   doğrulandı) ama `TimeConfig`'teki `Clock.system(ZoneId.of("Europe/Istanbul"))` + `TimeZone.
+   setDefault(...)` bunu JVM seviyesinde geçersiz kılıyor — container OS'unun TZ'si Java
+   tarafında hiç önemli değil. Ayırt edici canlı kanıt: bugün (UTC ~14:09) için "bugün 15:30"a
+   randevu denendi — ham UTC saatine göre gelecekte görünürdü (kabul edilmeliydi UTC mantığıyla),
+   ama backend "Randevu tarihi geçmişte olamaz" diyerek REDDETTİ çünkü gerçek Istanbul saati
+   zaten 17:09'du. Bu, Clock'un container TZ'sinden BAĞIMSIZ doğru çalıştığının kesin kanıtı.
+   Frontend tarafı da güvenli: `new Date(dateStr)` + `.getHours()` ikisi de AYNI çalıştırma
+   ortamının yerel saatini kullanıyor, bu yüzden hangi cihazda açılırsa açılsın round-trip
+   matematik olarak kimlik dönüşümü — **ama bu iddia bu oturumda farklı cihaz saat dilimleri
+   için ampirik olarak test EDİLEMEDİ** (Windows'ta Node, `TZ` ortam değişkenini yok sayıyor,
+   Docker Desktop izin sorunuyla aynı sınıf bir yerel test kısıtı) — sadece ECMAScript
+   spesifikasyonunun garantisine dayanıyor. Container'a ayrıca `TZ=Europe/Istanbul` eklemeye
+   GEREK YOK (JVM zaten kendi ayarını okumuyor bile).
+10. **`restart: unless-stopped` — kontrol edildi, EKSİK.** Şu an sadece backend ve caddy'de
+    `restart: on-failure` var (postgres'te hiç yok), ve `on-failure` bir VPS reboot'undan sonra
+    container'ları OTOMATİK başlatmaz (sadece çöken bir container'ı yeniden dener, durdurulmuş
+    bir daemon'dan sonra değil). Üç servise de `restart: unless-stopped` eklenmesi gerekiyor —
+    reboot testi runbook'un doğrulama turunda var.
+11. **Prod secret'ları sunucuda YENİDEN üretilecek.** Dev'deki JWT secret ve DB şifresi asla
+    sunucuya taşınmıyor — `openssl rand -base64 32` (JWT) ve benzeri komutlarla sunucuda taze
+    üretilip `.env`'e yazılıyor (`chmod 600`). Komutlar RUNBOOK.md'de.
+
+#### Karar: `/actuator/health` dışarıya açık kalsın mı?
+
+Bilinçli karar bekleyen açık madde (unutkanlıkla değil):
+- **Açık bırakmanın artısı:** dış bir uptime-monitor (UptimeRobot/healthchecks.io) periyodik
+  ping atıp düşüşü mail ile bildirebilir — Docker'ın kendi `HEALTHCHECK`'i sadece container
+  içinden çalışıyor, dışarıdan "site tamamen erişilemez" durumunu (ör. Caddy'nin kendisi
+  çökerse) YAKALAYAMAZ.
+- **Artısı olmayan taraf:** Docker'ın kendi `HEALTHCHECK`'i zaten container içi liveness'ı
+  karşılıyor; risk zaten düşük (`show-details` hiç ayarlanmamış, yanıt sadece `{"status":"UP"}`,
+  DB/disk detayı hiç sızmıyor, defalarca canlı doğrulandı).
+- **Öneri:** açık bırakmak (risk düşük, dış izleme faydası gerçek) — ama bu senin kararın,
+  RUNBOOK.md'de "onaylıyorum" diye işaretlenecek bir adım olarak duruyor.
 
 ### 3.9 — KVKK ve hukuki metinler `[SEN]`
 Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
@@ -761,7 +809,8 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.5 Rate limiting ve kötüye kullanım koruması — b201bb7
 - [x] 3.6 Loglama, izleme ve hata takibi
 - [x] 3.7 Konteynerleştirme
-- [ ] 3.8 Deploy, yedekleme, izleme
+- [ ] 3.8a Sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama
+- [ ] 3.8b Yedekleme + restore provası + izleme (3.8a bitmeden başlanmaz)
 - [ ] 3.9 KVKK ve hukuki metinler
 - [ ] 3.10 E-posta doğrulama (3.4'e bağımlı, açık kayıt öncesi şart)
 - [ ] 3.11 Auth sertleştirme: httpOnly cookie + CSRF ⭐ (3.8'den sonra, beta onboarding'den önce)
