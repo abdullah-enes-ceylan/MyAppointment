@@ -38,7 +38,14 @@
 	handle /api/* {
 		reverse_proxy backend:8080
 	}
-	handle /actuator/* {
+	# "/actuator" (sonunda / olmadan, sondaki segment olmadan) /actuator/*
+	# kalibina UYMUYOR -- canli testte yakalandi: bu path SPA fallback'ine
+	# dusup index.html donduruyordu (veri sizmiyor ama tutarsizdi). handle
+	# tek bir path deseni alabiliyor, o yuzden named matcher ile ikisini
+	# birden tanimliyoruz (ilk denemede handle'a iki path vermeye calisip
+	# "wrong argument count" hatasi aldik, canli duzeltildi).
+	@actuator path /actuator /actuator/*
+	handle @actuator {
 		reverse_proxy backend:8080
 	}
 

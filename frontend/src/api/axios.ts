@@ -1,24 +1,11 @@
 import axios from "axios";
 
-// Eskiden http://localhost:8080 sabit kodluydu — deploy'da (frontend ve
-// backend farklı adreslerde çalıştığında) kırılırdı. .env'den okunuyor,
-// VITE_API_URL tanımlı değilse yerel geliştirme varsayılanına düşer.
-//
-// Ayrıca export ediliyor: backend'in döndürdüğü göreceli görsel yolları
-// (ör. "/api/business-photos/xxx-card.jpg") <img src> için mutlak hale
-// getirilirken kullanılıyor -- bkz. utils/photo.ts.
-//
-// `??` KASITLI, `||` DEĞİL: Faz 3.7'de Caddy aynı origin'den hem frontend'i
-// hem backend'i sunuyor, bu yüzden prod build'de VITE_API_URL BİLEREK boş
-// string olarak veriliyor (göreli yol, "/api/..." doğrudan aynı origin'e
-// gider). `||` boş string'i "tanımsız" sayıp yerel geliştirme adresine
-// düşerdi -- prod build'i sessizce yanlış (hiç var olmayan) bir backend'e
-// bağlardı. `??` sadece null/undefined'da fallback'e düşüyor, boş string'i
-// olduğu gibi bırakıyor.
-export const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
-
+// Eskiden VITE_API_URL ile ayrı bir taban URL taşınıyordu (frontend ve
+// backend farklı origin'lerdeyken gerekliydi). Faz 3.7'de hem prod'da
+// (Caddy, bkz. Caddyfile) hem dev'de (Vite proxy, bkz. vite.config.js)
+// frontend ve backend AYNI origin'den servis ediliyor -- baseURL hiç
+// gerekmiyor, "/api/..." göreli yolu zaten doğru yere gidiyor.
 const api = axios.create({
-  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },

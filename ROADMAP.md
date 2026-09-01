@@ -464,6 +464,32 @@ Kanal seçimi **ertelendi**. Yapılacak: kanaldan bağımsız iskelet.
 - **`DatabaseSeeder` prod profilinde devre dışı** ✅ zaten yapılmış — `@Profile("dev")` ile
   sınırlı (Faz 3.7'de fark edildi, ayrı bir iş gerekmedi).
 
+**İkinci geçiş — dışarıdan bir gözden geçirme sonrası bulunan/düzeltilen gerçek boşluklar
+(2026-09-01):**
+- **Bare `/actuator` yolu SPA fallback'ine düşüyordu.** Caddyfile'daki `handle /actuator/*`,
+  sonunda `/` olmayan çıplak `/actuator`'a uymuyordu — bu yol `index.html`'e (200) düşüyordu.
+  Veri sızmıyordu (gerçek actuator verisine hiç ulaşılmıyordu) ama tutarsızdı. Named matcher
+  (`@actuator path /actuator /actuator/*`) ile düzeltildi, canlı doğrulandı: artık ikisi de
+  backend'e gidip 401/200 tutarlı dönüyor.
+- **Caddy'nin capability'leri kısıtlandı** — `cap_drop: [ALL]` + `cap_add: [NET_BIND_SERVICE]`
+  + `security_opt: no-new-privileges:true`. Root kalıyor (resmi image'ın gerektirdiği gibi,
+  80/443'e bind için) ama yetkisi SADECE ayrıcalıklı porta bağlanmakla sınırlı. Canlı doğrulandı,
+  Caddy hâlâ normal çalışıyor.
+- **Docker log driver'a sınır kondu** (`max-size: 10m`, `max-file: 3`, tüm servisler) — önceden
+  hiç yoktu, sınırsız büyürdü.
+- **`VITE_API_URL` tamamen kaldırıldı.** Vite dev sunucusuna (`vite.config.js`) `/api` ve
+  `/actuator`'ı backend'e (8080) yönlendiren bir proxy eklendi — artık dev'de de prod'daki gibi
+  aynı origin modeli geçerli. Bu sayede ayrı bir taban-URL değişkenine hiç gerek kalmadı;
+  `axios.ts`'te `baseURL` set edilmiyor, `frontend/.env`/`.env.example` silindi (tek içerikleri
+  bu değişkendi). Canlı doğrulandı: Vite dev sunucusu (5173) üzerinden gerçek kayıt+giriş
+  backend'e (8080) proxy'lenerek çalıştı.
+- **Üç iddia, canlı kanıtla doğrulandı (önceden sadece config dosyasına bakılarak "var" denmişti):**
+  (1) `docker compose exec backend env` ile secret'ların gerçekten container'a ulaştığı görüldü;
+  (2) gerçek bir işletme oluşturulup `docker compose down && up` (volume korunarak) yapıldı,
+  veri hâlâ oradaydı — named volume kalıcılığı kanıtlandı; (3) Caddy'ye sahte bir
+  `X-Forwarded-For` header'ı gönderildi, backend'in gördüğü IP değişmedi — spoofing'e kapalı
+  olduğu doğrulandı (ayrıntı ve çekince için Faz 3.8'deki rate-limiting IP maddesine bakınız).
+
 ### 3.8 — Deploy, yedekleme, izleme `[DevOps]` `[SEN]`
 Detaylar aşağıdaki bölümde.
 - [ ] **`business-photo-storage` host klasörü izinleri** — Faz 3.7'de Windows + Docker Desktop'ta
@@ -485,7 +511,35 @@ Detaylar aşağıdaki bölümde.
   sunucu loglarında **farklı IP** olarak göründüğünü teyit etmek olmalı. Doğrulanmazsa, Caddy
   `X-Forwarded-For` göndermiyor ya da `server.forward-headers-strategy=native` yanlış
   çalışıyor demektir — bu durumda rate limiting koruma olmaktan çıkıp TÜM kullanıcıları proxy'nin
-  tek IP'si üzerinden birbirine kilitleyen bir mekanizmaya döner.
+  tek IP'si üzerinden birbirine kilitleyen bir mekanizmaya döner. **Faz 3.7'de kısmen canlı
+  test edildi:** istemcinin gönderdiği sahte bir `X-Forwarded-For` header'ının Caddy tarafından
+  GERÇEKTEN reddedildiği/ezildiği doğrulandı (spoofing'e kapalı). Ama görülen IP `172.18.0.1`
+  (Docker bridge gateway'i) çıktı — bu, Windows/Docker Desktop'ın port yayınlama NAT katmanına
+  özgü bir maskeleme olabilir, gerçek bir Linux sunucuda farklı davranabilir. Yani spoofing
+  koruması doğrulandı ama gerçek-IP-doğruluğu HÂLÂ sadece gerçek sunucuda, gerçek farklı
+  istemcilerle kanıtlanabilir.
+- [ ] **Postgres port izolasyonu, gerçek sunucuda doğrulanmalı.** Faz 3.7'de bu makinede
+  denendi ama sonuç güvenilmez çıktı: bu geliştirme makinesinde zaten yerel bir Postgres servisi
+  5432'yi dinliyor, host'tan bağlanabilmek docker-compose'un port açmasından değil o yerel
+  servisten kaynaklandı (compose dosyasında `postgres` servisinin hiç `ports:` satırı yok,
+  `docker compose ps` ile doğrulandı). Deploy günü sunucudan `psql -h localhost -p 5432` (veya
+  `nc localhost 5432`) denenip **reddedildiği** görülmeli.
+- [ ] **`/actuator/health`'in dışarıya (Caddy üzerinden) hiç proxy'lenmesi gerekip gerekmediği
+  karara bağlanmalı.** Docker'ın kendi `HEALTHCHECK`'i zaten container içinden `localhost`
+  üzerinden erişiyor, dışarıya açmaya teknik olarak gerek yok. Dışarı açmanın tek gerçek faydası
+  dış bir uptime-monitor servisinin (ör. UptimeRobot) periyodik ping atabilmesi. Risk düşük
+  (`management.endpoint.health.show-details` hiç ayarlanmamış, Spring'in güvenli varsayılanı
+  geçerli — canlı yanıt sadece `{"status":"UP","groups":[...]}, DB/disk detayı YOK, defalarca
+  doğrulandı) ama karar yine de bilinçli verilmeli, unutkanlıkla açık kalmasın.
+- [ ] **JVM `mem_limit`/container bellek sınırı** — henüz hiç ayarlanmamış. Asıl mesele
+  `MaxRAMPercentage` DEĞİL, container'a bir `mem_limit` konulmamış olması: JVM heap şişerse
+  Linux OOM killer'ın hangi container'ı öldüreceği belirsizleşir, Postgres'i de seçebilir. JDK
+  zaten cgroup limitini kendiliğinden okuyor — **önce `mem_limit` konur (gerçek sunucunun
+  RAM'ine göre), sonra gerekirse `MaxRAMPercentage` ince ayarı yapılır**, sıra bu, tersi değil.
+- [ ] **Let's Encrypt: ilk denemede staging CA kullan.** Gerçek (production) CA'nın saatte 5
+  başarısız deneme sınırı var — Caddyfile/DNS ayarını ilk seferde doğru kurmayabilirsin, staging
+  CA'da bu sınıra takılmazsın. Caddy'nin `acme_ca` global seçeneğiyle geçici olarak staging
+  endpoint'ine yönlendirilip, çalıştığı görülünce production'a dönülür.
 
 ### 3.9 — KVKK ve hukuki metinler `[SEN]`
 Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
@@ -521,6 +575,32 @@ olduğunu doğrulamak ek bir maliyet katmanı ekler.
   ayrı bir iş.
 - Doğrulanmamış hesabın süre aşımı/temizlenmesi (ör. 24 saat sonra pasifleşir mi, silinir mi) —
   karar verilecek.
+
+### 3.11 — Auth sertleştirme: httpOnly cookie + CSRF `[BE]` `[SEN]` ⭐
+**Sıralama kesin, "ileride" değil:** 3.7 (konteynerleştirme) bitti → **3.8 (deploy)** → **buraya** →
+gerçek işletmelerle beta onboarding. 3.9/3.10'un tamamlanmasına bağımlı değil (paralel
+ilerleyebilir), ama beta'ya **gerçek müşteri verisiyle** girmeden önce kesinlikle bitmiş olmalı.
+
+**Neden burada, neden şimdi değil:** JWT şu an `localStorage`'da tutuluyor — XSS ile okunabilir.
+httpOnly cookie'ye taşımak bunu kapatıyor (JS `document.cookie` ile erişemiyor), karşılığında
+CSRF gündeme geliyor (`SameSite=Lax` + state-changing endpoint'lerde POST zorunluluğu bunu büyük
+ölçüde kapatıyor). Bu değişiklik **same-origin mimarisi gerektiriyor** (Faz 3.7'de Caddy ile
+zaten kuruldu — cookie'nin `Domain`/`SameSite` davranışını farklı origin'lerde (ör. Vite dev
+sunucusu ayrı portta, backend ayrı portta) güvenilir test etmek zordu, artık ikisi de aynı
+origin'den servis ediliyor). 3.7'nin ortasında bu ameliyata girmek deploy'a risk eklerdi — ama
+gerçek işletmeleri `localStorage`'daki bir JWT ile beta'ya almak da kabul edilebilir değil.
+Deploy'dan (3.8) sonra, beta onboarding'den önce yapılacak tek yer burası.
+
+- Backend: login/register yanıtı JWT'yi gövdede değil `Set-Cookie` (httpOnly, `Secure`,
+  `SameSite=Lax`) ile döner.
+- Frontend: `axios.ts`'teki `localStorage.getItem("token")` + `Authorization` header enjeksiyonu
+  kaldırılır, `withCredentials: true` eklenir. Response interceptor'daki 401 mantığı kalır
+  (davranış aynı, sadece token'ın nereden geldiği değişiyor).
+- CSRF koruması: state-changing (`POST`/`PUT`/`DELETE`) endpoint'lerde bir CSRF token deseni
+  (`SameSite=Lax` tek başına yeterli olmayabilir, özellikle GET-tabanlı olmayan cross-site form
+  saldırılarına karşı) — tasarım detayı bu maddeye girildiğinde netleşecek.
+- Logout akışı: `localStorage.removeItem` yerine backend'in cookie'yi geçersiz kılan bir uç
+  sunması gerekiyor (httpOnly cookie'yi JS silemez).
 
 ---
 

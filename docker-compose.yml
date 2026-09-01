@@ -3,9 +3,20 @@
 # repo'ya girmez) ya da kabuk ortamindan geliyor -- gercek deploy'da bu dosya
 # sunucuya ELLE kopyalanacak (tek sunucu olcegi, ayri bir secrets-manager
 # gereksiz karmasiklik olurdu).
+
+# Docker'in varsayilan json-file log driver'i SINIRSIZ buyuyor -- uzun sureli
+# calisan bir prod container'i aylar icinde host diskini doldurabilir. Butun
+# servisler bunu paylasiyor (YAML anchor, tekrar etmemek icin).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   postgres:
     image: postgres:18-alpine
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-appointment_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -30,6 +41,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    logging: *default-logging
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-appointment_db}
@@ -76,6 +88,23 @@ services:
         # sundugu icin frontend "/api/..." gibi GORELI bir yola istek atiyor
         # -- ayri bir backend adresi gerekmiyor (bkz. axios.ts, Caddyfile).
         VITE_API_URL: ""
+    logging: *default-logging
+    # Root KALIYOR (Caddy'nin resmi image'inin varsayilan durusu -- 80/443
+    # gibi ayricalikli portlara bind etmek root gerektiriyor), ama root'un
+    # YETKISI 80/443'e bind etmekle SINIRLANIYOR: once butun Linux
+    # capability'leri (CAP_CHOWN, CAP_SETUID, CAP_SYS_ADMIN vb.) dusuruluyor,
+    # sonra SADECE ayricalikli port'a bind etmeye yarayan capability geri
+    # ekleniyor. no-new-privileges, setuid-root bir binary calistirilsa bile
+    # (Caddy'nin kendisinde yok ama savunma katmani) ek yetki kazanmayi
+    # engelliyor. Non-root'a tam gecis (host portu 8080'e cevirip Caddy'yi
+    # ayricaliksiz portta dinletmek) otomatik HTTPS/ACME akisini bozup
+    # bozmadigi gercek bir domain'le doğrulanmadan denenmeyecek (Faz 3.8).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
     environment:
       DOMAIN: ${DOMAIN:-:80}
     ports:
