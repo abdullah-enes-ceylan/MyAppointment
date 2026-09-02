@@ -3,10 +3,12 @@ package com.randevu.backend.service;
 import com.randevu.backend.dto.request.ReviewRequest;
 import com.randevu.backend.entity.Appointment;
 import com.randevu.backend.entity.AppointmentStatus;
+import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.Review;
 import com.randevu.backend.exception.BusinessRuleException;
 import com.randevu.backend.exception.ResourceNotFoundException;
 import com.randevu.backend.repository.AppointmentRepository;
+import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ReviewRepository;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -33,12 +35,14 @@ public class ReviewService {
 
     private final ReviewRepository reviewRepository;
     private final AppointmentRepository appointmentRepository;
+    private final BusinessRepository businessRepository;
     private final Clock clock;
 
     public ReviewService(ReviewRepository reviewRepository, AppointmentRepository appointmentRepository,
-            Clock clock) {
+            BusinessRepository businessRepository, Clock clock) {
         this.reviewRepository = reviewRepository;
         this.appointmentRepository = appointmentRepository;
+        this.businessRepository = businessRepository;
         this.clock = clock;
     }
 
@@ -89,7 +93,28 @@ public class ReviewService {
         return reviewRepository.save(review);
     }
 
+    // Faz 3.9: bu uç -- ilk yazdığımda "kimliksiz/herkese açık" sandım, YANLIŞTI:
+    // SecurityConfig'te bir permitAll satırı YOK, yani genel "/api/**"
+    // kuralına düşüp authenticated() istiyor (kontrol edip düzelttim). Ama bu
+    // sadece "GİRİŞ YAPMIŞ" demek, sahiplik/ilgi kontrolü YOK -- rastgele
+    // herhangi bir kullanıcı hesabı, kendisiyle hiç ilgisi olmayan bir
+    // işletmenin businessId'sini vererek yorumlarını okuyabiliyor. Bu zaten
+    // (askı harici) mevcut bir tasarım -- yorumlar zaten kamuya açık bilgi
+    // olarak düşünülmüş. Buradaki asıl düzeltme askı için: ReviewResponse'un
+    // kendisi hiçbir işletme profil alanı (adres/telefon/fotoğraf) taşımıyor,
+    // o yüzden bu bir "profil verisi" sızıntısı değil, ama askıya alınmış
+    // bir işletmenin ID'sini bilen giriş yapmış HERHANGİ bir kullanıcı, işletme
+    // her yerde 404 dönerken BURADAN hâlâ gerçek müşteri adlarını/puanlarını/
+    // yorumlarını okuyabiliyordu -- "hiçbir yoldan görüntülenemesin" ilkesinin
+    // ihlali, canlı denetimde bulunan gerçek bir açık. Business bulunamıyorsa
+    // ya da askıdaysa boş liste dönüyoruz (404 değil -- bu zaten bir liste
+    // ucu, getAllBusinesses'in askıdakini listeden düşürmesiyle AYNI "sessizce
+    // yok say" deseni).
     public List<Review> getReviewsForBusiness(Long businessId) {
+        Business business = businessRepository.findById(businessId).orElse(null);
+        if (business == null || business.getSuspendedAt() != null) {
+            return List.of();
+        }
         return reviewRepository.findByAppointment_Business_IdOrderByCreatedAtDesc(businessId);
     }
 

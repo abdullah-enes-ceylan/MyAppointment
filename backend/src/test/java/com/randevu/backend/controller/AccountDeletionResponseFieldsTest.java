@@ -8,12 +8,14 @@ import com.randevu.backend.entity.AppointmentStatus;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.BusinessCategory;
 import com.randevu.backend.entity.Favorite;
+import com.randevu.backend.entity.Review;
 import com.randevu.backend.entity.Role;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.repository.AppointmentRepository;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.FavoriteRepository;
+import com.randevu.backend.repository.ReviewRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
 import com.randevu.backend.repository.UserRepository;
 import com.randevu.backend.service.AccountDeletionService;
@@ -58,6 +60,8 @@ class AccountDeletionResponseFieldsTest extends AbstractIntegrationTest {
     private AppointmentRepository appointmentRepository;
     @Autowired
     private FavoriteRepository favoriteRepository;
+    @Autowired
+    private ReviewRepository reviewRepository;
     @Autowired
     private PasswordEncoder passwordEncoder;
     @Autowired
@@ -256,6 +260,47 @@ class AccountDeletionResponseFieldsTest extends AbstractIntegrationTest {
         accountDeletionService.requestDeletion(owner, RAW_PASSWORD);
 
         mockMvc.perform(get("/api/favorites/me").header("Authorization", "Bearer " + tokenFor(customer)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    // Faz 3.9 -- GET /api/reviews/business/{id} kimliksiz DEĞİL (SecurityConfig'te
+    // permitAll yok, genel authenticated() kuralına tabi -- bunu ÖNCE yanlış
+    // varsayıp test yazarken 401 alınca fark ettim, düzelttim), ama sahiplik/
+    // ilgi kontrolü de YOK: bu işletmeyle hiç ilgisi olmayan (ne müşterisi ne
+    // sahibi) giriş yapmış herhangi bir kullanıcı businessId'yi bilerek
+    // yorumları okuyabiliyor. ReviewService.getReviewsForBusiness suspendedAt'e
+    // hiç bakmıyordu -- gerçek müşteri adı+puan+yorum, askıdaki bir işletme
+    // için bu ilgisiz kullanıcıya dönmeye devam ediyordu. Bu test "stranger"
+    // (ne müşteri ne sahip) bir hesapla, hem askıdan önce görünür hem
+    // askıdan sonra boş liste iki ucu da kanıtlıyor.
+    @Test
+    @DisplayName("GET /reviews/business/{id}: ilgisiz bir kullanıcı okuyabiliyor, ama askıya alınınca artık dönmüyor")
+    void getReviewsByBusiness_askidakiIsletmeninYorumlariArtikDonmuyor() throws Exception {
+        User owner = createUser(Role.BUSINESS_OWNER);
+        User customer = createUser(Role.USER);
+        User stranger = createUser(Role.USER);
+        Business business = businessRepository.save(Business.builder()
+                .name("Yorumlu İşletme").address("Adres").owner(owner)
+                .category(BusinessCategory.HAIRDRESSER).build());
+        ServiceItem serviceItem = serviceItemRepository.save(ServiceItem.builder()
+                .name("Hizmet").description("d").price(BigDecimal.TEN).durationInMinutes(30).business(business)
+                .build());
+        Appointment appointment = appointmentRepository.save(Appointment.builder()
+                .status(AppointmentStatus.COMPLETED).business(business).customer(customer).serviceItem(serviceItem)
+                .appointmentDate(LocalDateTime.now().minusDays(1))
+                .createdAt(LocalDateTime.now().minusDays(2))
+                .build());
+        reviewRepository.save(Review.builder()
+                .appointment(appointment).rating(5).comment("Harika").createdAt(LocalDateTime.now()).build());
+
+        mockMvc.perform(get("/api/reviews/business/" + business.getId()).header("Authorization", "Bearer " + tokenFor(stranger)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+
+        accountDeletionService.requestDeletion(owner, RAW_PASSWORD);
+
+        mockMvc.perform(get("/api/reviews/business/" + business.getId()).header("Authorization", "Bearer " + tokenFor(stranger)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }
