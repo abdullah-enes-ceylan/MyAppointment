@@ -27,10 +27,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-// Faz 3.2. Calisma saatleri/kapanislarin GET uclari bilerek herkese acik
-// (musteri randevu almadan once "bu isletme Pazar acik mi" gorebilmeli),
-// sadece degistiren uclar (PUT/POST/DELETE) sahiplik kontrollu -- bu dosya
-// sadece o degistiren uclari test ediyor.
+// Faz 3.2. Degistiren uclar (PUT/POST/DELETE) sahiplik kontrollu. (Faz 3.9)
+// GET uclari da artik sahiplik kontrollu -- eskiden herkese acikti
+// ("musteri randevu almadan once 'bu isletme Pazar acik mi' gorebilmeli"),
+// ama gercekte hicbir musteri akisi bu uclari cagirmiyordu; tek gercek
+// cagiran isletme sahibinin paneli oldugu icin kilitlendi (bkz.
+// WorkingHourController'daki guncel aciklama).
 @ExtendWith(MockitoExtension.class)
 class WorkingHourControllerOwnershipTest {
 
@@ -65,6 +67,48 @@ class WorkingHourControllerOwnershipTest {
 
     private void actingAs(Long userId) {
         when(currentUserService.getCurrentUser(authentication)).thenReturn(User.builder().id(userId).build());
+    }
+
+    @Test
+    @DisplayName("getWorkingHours: saldirgan rakip isletmenin calisma saatlerini goremez")
+    void getWorkingHours_saldirgan_AccessDenied() {
+        actingAs(ATTACKER_ID);
+
+        assertThatThrownBy(() -> controller.getWorkingHours(BUSINESS_ID, authentication))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(workingHourService, never()).getWorkingHours(any());
+    }
+
+    @Test
+    @DisplayName("getWorkingHours: gercek sahip kendi calisma saatlerini gorebilir")
+    void getWorkingHours_sahip_izinVerilir() {
+        actingAs(OWNER_ID);
+
+        controller.getWorkingHours(BUSINESS_ID, authentication);
+
+        verify(workingHourService).getWorkingHours(BUSINESS_ID);
+    }
+
+    @Test
+    @DisplayName("getClosures: saldirgan rakip isletmenin kapanis gunlerini goremez")
+    void getClosures_saldirgan_AccessDenied() {
+        actingAs(ATTACKER_ID);
+
+        assertThatThrownBy(() -> controller.getClosures(BUSINESS_ID, authentication))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(workingHourService, never()).getClosures(any());
+    }
+
+    @Test
+    @DisplayName("getClosures: gercek sahip kendi kapanis gunlerini gorebilir")
+    void getClosures_sahip_izinVerilir() {
+        actingAs(OWNER_ID);
+
+        controller.getClosures(BUSINESS_ID, authentication);
+
+        verify(workingHourService).getClosures(BUSINESS_ID);
     }
 
     @Test

@@ -1,12 +1,14 @@
 package com.randevu.backend.controller;
 
 import com.randevu.backend.dto.request.ChangePasswordRequest;
+import com.randevu.backend.dto.request.DeleteAccountRequest;
 import com.randevu.backend.dto.request.RegisterRequest;
 import com.randevu.backend.dto.request.UpdateProfileRequest;
 import com.randevu.backend.dto.response.ProfileStatsResponse;
 import com.randevu.backend.dto.response.UserResponse;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.mapper.UserMapper;
+import com.randevu.backend.service.AccountDeletionService;
 import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.ProfileStatsService;
 import com.randevu.backend.service.UserService;
@@ -26,12 +28,14 @@ public class UserController {
     private final UserService userService;
     private final CurrentUserService currentUserService;
     private final ProfileStatsService profileStatsService;
+    private final AccountDeletionService accountDeletionService;
 
     public UserController(UserService userService, CurrentUserService currentUserService,
-            ProfileStatsService profileStatsService) {
+            ProfileStatsService profileStatsService, AccountDeletionService accountDeletionService) {
         this.userService = userService;
         this.currentUserService = currentUserService;
         this.profileStatsService = profileStatsService;
+        this.accountDeletionService = accountDeletionService;
     }
 
     // Tum kullanicilari getiren API — tum kullanicilarin ad/email/telefon
@@ -95,5 +99,29 @@ public class UserController {
     public ProfileStatsResponse getMyStats(Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
         return profileStatsService.getStatsForUser(currentUser.getId());
+    }
+
+    // Hesap silme talebi (Faz 3.9, KVKK unutulma hakki). Sifre yeniden
+    // istenir (bkz. DeleteAccountRequest). Bu cagridan sonra USER icin
+    // deletionRequestedAt disinda HICBIR SEY degismez -- giris, randevular,
+    // favoriler 30 gun boyunca aynen kalir. BUSINESS_OWNER icin ek olarak
+    // isletmeler aninda askiya alinir, yakin randevular hemen iptal edilir
+    // (bkz. AccountDeletionService).
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> deleteMyAccount(@Valid @RequestBody DeleteAccountRequest request,
+            Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        accountDeletionService.requestDeletion(currentUser, request.getPassword());
+        return ResponseEntity.noContent().build();
+    }
+
+    // Silme talebini geri alir. gracePeriod dolmadigi surece (anonymizedAt
+    // hala null) her zaman mumkun -- bu, geri donus penceresinin butun
+    // amaci (bkz. User.java'daki gerekce).
+    @PostMapping("/me/cancel-deletion")
+    public ResponseEntity<Void> cancelMyAccountDeletion(Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        accountDeletionService.cancelDeletion(currentUser);
+        return ResponseEntity.noContent().build();
     }
 }

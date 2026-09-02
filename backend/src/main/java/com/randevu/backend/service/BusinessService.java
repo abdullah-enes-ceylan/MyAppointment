@@ -48,15 +48,27 @@ public class BusinessService {
         return new RatingStats(stats.getAverageRating(), count);
     }
 
+    // Askidaki (sahibi hesap silme talep etmis) isletmeler listede GORUNMEZ
+    // (Faz 3.9) -- "aramada gorunmuyor" tek basina yetmez demisti, ama bu
+    // metot zaten aramanin/listelemenin tek kaynagi.
     public List<Business> getAllBusinesses() {
-        return businessRepository.findAll();
+        return businessRepository.findBySuspendedAtIsNull();
     }
 
     // Tekil işletme detayı — eskiden bu uç hiç yoktu, frontend tüm listeyi
     // (GET /api/businesses) çekip client tarafında id'ye göre filtreliyordu.
+    //
+    // Askidaki isletme icin BILEREK 404 (403 DEGIL) -- "yetkin yok" ile
+    // "boyle bir isletme yok" arasinda fark belli edilmemeli, aksi halde
+    // dogrudan URL ile bir isletmenin silinme surecinde oldugu anlasilirdi
+    // (bkz. path traversal/SecurityConfigUnmatchedPathTest'teki ayni desen).
     public Business getBusinessById(Long id) {
-        return businessRepository.findById(id)
+        Business business = businessRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
+        if (business.getSuspendedAt() != null) {
+            throw new ResourceNotFoundException("İşletme bulunamadı.");
+        }
+        return business;
     }
 
     public List<Business> getBusinessesByOwner(Long ownerId) {
@@ -73,6 +85,13 @@ public class BusinessService {
     // basarisiz olursa Spring OTOMATIK ROLLBACK yapar, ikisi de geri alinir.
     @Transactional
     public Business createBusiness(User owner, Business business) {
+        // Faz 3.9: hesap silme talep etmiş bir kullanıcı YENİ bir işletme
+        // açamaz -- "kapanıyorum" derken aynı anda yeni bir işletme kurmak
+        // tutarsız, ayrıca 30 gün içinde talep geri alınmazsa bu yeni
+        // işletme de hiç kullanılmadan aynı akışa girerdi.
+        if (owner.getDeletionRequestedAt() != null) {
+            throw new BusinessRuleException("Hesap silme talebiniz olduğu için yeni işletme oluşturamazsınız.");
+        }
         validateBusinessHours(business);
         promoteToBusinessOwnerIfNeeded(owner);
         business.setOwner(owner);
@@ -165,7 +184,7 @@ public class BusinessService {
     public List<Business> getBusinessesByCategory(String categoryStr) {
         try {
             BusinessCategory category = BusinessCategory.valueOf(categoryStr.toUpperCase());
-            return businessRepository.findByCategory(category);
+            return businessRepository.findByCategoryAndSuspendedAtIsNull(category);
         } catch (IllegalArgumentException e) {
             return new ArrayList<>();
         }

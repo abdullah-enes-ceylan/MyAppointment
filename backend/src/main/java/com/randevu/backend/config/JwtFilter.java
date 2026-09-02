@@ -8,6 +8,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -49,11 +50,29 @@ public class JwtFilter extends OncePerRequestFilter {
         // 3. Email varsa ve o an oturum açmamışsa sistemi kontrol et
         if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-            // Veritabanından kullanıcıyı bul
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(email);
+            // Veritabanından kullanıcıyı bul. UsernameNotFoundException burada
+            // YAKALANMAZSA ExceptionTranslationFilter'a hiç ulaşmaz -- bu filtre
+            // SecurityConfig'te JwtFilter'dan SONRA (UsernamePasswordAuthentication
+            // Filter'a göre) kayıtlı, yani zincirde ondan DAHA GEÇ çalışıyor ve
+            // ondan ÖNCE fırlayan bir exception'ı hiçbir zaman göremiyor. Canlı
+            // doğrulandı: anonimleştirme (Faz 3.9) kullanıcının email'ini
+            // değiştiriyor, anonimleştirmeden önce alınmış hâlâ geçerli bir JWT
+            // ile istek atılınca bu satır token'daki eski email'i artık DB'de
+            // bulamayıp UsernameNotFoundException fırlatıyordu ve bu, Rest
+            // AuthenticationEntryPoint'in ürettiği düzgün 401 yerine kontrolsüz
+            // bir 500'e düşüyordu. Kullanıcı bulunamazsa kimliksiz devam etmek
+            // güvenli: SecurityConfig zaten "/api/**" için authenticated()
+            // istiyor, boş SecurityContext ile AuthorizationFilter isteği
+            // reddedip RestAuthenticationEntryPoint'in temiz 401'ini üretecek.
+            UserDetails userDetails;
+            try {
+                userDetails = this.userDetailsService.loadUserByUsername(email);
+            } catch (UsernameNotFoundException e) {
+                userDetails = null;
+            }
 
             // 4. Token geçerli mi?
-            if (jwtUtil.validateToken(jwt, userDetails)) {
+            if (userDetails != null && jwtUtil.validateToken(jwt, userDetails)) {
                 // Geçerli! Oturumu açıyoruz
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                         userDetails, null, userDetails.getAuthorities());

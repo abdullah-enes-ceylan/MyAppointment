@@ -68,4 +68,23 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             LocalDateTime after,
             List<AppointmentStatus> statuses);
 
+    // --- Hesap silme akisi (Faz 3.9) ---
+
+    // Musteri hesap silme talep ettiginde, gracePeriod sonunda kendi
+    // (musteri tarafi) cevaplanmamis/onaylanmis randevularini iptal etmek
+    // icin (bkz. AccountDeletionScheduler).
+    List<Appointment> findByCustomerIdAndStatusIn(Long customerId, List<AppointmentStatus> statuses);
+
+    // BUSINESS_OWNER silme talep ettigi ANDA, businessNoticePeriod
+    // icindeki randevulari hemen iptal etmek icin (haber verme payi, bkz.
+    // AccountDeletionService).
+    List<Appointment> findByBusinessIdInAndStatusInAndAppointmentDateBefore(
+            List<Long> businessIds,
+            List<AppointmentStatus> statuses,
+            LocalDateTime before);
+
+    // businessReversalWindow gecip talep geri alinmadiysa, KALAN TUM
+    // randevulari topluca iptal etmek icin (bkz. AccountDeletionScheduler).
+    List<Appointment> findByBusinessIdInAndStatusIn(List<Long> businessIds, List<AppointmentStatus> statuses);
+
 }

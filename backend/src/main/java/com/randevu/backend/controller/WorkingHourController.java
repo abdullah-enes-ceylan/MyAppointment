@@ -21,9 +21,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 // Faz 1.8'deki "İşletme paneli — çalışma saatleri ekranı"nın kullanacağı
-// backend altyapısı. GET uçları herkese açık (müşteri randevu almadan önce
-// "bu işletme Pazar günleri açık mı" görebilmeli); değiştiren uçlar
-// OwnershipGuard ile sahiplik kontrollü.
+// backend altyapısı. (Faz 3.9) GET uçları da artık OwnershipGuard ile
+// sahiplik kontrollü -- eskiden "müşteri randevu almadan önce 'bu işletme
+// Pazar günleri açık mı' görebilmeli" gerekçesiyle herkese açıktı, ama
+// gerçekte hiçbir müşteri akışı bu uçları çağırmıyor (bkz. SecurityConfig'teki
+// güncel açıklama) -- tek gerçek çağıran işletme sahibinin kendi paneli.
+// assertOwnsBusiness (Active DEĞİL) kullanılıyor: sahip kendi askıdaki
+// işletmesinin saatlerini/kapanışlarını görmeye devam etmeli, sadece
+// DEĞİŞTİREMEMELİ (bkz. o metotlardaki assertOwnsActiveBusiness).
 @RestController
 @RequestMapping("/api/businesses/{businessId}")
 public class WorkingHourController {
@@ -41,7 +46,9 @@ public class WorkingHourController {
     }
 
     @GetMapping("/working-hours")
-    public List<WorkingHourResponse> getWorkingHours(@PathVariable Long businessId) {
+    public List<WorkingHourResponse> getWorkingHours(@PathVariable Long businessId, Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return workingHourService.getWorkingHours(businessId).stream()
                 .map(WorkingHourMapper::toResponse)
                 .toList();
@@ -54,13 +61,15 @@ public class WorkingHourController {
                                                @Valid @RequestBody WorkingHourRequest request,
                                                Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
         WorkingHour saved = workingHourService.setWorkingHour(businessId, request);
         return WorkingHourMapper.toResponse(saved);
     }
 
     @GetMapping("/closures")
-    public List<BusinessClosureResponse> getClosures(@PathVariable Long businessId) {
+    public List<BusinessClosureResponse> getClosures(@PathVariable Long businessId, Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return workingHourService.getClosures(businessId).stream()
                 .map(WorkingHourMapper::toResponse)
                 .toList();
@@ -71,7 +80,7 @@ public class WorkingHourController {
                                                                 @Valid @RequestBody BusinessClosureRequest request,
                                                                 Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
         BusinessClosure created = workingHourService.addClosure(businessId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(WorkingHourMapper.toResponse(created));
     }
@@ -80,7 +89,7 @@ public class WorkingHourController {
     public void removeClosure(@PathVariable Long businessId, @PathVariable Long closureId,
                                Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
         workingHourService.removeClosure(businessId, closureId);
     }
 }

@@ -15,10 +15,18 @@ import java.util.Optional;
 
 @Repository
 public interface BusinessRepository extends JpaRepository<Business, Long> {
-    // işletmecinin iş yerlerini getir
+    // işletmecinin iş yerlerini getir. BILEREK suspendedAt'e gore FILTRELENMEZ
+    // -- hesap silme talep etmis bir sahip kendi "/my" panelinden askidaki
+    // isletmesini gormeye devam etmeli (Faz 3.9, ROADMAP 3.9), aksi halde
+    // geri donus penceresinde ne oldugunu goremez.
     List<Business> findByOwnerId(Long ownerId);
 
-    List<Business> findByCategory(BusinessCategory category);
+    // Askiya alinmis (suspendedAt dolu) bir isletme ne aramada ne kategori
+    // filtresinde gorunmemeli (Faz 3.9) -- musteri gormemeli, silinmis
+    // sahibin isletmesine yeni randevu denemesi zaten hic teklif edilmemeli.
+    List<Business> findByCategoryAndSuspendedAtIsNull(BusinessCategory category);
+
+    List<Business> findBySuspendedAtIsNull();
 
     // Kapak fotografi degistirme (BusinessService.swapPhotoKey) icin --
     // SELECT ... FOR UPDATE ile satiri kilitler. Eszamanli iki yukleme ayni
@@ -34,6 +42,7 @@ public interface BusinessRepository extends JpaRepository<Business, Long> {
     // Java tarafında yapılıyor -- bu sorgu sadece adayları daraltıyor, kutu
     // köşelerinde dairenin dışında kalan noktalar da dönebilir (bilerek,
     // bkz. LocationService).
-    List<Business> findByLatitudeBetweenAndLongitudeBetween(
+    // Faz 3.9: askidaki isletmeler konum aramasinda da GORUNMEMELI.
+    List<Business> findByLatitudeBetweenAndLongitudeBetweenAndSuspendedAtIsNull(
             Double minLatitude, Double maxLatitude, Double minLongitude, Double maxLongitude);
 }

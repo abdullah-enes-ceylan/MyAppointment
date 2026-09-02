@@ -22,5 +22,11 @@ public enum NotificationType {
     // AppointmentReminderService) -- musteriye DEGIL isletmeye gidiyor
     // cunku dusmeyi engelleyecek aksiyonu (onay/red) sadece isletme
     // alabilir.
-    PENDING_EXPIRY_WARNING
+    PENDING_EXPIRY_WARNING,
+
+    // Musteriye: randevu aldigi isletmenin sahibi hesap silme talep etti,
+    // randevu bu yuzden iptal edildi (Faz 3.9). AppointmentExpiryPolicy'nin
+    // "hicbir sey isletmenin sucu degil" ayrimindan FARKLI -- burada
+    // gercekten isletme tarafi kaynakli bir iptal, mesaj buna gore acik.
+    APPOINTMENT_CANCELLED_BUSINESS_CLOSED
 }

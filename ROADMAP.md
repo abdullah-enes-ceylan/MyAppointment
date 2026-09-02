@@ -713,8 +713,9 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
 - Aydınlatma metni, açık rıza akışı, gizlilik politikası, kullanım şartları
 - VERBİS kayıt yükümlülüğü eşiğini kontrol et
 - İşletmelerle veri işleyen sözleşmesi (sen veri sorumlususun, işletme de öyle)
-- **Hesap ve veri silme akışı (unutulma hakkı) — `USER` VE `BUSINESS_OWNER` için, ikisi de
-  plan hazır, onay bekliyor.**
+- **Hesap ve veri silme akışı (unutulma hakkı) — `USER` VE `BUSINESS_OWNER` için, backend
+  implementasyonu VE testleri tamamlandı (bkz. altta "Uygulama durumu").** Frontend (silme
+  UI'ı, askıya alınmış işletme linkinin düz metne dönmesi) henüz yapılmadı.
 
   **Tespit edilen teknik kısıt:** Hiçbir migration'da `ON DELETE CASCADE`/`SET NULL` yok — hepsi
   düz `REFERENCES` (Postgres varsayılanı `RESTRICT`). Yani randevusu/favorisi olan bir
@@ -774,6 +775,26 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
   şey (giriş kapama, randevu iptali, alan scrub'ı) 30. günde TEK seferde, atomik olarak
   uygulanıyor.
 
+  **Ek soru: silme talebi verildiği AN (henüz anonimleştirme yok, `enabled` hâlâ true) mevcut
+  JWT'ler geçerli kalmaya devam ediyor — bu bilinçli bir kabul, düzeltilecek bir açık değil.**
+  Karar: `requestDeletion` var olan token'ları GEÇERSİZ KILMIYOR (ve kılmamalı). Gerekçe: (1)
+  `DELETE /api/users/me` zaten şifre yeniden istiyor — şifresiz biri bu talebi tetikleyemez,
+  yani "ele geçirilmiş ama şifresiz bir oturum" senaryosu burada geçerli değil. (2) Gerçek
+  hesap sahibi, eski token'ı geçerli kalsın ya da kalmasın, `enabled=true` olduğu sürece
+  şifresiyle YENİDEN login olup `POST /api/users/me/cancel-deletion`'a ulaşabilir (login,
+  `DaoAuthenticationProvider` üzerinden HER SEFERİNDE taze bir `isEnabled()` kontrolü yapar) —
+  yani "eski token'lar canlı kalsın" kararı kurtarma/geri dönüş akışını hiçbir şekilde
+  ENGELLEMİYOR. (3) Bu projede JWT tamamen stateless — hiçbir yerde (şifre değişikliğinde bile,
+  bkz. `UserService.changePassword`) "bu andan önce üretilmiş token'lar geçersiz" türünde bir
+  mekanizma (ör. `User` üzerinde bir `tokenValidAfter` alanı + `JwtFilter`'da bunun kontrolü)
+  yok. Böyle bir mekanizmayı SADECE silme talebi için eklemek tutarsız olurdu — şifre
+  değişikliğinde neden yok da burada var sorusuna cevap üretilemezdi. Genel bir oturum
+  sonlandırma/token-geçersiz-kılma ihtiyacı gerçekten doğarsa (ör. "şüpheli giriş" özelliği),
+  bu HER İKİ olayı (şifre değişikliği VE silme talebi) kapsayan ayrı, daha geniş bir görev
+  olmalı — 3.9'a özel bir yama değil. (Bu, anonimleştirme SONRASI eski token'ların ne olduğu
+  sorusundan AYRI — o soru zaten canlı test edilip düzeltildi, bkz. `JwtFilter`'daki
+  `UsernameNotFoundException` yakalama ve `JwtFilterAnonymizedUserTest`.)
+
   **Anonimleştirme gerçekten geri döndürülemez mi? Kod tabanında kontrol edildi: canlı
   veritabanında evet, yedeklerde HAYIR (dürüstçe kabul edilen tek sınır).**
   - `NotificationLog`/`InAppNotification` tabloları kontrol edildi: ikisi de kullanıcıyı
@@ -804,7 +825,7 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
     sütun olarak tutulduğunu doğruluyor — "kim anonimleşmiş" sorusunu restore sonrası tekrar
     sormak için gereken tek bilgi bu.
 
-  **`BUSINESS_OWNER` silme akışı — plan hazır, onay bekliyor.**
+  **`BUSINESS_OWNER` silme akışı — backend implementasyonu VE testleri tamamlandı.**
 
   **Veri modeli tespiti.** `Business.owner` `@ManyToOne` — **bir sahip N işletme
   yönetebiliyor** (`BusinessRepository.findByOwnerId` → `List<Business>`, CLAUDE.md karar
@@ -840,12 +861,11 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
   doğrulanması gerekiyor.
 
   **Kimlik anonimleştirmesi (30 günlük `gracePeriod`) bu ikisinden TAMAMEN AYRI ve
-  DEĞİŞMEDİ** — randevu kaderleri 48-72 saat içinde netleşiyor, ama `User` satırının kendisi
-  (isim/e-posta/telefon) hâlâ USER akışındaki AYNI 30 günlük pencereyi bekliyor, hesap hâlâ
-  giriş yapılabilir durumda kalıyor. (Bunu böyle anlıyorum — "sonra anonimleştirme akışı
-  işler" ifadeni "randevular çözüldükten sonra, zaten çalışmakta olan 30 günlük sayaç kendi
-  akışında ilerlemeye devam eder" diye okudum; eğer kastın kimlik anonimleştirmesinin de
-  48 saate çekilmesiyse bu farklı bir karar olur, düzelt.)
+  DEĞİŞMEDİ — teyit edildi.** Randevu kaderleri 48-72 saat içinde netleşiyor, ama `User`
+  satırının kendisi (isim/e-posta/telefon) hâlâ USER akışındaki AYNI 30 günlük pencereyi
+  bekliyor, hesap hâlâ giriş yapılabilir durumda kalıyor. İkisi farklı şeyi koruyor: randevu
+  iptali müşteriyi korur (hızlı olmalı), anonimleştirme hesap sahibinin geri dönüş hakkını
+  korur (geniş olmalı).
 
   **Bildirim — yeni bir `NotificationType`.** Her iki dalgada da (72s anında iptal, 48s toplu
   iptal) etkilenen müşteriye in-app bildirim gidiyor — mevcut `NotificationType` enum'ında
@@ -886,15 +906,82 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
   görünmüyor" yeterli değil, üç ayrı yol da kapatılmalı:**
   - **Arama/listeleme:** `GET /api/businesses` ve konum/kategori sorguları `suspendedAt IS
     NULL` filtreler (zaten plandaydı).
-  - **Doğrudan URL:** `GET /api/businesses/{id:\d+}` (detay ucu) `suspendedAt != null` ise
-    **404** döner (403 değil — path traversal'daki gibi, "var ama erişemiyorsun" ile "böyle
-    bir şey yok" arasında fark belli edilmez). Şu an bu uç `suspendedAt` kavramını hiç
-    bilmiyor, kontrol eklenmesi gerekiyor.
-  - **Eski randevu detayında tıklanabilir link:** Backend'in 404'ü zaten gerçek güvenlik
-    sınırı (frontend ne yaparsa yapsın tıklanınca 404 alınır) — ama frontend'de de `Business
-    Summary`'nin (`AppointmentResponse.business`) taşıdığı bilgiye `suspendedAt`/`active`
-    gibi bir alan eklenip, geçmiş randevu ekranlarında işletme adı `suspendedAt` doluysa
-    tıklanabilir link DEĞİL düz metin olarak gösterilmeli — kırık bir link gibi görünmesin.
+  - **Doğrudan URL:** `GET /api/businesses/{id}` (detay ucu, `BusinessService.getBusinessById`)
+    `suspendedAt != null` ise **404** döner (403 değil — path traversal'daki gibi, "var ama
+    erişemiyorsun" ile "böyle bir şey yok" arasında fark belli edilmez). **Yapıldı.**
+  - **Eski randevu detayında tıklanabilir link — henüz yapılmadı (frontend).** Backend'in
+    404'ü zaten gerçek güvenlik sınırı (frontend ne yaparsa yapsın tıklanınca 404 alınır) —
+    ama frontend'de de `BusinessSummary`'nin (`AppointmentResponse.business`) taşıdığı bilgiye
+    `suspendedAt`/`active` gibi bir alan eklenip, geçmiş randevu ekranlarında işletme adı
+    `suspendedAt` doluysa tıklanabilir link DEĞİL düz metin olarak gösterilmeli — kırık bir
+    link gibi görünmesin.
+
+  **Uygulama durumu (backend, teyit edildi — test edilerek doğrulandı, iddia değil):**
+  - Migration `V15__account_deletion.sql` — `users.deletion_requested_at`, `users.anonymized_at`,
+    `businesses.suspended_at` (üçü de nullable, expand-contract).
+  - `AccountDeletionProperties` (`app.account-deletion.grace-period`/`business-notice-period`/
+    `business-reversal-window`, `application.properties`'te varsayılanlarıyla) —
+    `@PostConstruct` doğrulaması hem tekil değerleri hem `reversalWindow <= noticePeriod`
+    ilişkisini kontrol ediyor.
+  - `AccountDeletionService` (`requestDeletion`/`cancelDeletion`/`bulkCancelRemainingAppointments`/
+    `anonymize`) ve `AccountDeletionScheduler` (`bulkCancelAfterReversalWindow`/
+    `anonymizeAfterGracePeriod`, `AppointmentLifecycleScheduler` ile aynı cron'u paylaşıyor).
+  - `DELETE /api/users/me` ve `POST /api/users/me/cancel-deletion` (`UserController`).
+  - `CustomUserDetailsService`: `enabled = (anonymizedAt == null)` — Spring Security'nin kendi
+    `DisabledException` mekanizması, elle kontrol yok.
+  - `BusinessRepository`/`BusinessService`/`LocationService`: liste, kategori ve konum
+    sorguları `suspendedAt IS NULL` filtreli; `findByOwnerId` BİLEREK filtresiz (sahip kendi
+    `/my` panelinden görmeye devam etmeli).
+  - `AppointmentService.createAppointment`: askıdaki işletmeye yeni randevu denemesi
+    `BusinessRuleException` (409) ile reddediliyor.
+  - **Askıdaki işletme sahibi panelde ne yapabilir — karar verildi: salt okunur + sadece
+    "talebi iptal et" aktif.** `OwnershipGuard`'a mutasyon uçları için ayrı bir metot ailesi
+    eklendi (`assertOwnsActiveBusiness`/`assertOwnsActiveServiceItem`/`assertOwnsActiveStaff`)
+    — sahiplik YETMEZ, işletme ayrıca askıda olmamalı. Okuma uçları (`assertOwnsBusiness`/
+    `assertOwnsServiceItem`/`assertOwnsStaff`) DEĞİŞMEDİ, askıda olsa da geçer — sahip kendi
+    randevularını/personel listesini/inbox'ını görmeye devam eder. Mutasyon uçları
+    (`BusinessController.updateBusiness`/`uploadPhoto`/`removePhoto`,
+    `WorkingHourController.setWorkingHour`/`addClosure`/`removeClosure`,
+    `ServiceItemController.create/update/delete`, `StaffController.create/update/delete` +
+    personel çalışma saati) hepsi aktif-varyanta geçirildi. `AppointmentService.changeStatus`:
+    askıdaki işletme sahibi artık APPROVE/REJECT/NO_SHOW yapamaz (409) — CANCEL BİLEREK
+    istisna, hem müşteri kendi randevusunu her zaman iptal edebilmeli hem de
+    `AccountDeletionService`'in kendi otomatik iptalleri aynı yolu (sahibinin ID'siyle)
+    kullanıyor. `BusinessService.createBusiness`: silme talebi olan bir kullanıcı yeni işletme
+    açamaz.
+  - **`businessRepository` çağrı noktaları tarandı — `findByOwnerId` DIŞINDA filtresiz kalan
+    yok.** Diğer tüm `findById` çağrıları (createAppointment, updateBusiness, swapPhotoKey,
+    FavoriteService, ServiceItemService, StaffService, OwnershipGuard, WorkingHourService) ya
+    tekil id ile zaten kimliği bilinen bir işletmeye erişiyor (IDOR değil, sahiplik ayrı
+    kontrol ediliyor) ya da sahibin kendi panel işlemi.
+  - **Bulgu kapatıldı: `GET /api/service-items/business/{id}`, `GET /api/businesses/{id}/working-hours`
+    ve `.../closures` artık kimliksiz/sahipliksiz DEĞİL.** İlk taramada bu üç uç "bilerek
+    herkese açık" sanılmıştı ("müşteri randevu almadan önce saatleri görebilmeli" gerekçesiyle,
+    bkz. eski `SecurityConfig` yorumu) — ama frontend'de gerçekten kontrol edildi
+    (`BusinessDetailPage.tsx` grep'lendi): müşteri sayfası bu uçları HİÇ çağırmıyor, sadece
+    `GET /api/businesses`'in gömülü `serviceItems`/`openTime`/`closeTime` alanlarını kullanıyor.
+    Tek gerçek çağıran işletme sahibinin kendi paneli (`WorkingHoursTab.tsx`/`ServicesTab.tsx`) —
+    yani "aynı uç hem herkese hem sahibe açık" değil, "hiç kimseye açık olması gerekmeyen bir uç
+    yanlışlıkla herkese açıktı" durumu. Tıpkı daha önce aynı sebeple kilitlenen
+    `StaffController.getStaffByBusiness` gibi: `SecurityConfig`'ten iki `permitAll` satırı
+    kaldırıldı, üçü de artık `OwnershipGuard.assertOwnsBusiness` (okuma varyantı, Active DEĞİL —
+    sahip kendi askıdaki işletmesini görmeye devam eder) ile korunuyor. Görünüm ayrımına HİÇ
+    gerek kalmadı çünkü tek gerçek görünüm zaten sahibinki. Canlı MockMvc testiyle doğrulandı
+    (`OwnerOnlyEndpointsUnauthenticatedTest`): kimliksiz istek üçünde de 401.
+  - **Testler — kullanıcının istediği 5 senaryo + 2 ek soru (idempotency, anonimleştirilmiş
+    hesapta cancelDeletion) + askıdaki işletme mutasyon kısıtı + üç ucun kilidi,
+    `Clock` manipülasyonuyla (`AccountDeletionIntegrationTest` gerçek Testcontainers Postgres,
+    `OwnershipGuardTest`/`AppointmentServiceStateMachineTest`/`OwnerOnlyEndpointsUnauthenticatedTest`
+    birim/MockMvc), hepsi yeşil (142/142):**
+    47. saatte geri alma → hiçbir randevu iptal olmadı + hesap normale döndü, bildirim
+    gitmedi; 49. saatte scheduler → geri dönüş penceresi dolduğu için kalan randevular iptal +
+    müşteriye `APPOINTMENT_CANCELLED_BUSINESS_CLOSED` bildirimi `SENT` loglandı; talep anında
+    72 saat içindekiler hemen iptal + bildirim, 73. saatteki dokunulmadan kaldı + bildirim
+    gitmedi; askıdaki işletmeye randevu denemesi reddedildi; 30. günde anonimleştirme →
+    randevu satırı duruyor (CANCELLED, silinmedi), kişisel alanlar temiz, favori hard-delete
+    edildi; ikinci silme talebi 409 ile reddedilir, ilk talebin zaman damgası sıfırlanmaz;
+    anonimleştirilmiş hesapta `cancelDeletion` 409 ile reddedilir; askıdaki işletme sahibi
+    APPROVE/REJECT/NO_SHOW yapamaz ama CANCEL hâlâ çalışır.
 
 - Log erişim kontrolü ve saklama süresi: kim (hangi rol) sunucu loglarına erişebilir, loglar
   ne kadar süre tutulur, rotasyon/silme politikası var mı. Faz 3.6'da `PiiMasker` ile

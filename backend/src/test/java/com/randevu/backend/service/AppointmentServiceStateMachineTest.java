@@ -92,6 +92,24 @@ class AppointmentServiceStateMachineTest {
                 .build();
     }
 
+    // Faz 3.9: is letme sahibi hesap silme talep etmis, isletme askida.
+    // appointmentWithStatus'un ayni sabit tarih/business setup'ini birebir
+    // kullaniyor, sadece Business.suspendedAt dolu.
+    private Appointment appointmentWithStatusAndSuspendedBusiness(AppointmentStatus status) {
+        User owner = User.builder().id(OWNER_ID).build();
+        User customer = User.builder().id(CUSTOMER_ID).build();
+        Business business = Business.builder().owner(owner)
+                .suspendedAt(LocalDateTime.of(2026, 9, 1, 8, 0)).build();
+        return Appointment.builder()
+                .id(APPOINTMENT_ID)
+                .status(status)
+                .business(business)
+                .customer(customer)
+                .appointmentDate(LocalDateTime.of(2026, 9, 5, 10, 0))
+                .createdAt(LocalDateTime.of(2026, 9, 1, 9, 0))
+                .build();
+    }
+
     // Basarili gecis bekleyen testler icin: hem bulunuyor hem kaydediliyor.
     private void stubFind(Appointment appointment) {
         when(appointmentRepository.findById(APPOINTMENT_ID)).thenReturn(Optional.of(appointment));
@@ -260,6 +278,60 @@ class AppointmentServiceStateMachineTest {
 
         assertThatThrownBy(() -> appointmentService.changeStatus(APPOINTMENT_ID, AppointmentAction.NO_SHOW, OWNER_ID))
                 .isInstanceOf(BusinessRuleException.class);
+    }
+
+    // --- Faz 3.9: askidaki (hesap silme talep edilmis) isletme ---
+
+    @Test
+    @DisplayName("APPROVE: askidaki isletme sahibi yeni bir talebi onaylayamaz")
+    void approve_askidakiIsletme_BusinessRule() {
+        Appointment appointment = appointmentWithStatusAndSuspendedBusiness(AppointmentStatus.PENDING);
+        stubFindOnly(appointment);
+
+        assertThatThrownBy(() -> appointmentService.changeStatus(APPOINTMENT_ID, AppointmentAction.APPROVE, OWNER_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("hesap silme sürecinde");
+    }
+
+    @Test
+    @DisplayName("REJECT: askidaki isletme sahibi yeni bir talebi reddedemez")
+    void reject_askidakiIsletme_BusinessRule() {
+        Appointment appointment = appointmentWithStatusAndSuspendedBusiness(AppointmentStatus.PENDING);
+        stubFindOnly(appointment);
+
+        assertThatThrownBy(() -> appointmentService.changeStatus(APPOINTMENT_ID, AppointmentAction.REJECT, OWNER_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("hesap silme sürecinde");
+    }
+
+    @Test
+    @DisplayName("NO_SHOW: askidaki isletme sahibi 'gelmedi' isaretleyemez")
+    void noShow_askidakiIsletme_BusinessRule() {
+        Appointment appointment = appointmentWithStatusAndSuspendedBusiness(AppointmentStatus.APPROVED);
+        stubFindOnly(appointment);
+
+        assertThatThrownBy(() -> appointmentService.changeStatus(APPOINTMENT_ID, AppointmentAction.NO_SHOW, OWNER_ID))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("hesap silme sürecinde");
+    }
+
+    // CANCEL BİLEREK istisna: hem musteri kendi randevusunu her zaman iptal
+    // edebilmeli, hem de AccountDeletionService'in kendi otomatik iptalleri
+    // (haber verme payi/geri donus penceresi) bu yolu isletme sahibinin
+    // ID'siyle cagiriyor -- bkz. requireBusinessActiveForOwnerAction'daki
+    // gerekce.
+    @Test
+    @DisplayName("CANCEL: askidaki isletmede sahip de musteri de iptal edebilir")
+    void cancel_askidakiIsletmedeHalaCalisir() {
+        Appointment sahipIptali = appointmentWithStatusAndSuspendedBusiness(AppointmentStatus.APPROVED);
+        stubFind(sahipIptali);
+        assertThat(appointmentService.changeStatus(APPOINTMENT_ID, AppointmentAction.CANCEL, OWNER_ID).getStatus())
+                .isEqualTo(AppointmentStatus.CANCELLED);
+
+        Appointment musteriIptali = appointmentWithStatusAndSuspendedBusiness(AppointmentStatus.APPROVED);
+        stubFind(musteriIptali);
+        assertThat(appointmentService.changeStatus(APPOINTMENT_ID, AppointmentAction.CANCEL, CUSTOMER_ID).getStatus())
+                .isEqualTo(AppointmentStatus.CANCELLED);
     }
 
     // --- Genel ---

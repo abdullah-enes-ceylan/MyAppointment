@@ -1,5 +1,6 @@
 package com.randevu.backend.entity;
 
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -74,6 +75,14 @@ public class Business {
     // set eder, genel guncelleme akisiyla degistirilemez.
     @Column(name = "photo_key")
     private String photoKey;
+
+    // Sahibi hesap silme talep ettiginde dolar (Faz 3.9). Dolu oldugu surece
+    // bu isletme aramada/listelemede GORUNMEZ, detay ucu 404 doner (bkz.
+    // BusinessService.getBusinessById) -- ama sahibi kendi /my ucundan
+    // GORMEYE devam eder, hesap silme talebi geri alinirsa (POST
+    // /api/users/me/cancel-deletion) bu alan null'a doner.
+    @Column(name = "suspended_at")
+    private LocalDateTime suspendedAt;
 
     // Getter ve Setter metotları
     public BusinessCategory getCategory() {

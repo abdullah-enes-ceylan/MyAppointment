@@ -33,10 +33,24 @@ public class CustomUserDetailsService implements UserDetailsService {
         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
 
         // 3. Bizim User'ı Spring Security'nin UserDetails nesnesine paketleyip sisteme
-        // teslim ediyoruz
+        // teslim ediyoruz.
+        //
+        // enabled=false SADECE anonymizedAt doluyken (Faz 3.9, hesap silme
+        // akisi fiilen tamamlanmis) -- deletionRequestedAt tek basina
+        // BILEREK giris engellemiyor: 30 gunluk geri donus penceresinde
+        // hesap ele gecirilip silme tetiklenmisse, gercek sahibinin giris
+        // yapip POST /api/users/me/cancel-deletion ile iptal edebilmesi
+        // gerekiyor. Spring Security'nin kendi DisabledException mekanizmasi
+        // devreye giriyor -- burada elle bir "silinmis mi" kontrolu yazmaya
+        // gerek yok.
+        boolean enabled = user.getAnonymizedAt() == null;
         return new org.springframework.security.core.userdetails.User(
                 user.getEmail(),
                 user.getPassword(),
+                enabled,
+                true,
+                true,
+                true,
                 Collections.singletonList(authority));
     }
 }

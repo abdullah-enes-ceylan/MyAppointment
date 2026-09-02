@@ -73,6 +73,27 @@ class ServiceItemControllerOwnershipTest {
     }
 
     @Test
+    @DisplayName("getServiceItemsByBusiness: saldirgan rakip isletmenin hizmet/fiyat listesini goremez (Faz 3.9)")
+    void getServiceItemsByBusiness_saldirgan_AccessDenied() {
+        actingAs(ATTACKER_ID);
+
+        assertThatThrownBy(() -> controller.getServiceItemsByBusiness(BUSINESS_ID, authentication))
+                .isInstanceOf(AccessDeniedException.class);
+
+        verify(serviceItemService, never()).getServicesByBusiness(any());
+    }
+
+    @Test
+    @DisplayName("getServiceItemsByBusiness: gercek sahip kendi hizmet listesini gorebilir")
+    void getServiceItemsByBusiness_sahip_izinVerilir() {
+        actingAs(OWNER_ID);
+
+        controller.getServiceItemsByBusiness(BUSINESS_ID, authentication);
+
+        verify(serviceItemService).getServicesByBusiness(BUSINESS_ID);
+    }
+
+    @Test
     @DisplayName("createServiceItem: saldirgan rakip isletmeye hizmet ekleyemez")
     void createServiceItem_saldirgan_AccessDenied() {
         actingAs(ATTACKER_ID);

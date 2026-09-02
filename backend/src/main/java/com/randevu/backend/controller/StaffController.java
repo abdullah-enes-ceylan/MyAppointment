@@ -59,7 +59,7 @@ public class StaffController {
             @Valid @RequestBody StaffRequest request,
             Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
         Staff created = staffService.createStaff(businessId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(StaffMapper.toResponse(created));
     }
@@ -69,14 +69,14 @@ public class StaffController {
             @Valid @RequestBody StaffRequest request,
             Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsStaff(currentUser.getId(), staffId);
+        ownershipGuard.assertOwnsActiveStaff(currentUser.getId(), staffId);
         return StaffMapper.toResponse(staffService.updateStaff(staffId, request));
     }
 
     @DeleteMapping("/delete/{staffId}")
     public void deleteStaff(@PathVariable Long staffId, Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsStaff(currentUser.getId(), staffId);
+        ownershipGuard.assertOwnsActiveStaff(currentUser.getId(), staffId);
         staffService.deleteStaff(staffId);
     }
 
@@ -97,7 +97,7 @@ public class StaffController {
             @Valid @RequestBody StaffWorkingHourRequest request,
             Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsStaff(currentUser.getId(), staffId);
+        ownershipGuard.assertOwnsActiveStaff(currentUser.getId(), staffId);
         return StaffWorkingHourMapper.toResponse(staffService.setWorkingHour(staffId, request));
     }
 }

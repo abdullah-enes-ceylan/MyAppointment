@@ -64,11 +64,18 @@ public class SecurityConfig {
                         // {id:\d+} kısıtı: SADECE sayısal path'lere eşleşir, "/my" gibi
                         // kimlik gerektiren literal yollarla asla çakışmaz.
                         .requestMatchers(HttpMethod.GET, "/api/businesses/{id:\\d+}").permitAll()
-                        // Musteri randevu almadan once "bu isletme Pazar acik mi" gibi
-                        // sorular sorabilmeli — calisma saatleri ve kapanislar da
-                        // herkese acik (degistiren PUT/POST/DELETE degil, sadece GET).
-                        .requestMatchers(HttpMethod.GET, "/api/businesses/*/working-hours").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/businesses/*/closures").permitAll()
+                        // (Faz 3.9) Calisma saatleri/kapanislar ARTIK herkese acik DEGIL --
+                        // eskiden "musteri randevu almadan once 'bu isletme Pazar acik mi'
+                        // diye sorabilmeli" gerekcesiyle permitAll'di, ama gercekte hicbir
+                        // musteri akisi bu uclari HIC cagirmiyor (musteri sayfasi sadece
+                        // BusinessDetailResponse'un gomulu openTime/closeTime alanina
+                        // bakiyor, bkz. BusinessDetailPage.tsx) -- tek gercek cagiran
+                        // isletme sahibinin kendi paneli (WorkingHoursTab.tsx). Askiya
+                        // alinmis bir isletmenin saatlerini/kapanislarini businessId
+                        // bilerek dogrudan okuyabilme acigini kapatmak icin artik genel
+                        // "/api/**" kuralina dusup authenticated + OwnershipGuard'lı
+                        // (StaffController.getStaffByBusiness'in ayni sebeple daha once
+                        // kilitlenmesiyle AYNI desen).
                         .requestMatchers(HttpMethod.GET, "/api/appointments/available-slots").permitAll()
                         // Kapak fotograflari herkese acik bilgi -- isletme listesi/detayi
                         // gibi (bkz. yukarisi). POST /api/businesses/{id}/photo (yukleme)

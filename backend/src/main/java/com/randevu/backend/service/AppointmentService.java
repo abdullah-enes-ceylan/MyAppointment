@@ -81,6 +81,16 @@ public class AppointmentService {
         Business business = businessRepository.findById(businessId)
                 .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
 
+        // Sahibi hesap silme talep etmis (Faz 3.9) bir isletmeye yeni randevu
+        // alinamaz -- BusinessService.getBusinessById'deki "yok say" (404)
+        // deseninden FARKLI olarak burada 409 (BusinessRuleException) daha
+        // dogru: musteri zaten bu isletmenin sayfasindaydi (var oldugunu
+        // biliyor), sorun "boyle bir isletme yok" degil "su an randevu
+        // alinamiyor".
+        if (business.getSuspendedAt() != null) {
+            throw new BusinessRuleException("Bu işletme şu anda randevu kabul etmiyor.");
+        }
+
         ServiceItem service = serviceItemRepository.findById(newAppointment.getServiceItem().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Hizmet bulunamadı."));
 
@@ -294,12 +304,14 @@ public class AppointmentService {
         switch (action) {
             case APPROVE -> {
                 requireOwner(isBusinessOwner, "Bu işlemi yalnızca işletme sahibi yapabilir.");
+                requireBusinessActiveForOwnerAction(appointment);
                 requireCurrentStatus(appointment, EnumSet.of(AppointmentStatus.PENDING),
                         "Sadece onay bekleyen randevular onaylanabilir.");
                 appointment.setStatus(AppointmentStatus.APPROVED);
             }
             case REJECT -> {
                 requireOwner(isBusinessOwner, "Bu işlemi yalnızca işletme sahibi yapabilir.");
+                requireBusinessActiveForOwnerAction(appointment);
                 requireCurrentStatus(appointment, EnumSet.of(AppointmentStatus.PENDING),
                         "Sadece onay bekleyen randevular reddedilebilir.");
                 appointment.setStatus(AppointmentStatus.REJECTED);
@@ -322,6 +334,7 @@ public class AppointmentService {
             // zaten terminal durumlar.
             case NO_SHOW -> {
                 requireOwner(isBusinessOwner, "Bu işlemi yalnızca işletme sahibi yapabilir.");
+                requireBusinessActiveForOwnerAction(appointment);
                 requireCurrentStatus(appointment, EnumSet.of(AppointmentStatus.APPROVED),
                         "Sadece onaylanmış randevular 'gelmedi' olarak işaretlenebilir.");
                 appointment.setStatus(AppointmentStatus.NO_SHOW);
@@ -406,6 +419,23 @@ public class AppointmentService {
     private void requireOwner(boolean isBusinessOwner, String message) {
         if (!isBusinessOwner) {
             throw new AccessDeniedException(message);
+        }
+    }
+
+    // Faz 3.9: hesap silme talep etmiş (askıdaki) bir işletme sahibi artık
+    // YENİ bir işletme kararı ALAMAZ (onay/red/gelmedi) -- bu OwnershipGuard.
+    // assertOwnsActiveBusiness ile AYNI "salt okunur" ilkesi, sadece burası
+    // OwnershipGuard'dan geçmiyor (changeStatus'un kendi sahiplik kontrolü
+    // var, yukarıda). CANCEL'e BİLEREK uygulanmıyor: hem müşterinin kendi
+    // randevusunu her zaman iptal edebilmesi gerekiyor hem de
+    // AccountDeletionService'in kendi otomatik iptalleri (haber verme
+    // payı/geri dönüş penceresi) bu metodu işletme sahibinin ID'siyle
+    // çağırıyor -- CANCEL'i burada engellemek kendi silme akışımızı
+    // kilitlerdi.
+    private void requireBusinessActiveForOwnerAction(Appointment appointment) {
+        if (appointment.getBusiness().getSuspendedAt() != null) {
+            throw new BusinessRuleException(
+                    "İşletmeniz hesap silme sürecinde olduğu için bu işlem yapılamıyor.");
         }
     }
 

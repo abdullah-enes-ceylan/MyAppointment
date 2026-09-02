@@ -20,4 +20,10 @@ public interface FavoriteRepository extends JpaRepository<Favorite, Long> {
 
     // Profil ekranindaki "favori isletme sayisi" -- listeyi cekmeye gerek yok.
     long countByUser_Id(Long userId);
+
+    // Kimlik anonimlestirmesinde favoriler HARD DELETE edilir (Faz 3.9,
+    // ROADMAP 3.9) -- diger tum tablolarin aksine bunlar "silinmis
+    // kullaniciya ait favori isletme" seklinde saklanmaya deger bir kayit
+    // degil, tamamen kullaniciya ozel bir tercih.
+    void deleteByUser_Id(Long userId);
 }

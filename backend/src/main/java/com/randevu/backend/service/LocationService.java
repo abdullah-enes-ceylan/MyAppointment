@@ -47,7 +47,8 @@ public class LocationService {
     public List<NearbyBusiness> findNearby(double centerLat, double centerLng, double radiusKm) {
         BoundingBox box = boundingBox(centerLat, centerLng, radiusKm);
 
-        List<Business> candidates = businessRepository.findByLatitudeBetweenAndLongitudeBetween(
+        // Faz 3.9: askidaki isletmeler konum aramasinda da gorunmemeli.
+        List<Business> candidates = businessRepository.findByLatitudeBetweenAndLongitudeBetweenAndSuspendedAtIsNull(
                 box.minLat(), box.maxLat(), box.minLng(), box.maxLng());
 
         return candidates.stream()

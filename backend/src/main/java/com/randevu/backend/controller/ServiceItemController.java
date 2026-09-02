@@ -35,8 +35,17 @@ public class ServiceItemController {
     // kullanmiyordu. Ihtiyac dogarsa geri eklemek birkac satir; gereksiz
     // API yuzeyini acik tutmanin ise bedeli var.
 
+    // (Faz 3.9) Sahiplik kontrollu hale getirildi -- eskiden auth gerektiriyordu
+    // ama HERHANGI bir giris yapmis kullanici baska bir isletmenin hizmet/fiyat
+    // listesini gorebiliyordu (musteri sayfasi zaten BusinessDetailResponse'un
+    // gomulu serviceItems'ini kullaniyor, bu ucu hic cagirmiyor -- bkz.
+    // BusinessDetailPage.tsx). assertOwnsBusiness (Active DEGIL): sahip kendi
+    // askidaki isletmesinin hizmet listesini gormeye devam etmeli.
     @GetMapping("/business/{businessId}")
-    public List<ServiceItemResponse> getServiceItemsByBusiness(@PathVariable Long businessId) {
+    public List<ServiceItemResponse> getServiceItemsByBusiness(@PathVariable Long businessId,
+            Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
         return serviceItemService.getServicesByBusiness(businessId).stream()
                 .map(ServiceItemMapper::toResponse)
                 .toList();
@@ -50,7 +59,7 @@ public class ServiceItemController {
                                           @Valid @RequestBody ServiceItemRequest request,
                                           Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
         return ServiceItemMapper.toResponse(serviceItemService.createServiceItem(businessId, request));
     }
 
@@ -64,14 +73,14 @@ public class ServiceItemController {
                                           @Valid @RequestBody ServiceItemRequest request,
                                           Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsServiceItem(currentUser.getId(), serviceId);
+        ownershipGuard.assertOwnsActiveServiceItem(currentUser.getId(), serviceId);
         return ServiceItemMapper.toResponse(serviceItemService.updateService(serviceId, request));
     }
 
     @DeleteMapping("/delete/{serviceId}")
     public void deleteServiceItem(@PathVariable Long serviceId, Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsServiceItem(currentUser.getId(), serviceId);
+        ownershipGuard.assertOwnsActiveServiceItem(currentUser.getId(), serviceId);
         serviceItemService.deleteService(serviceId);
     }
 

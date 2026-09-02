@@ -111,7 +111,7 @@ public class BusinessController {
                                             @Valid @RequestBody BusinessRequest request,
                                             Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
         Business updated = businessService.updateBusiness(businessId, request);
         return toResponseWithRating(updated);
     }
@@ -133,7 +133,7 @@ public class BusinessController {
                                          @RequestParam("file") MultipartFile file,
                                          Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
 
         RateLimitResult result = rateLimitPort.tryConsume("photo-upload:user:" + currentUser.getId(),
                 rateLimitProperties.getPhotoUploadMaxRequests(), rateLimitProperties.getPhotoUploadWindow());
@@ -155,7 +155,7 @@ public class BusinessController {
     @DeleteMapping("/{id:\\d+}/photo")
     public ResponseEntity<Void> removePhoto(@PathVariable("id") Long businessId, Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
+        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
         businessPhotoService.removePhoto(businessId);
         return ResponseEntity.noContent().build();
     }
