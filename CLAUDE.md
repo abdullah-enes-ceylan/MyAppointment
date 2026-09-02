@@ -125,6 +125,9 @@ Bu kararlar tartışılıp verildi; yeniden açmadan önce sor.
 | Migration'lar geriye uyumlu yazılmalı (expand-contract) | **(2026-09-01, Faz 3.8 planlaması — beta öncesi kesin kural.)** Rollback mekanizması (bkz. RUNBOOK.md) SADECE kod/image seviyesinde geri dönüş sağlıyor — Flyway migration'ları geriye ALINMIYOR (bu projede hiç yapılmadı, forward-only). Bu şu anlama geliyor: bir deploy şema değişikliği içeriyorsa ve o deploy'da BAŞKA bir şey bozulursa, image'ı eski SHA'ya döndürmek YETMEZ — eski kod, YENİ şemayla karşı karşıya kalır (olmayan bir kolonu okumaya çalışır, ya da yeni NOT NULL bir kolonu hiç doldurmaz). Canlı test edilip kanıtlandı: Postgres DDL'i transactional olduğu için başarısız bir migration şemayı YARIM bırakmıyor (`Changes successfully rolled back`), ama bu sadece "migration'ın kendisi" için geçerli — bir ÖNCEKİ migration başarıyla uygulanıp deploy edildikten SONRA kod'da rollback yapılırsa, o migration'ın sonucu (yeni kolon/tablo) geride kalır, eski kod bundan habersizdir. **Kural: her migration, bir önceki kod sürümüyle de çalışacak şekilde yazılır (expand-contract).** Pratikte: yeni bir kolon eklerken NOT NULL zorunlu kılınmaz (varsayılan değerle veya nullable eklenir); bir kolonu/tabloyu KALDIRMAK isteyen bir migration, önce onu kullanmayı bırakan bir kod deploy'undan SONRAKİ bir migration'da yapılır, aynı deploy'da değil. Bu, beta'da gerçek müşteri verisi işlenmeye başlamadan ÖNCE ekibin (yani gelecekteki AI oturumlarının da) içselleştirmesi gereken bir disiplin — "rollback var" güvencesi bu kural uygulanmadan yanlış bir güvencedir. |
 | `DatabaseSeeder` prod'da asla çalışmaz | **(2026-09-01, Faz 3.8 planlaması)** `@Profile("dev")` class-level anotasyonu ile sınırlı (bkz. `DatabaseSeeder.java` başındaki gerekçe yorumu) — Spring bu profil aktif değilse bean'i hiç OLUŞTURMUYOR, `CommandLineRunner.run()` çağrılmıyor bile. Canlı doğrulandı: `SPRING_PROFILES_ACTIVE=prod` ile tamamen taze bir stack açılıp doğrudan `psql` ile `users`/`businesses` tabloları sorgulandı — ikisi de 0 satır, loglarda seeder'a ait tek bir iz yok. Bu, API yanıtına değil doğrudan veritabanına bakan bir kanıt olduğu için "seeder çalışmadı ama başka bir yoldan veri girdi" ihtimalini de kapatıyor. |
 | Ham exception mesajı loglama | **(2026-08-31)** Bir `catch` bloğunda `ex.getMessage()` / `ex.getMostSpecificCause().getMessage()` gibi ÜÇÜNCÜ TARAF (DB sürücüsü, Jackson, vb.) ürettiği bir mesaj loglanacaksa, o mesajın PII (ör. e-posta) taşıyabileceği **her seferinde** değerlendirilmeli — bkz. `GlobalExceptionHandler`'daki iki call site (`DataIntegrityViolationException`, `HttpMessageNotReadableException`), ikisi de `PiiMasker.maskEmails()`'ten geçiriliyor çünkü `users.email` UNIQUE kısıtı ihlali veya Jackson'ın ayrıştıramadığı ham istek gövdesi, e-postayı düz metin olarak mesaja gömebiliyor. Genel bir "her logu regex'le tara" filtresi bilerek yok — sadece bilinen call site'lara elle uygulanıyor. Yeni bir yerde ham exception mesajı loglanacaksa `PiiMasker`'ın oraya da uygulanması gerekip gerekmediği değerlendirilmeli. **Önemli tuzak (canlı bulundu):** bizim kendi `catch` bloğumuzu maskelemek yetmeyebilir — kullandığımız framework'ün KENDİ dahili logger'ı, bizim hiç çağırmadığımız bir noktada aynı ham mesajı BAĞIMSIZ olarak zaten loglamış olabilir. Somut örnek: Hibernate'in `org.hibernate.orm.jdbc.error` logger'ı, `GlobalExceptionHandler` devreye girmeden ÖNCE, aynı Postgres exception'ının ham `Detail: Key (email)=(...)` satırını kendi başına basıyordu — `PiiMasker` oraya hiç ulaşamıyordu çünkü o log çağrısı bizim kodumuzda değil. Çözüm `application-prod.properties`'te `logging.level.org.hibernate.orm.jdbc.error=OFF` (sadece prod, dev/test'te gerçek PII yok). Yeni bir üçüncü taraf kütüphane eklenince aynı soru sorulmalı: bu kütüphanenin kendi dahili logger'ı, bizim hiç görmediğimiz ham veriyi loglar mı? |
+| Hesap silme eşikleri (Faz 3.9) | **(2026-09-02)** Üç ayrı, birbirine KARIŞTIRILMAMASI gereken süre: **gracePeriod** (30 gün, varsayılan) — kimlik anonimleştirmesine kadar, USER ve BUSINESS_OWNER PAYLAŞIYOR, bu süre boyunca hesapta GERÇEKTEN hiçbir şey değişmez (geri dönüş/ele geçirme kurtarma senaryosu için). **businessNoticePeriod** (72 saat) — SADECE BUSINESS_OWNER, talep ANINDA bu süre içindeki randevular hemen iptal + bildirim. **businessReversalWindow** (48 saat) — SADECE BUSINESS_OWNER, talep geri alınmazsa kalan TÜM randevular topluca iptal. `reversalWindow <= noticePeriod` matematiksel zorunluluk (`AccountDeletionProperties`'in `@PostConstruct`'ı doğruluyor) — aksi halde iki eşik arasına düşen bir randevu hiç yakalanamaz. Üçü de `application.properties`'te ayrı ayrı config, koda gömülü değil. |
+| Askıdaki işletme sahibi panelde ne yapabilir | **(2026-09-02)** Salt okunur + sadece "talebi iptal et" aktif. Okuma uçları (`OwnershipGuard.assertOwnsBusiness`/`assertOwnsServiceItem`/`assertOwnsStaff`) askıda olsa da geçer — sahip randevularını/inbox'ını/personelini görmeye devam eder. Mutasyon uçları (`assertOwnsActiveBusiness`/`assertOwnsActiveServiceItem`/`assertOwnsActiveStaff` + `AppointmentService.changeStatus`'ta APPROVE/REJECT/NO_SHOW engeli) askıdaysa 409. CANCEL bilerek istisna — hem müşteri kendi randevusunu her zaman iptal edebilmeli hem de silme akışının kendi otomatik iptalleri aynı yolu kullanıyor. |
+| Silme talebi anında JWT'ler geçersiz kılınmıyor | **(2026-09-02) Bilinçli kabul.** `deletionRequestedAt` dolduğunda (henüz `anonymizedAt` değil) mevcut token'lar çalışmaya devam eder — bu bir açık değil: talep zaten şifre istiyor (ele geçirilmiş şifresiz oturum senaryosu yok), gerçek sahip `enabled=true` olduğu sürece şifresiyle yeniden login olup iptal ucuna ulaşabilir (kurtarma buna bağımlı değil). Bu projede JWT tamamen stateless — şifre değişikliğinde bile "bu andan önceki token'lar geçersiz" mekanizması yok, SADECE silme talebi için eklemek tutarsız olurdu. Genel bir oturum sonlandırma ihtiyacı doğarsa (ör. "şüpheli giriş"), hem şifre değişikliğini hem silme talebini kapsayan ayrı bir görev olmalı. **AYRI ve GERÇEK bir bug olarak canlı bulunup düzeltildi:** anonimleştirme SONRASI (`anonymizedAt` dolu) eski bir token'la istek atılırsa, `JwtFilter`'ın `loadUserByUsername` çağrısı token'daki artık-var-olmayan eski email'i bulamayıp `UsernameNotFoundException` fırlatıyordu — bu, `ExceptionTranslationFilter`'a hiç ulaşmadan (zincirde ondan önce çalıştığı için) kontrolsüz bir 500'e düşüyordu. `JwtFilter` artık bunu yakalayıp kimliksiz devam ediyor, temiz 401 dönüyor (bkz. `JwtFilterAnonymizedUserTest`). |
 
 ---
 
@@ -195,13 +198,19 @@ düzeltmek, sonraki oturumu aynı yanlışa götürür.
 
 ## Mevcut Durum
 
-**Faz 0 ve Faz 1 tamamlandı, Faz 2 tamamlandı.** Yukarıda bir zamanlar listelenen 10 kritik
-açığın hepsi kapatıldı (DTO katmanı, `OwnershipGuard`, `GlobalExceptionHandler`, Bean
-Validation, Flyway, yarış koşulu için partial unique index, sırların git'ten çıkarılması).
-Şu an Faz 3 öncesi ek sertleştirme ve ürün olgunlaştırma yapılıyor.
+**Faz 0, 1, 2 tamamlandı. Faz 3 sürüyor: 3.1-3.7 tamamlandı, 3.8 (deploy) henüz
+BAŞLAMADI, 3.9 (KVKK) kısmen tamamlandı.** Güncel faz ilerleme tablosu için
+ROADMAP.md'nin sonundaki checklist tek otorite — burası sadece kısa bir özet, ayrıntı
+için oraya bak.
 
-**Migration seviyesi: V11.** Prod **henüz deploy edilmedi** (Dockerfile/compose yok), tek
-veritabanı yerel geliştirme ortamı — şema değişiklikleri hâlâ ucuz.
+**Migration seviyesi: V15.** Prod **henüz deploy edilmedi** — Dockerfile/compose ve
+`RUNBOOK.md` (Faz 3.7/3.8'de) hazırlandı, ama gerçek sunucuya ilk deploy (3.8a) daha
+yapılmadı. Tek veritabanı hâlâ yerel geliştirme ortamı.
+
+**Faz 3.9 (hesap silme akışı, KVKK unutulma hakkı) — backend tamamlandı ve test
+edildi, frontend ve hukuki metinler (aydınlatma/VERBİS/sözleşme) yapılmadı.** Detay:
+ROADMAP.md 3.9, karar tablosundaki "Hesap silme eşikleri" ve "Askıdaki işletme sahibi
+panelde ne yapabilir" satırları.
 
 ### Bu aşamada eklenenler (git geçmişinde detaylı gerekçeleriyle)
 
@@ -212,6 +221,11 @@ veritabanı yerel geliştirme ortamı — şema değişiklikleri hâlâ ucuz.
   `EXPIRED` durumu, `AppointmentLifecycleScheduler`, randevu ufku, açık talep sınırı
 - Güvenlik: hizmet uçlarında kiracılar arası ele geçirme açığı (canlı sömürüldü ve kapatıldı),
   personel uçlarına sahiplik, login hata yönetimi handler'a taşındı
+- Test altyapısı (Testcontainers Postgres), yetkilendirme entegrasyon testleri, API dokümantasyonu
+- Bildirim altyapısı (`NotificationPort`, kanal-bağımsız), rate limiting, loglama/izleme
+- İşletme kapak fotoğrafı yükleme (`BusinessPhotoService`, yerel disk depolama)
+- Konteynerleştirme (Dockerfile'lar, docker-compose, Caddy) — henüz deploy edilmedi
+- Hesap silme akışı (USER + BUSINESS_OWNER, backend) — bkz. yukarısı
 
 ### Bilinen açık işler
 
@@ -223,7 +237,8 @@ veritabanı yerel geliştirme ortamı — şema değişiklikleri hâlâ ucuz.
 | `/me/upcoming` ile profil "yaklaşan" sayısı tutarsız | `CANCELLED`/`NO_SHOW` sayıyor; ayrı görev olarak açıldı |
 | `favorites.created_at`'te `DEFAULT now()` | Kullanılmıyor ama şemada duruyor; ayrı küçük migration ile temizlenecek |
 | İl/ilçe ile manuel konum seçimi | Tasarım konuşuldu (`city`/`district` alanları), yazılmadı |
-| İşletme fotoğrafı | Altyapı yok; kartlarda kategori ikonlu stilize kapak var |
+| Hesap silme akışı — frontend | **Yapılmadı** — silme UI'ı (şifre onaylı), askıdaki hesap banner'ı, geçmiş randevuda askıdaki işletme adının link değil düz metin olması |
+| Faz 3.8 deploy (sunucu, DNS, ilk canlı deploy, yedekleme) | **Başlamadı** — plan/RUNBOOK.md hazır |
 
 ### Doğrulama beklentisi
 

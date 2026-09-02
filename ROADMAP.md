@@ -1160,7 +1160,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.7 Konteynerleştirme
 - [ ] 3.8a Sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama
 - [ ] 3.8b Yedekleme + restore provası + izleme (3.8a bitmeden başlanmaz)
-- [ ] 3.9 KVKK ve hukuki metinler
+- [ ] 3.9 KVKK ve hukuki metinler — hesap silme akışı backend'i tamamlandı ve test edildi (eaf1c86); frontend + aydınlatma/VERBİS/sözleşme metinleri kaldı
 - [ ] 3.10 E-posta doğrulama (3.4'e bağımlı, açık kayıt öncesi şart)
 - [ ] 3.11 Auth sertleştirme: httpOnly cookie + CSRF ⭐ (3.8'den sonra, beta onboarding'den önce)
 
