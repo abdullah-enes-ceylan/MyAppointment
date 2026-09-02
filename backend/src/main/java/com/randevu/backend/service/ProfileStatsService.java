@@ -8,7 +8,6 @@ import com.randevu.backend.repository.ReviewRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.time.Clock;
 
 // Profil ekranindaki ozet sayilari toplar. UserService'e DEGIL ayri bir
@@ -20,13 +19,6 @@ import java.time.Clock;
 // degismek zorunda kalirdi.
 @Service
 public class ProfileStatsService {
-
-    // "Yaklasan randevu" = tarihi gelecekte OLAN ve hala aktif olan.
-    // Iptal/ret edilmis bir randevu tarihi gelecekte olsa bile yaklasan
-    // sayilmaz -- AppointmentService'teki "engelleyici durumlar" listesiyle
-    // ayni mantik.
-    private static final List<AppointmentStatus> ACTIVE_STATUSES = List.of(
-            AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
 
     private final AppointmentRepository appointmentRepository;
     private final FavoriteRepository favoriteRepository;
@@ -49,7 +41,7 @@ public class ProfileStatsService {
                 appointmentRepository.countByCustomerId(userId),
                 appointmentRepository.countByCustomerIdAndStatus(userId, AppointmentStatus.COMPLETED),
                 appointmentRepository.countByCustomerIdAndAppointmentDateAfterAndStatusIn(
-                        userId, LocalDateTime.now(clock), ACTIVE_STATUSES),
+                        userId, LocalDateTime.now(clock), AppointmentStatus.ACTIVE_STATUSES),
                 favoriteRepository.countByUser_Id(userId),
                 reviewRepository.countByAppointment_Customer_Id(userId));
     }

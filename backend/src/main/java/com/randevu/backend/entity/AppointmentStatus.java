@@ -1,5 +1,7 @@
 package com.randevu.backend.entity;
 
+import java.util.List;
+
 public enum AppointmentStatus {
     PENDING, // Onay bekliyor
     APPROVED, // Onaylandı
@@ -13,5 +15,13 @@ public enum AppointmentStatus {
     // sadece görmemiş. Sadece zamanlanmış görev atar, elle geçilemez
     // (bkz. AppointmentService.changeStatus — hiçbir eylemin girdisi değil,
     // dolayısıyla terminal). Düşme anı: AppointmentExpiryPolicy.
-    EXPIRED
+    EXPIRED;
+
+    // "Yaklaşan/aktif" randevu = henüz sonuçlanmamış (PENDING/APPROVED).
+    // "Yaklaşan randevu" kavramını kullanan HER yer (profil özeti,
+    // müşterinin ve işletmenin yaklaşan randevu listesi) tek bu listeden
+    // okur — ayrı kopyalar aynı tutarsızlığı üçüncü bir çağrı noktasında
+    // geri getirir (bkz. ProfileStatsService, AppointmentService
+    // getUpcomingCustomerAppointments/getUpcomingBusinessAppointments).
+    public static final List<AppointmentStatus> ACTIVE_STATUSES = List.of(PENDING, APPROVED);
 }
