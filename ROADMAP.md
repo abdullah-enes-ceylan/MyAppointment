@@ -1040,6 +1040,238 @@ Deploy'dan (3.8) sonra, beta onboarding'den önce yapılacak tek yer burası.
 
 ---
 
+### 3.12 — Randevuya Katılım Oranı `[BE]` `[SEN]` — **ERTELENDİ**
+
+**(2026-09-03) Karar: ertelendi, iptal değil.** Gerekçe:
+- **Beta ölçeğinde anlamlı veri birikmez.** Eşik (sayıma dahil ≥5 kayıt) ve pencere (son 10
+  kayıt) tasarımı, düzenli randevu trafiği olan bir müşteri tabanı varsayıyor — 5-10 işletmelik
+  bir betada bir müşterinin 5+ `COMPLETED`/`NO_SHOW` randevuya ulaşması aylar sürer, özellik
+  neredeyse hiç kimse için görünür olmaz. Şimdi inşa etmek, kullanılmayacak bir yüzey için
+  bakım yükü demek.
+- **`NO_SHOW` fiilen işaretlenemiyor — bu, aşağıdaki Soru 2 analizinde bulunan gerçek bir
+  engel.** `completeElapsedAppointments` (5 dk'da bir) süresi geçen `APPROVED` randevuyu
+  otomatik `COMPLETED`'a çeviriyor; bu ANA VE `NO_SHOW` sadece `APPROVED`'dan geçerli
+  olduğu için, işletme sahibinin "gelmedi" işaretleyebileceği pencere fiilen hizmet süresi +
+  ~5 dakikaya sıkışıyor (bkz. altta). Özellik gerçek katılım verisine dayanıyor ama bugünkü
+  durum makinesi bu veriyi büyük ölçüde ÜRETEMİYOR bile — önce `COMPLETED → NO_SHOW` geçişinin
+  (işletmenin sonradan "aslında gelmemiş" diyebilmesi) eklenmesi gerekiyor, bu ayrı bir
+  durum-makinesi değişikliği.
+- **Talep sinyali yok.** Bu özellik gerçek işletme geri bildiriminden değil, ileriye dönük bir
+  varsayımdan doğdu. CLAUDE.md'nin ticari planı (5-10 işletmede saha geri bildirimiyle
+  olgunlaştırma) tam olarak bunun için var — işletmelerden "müşterinin geçmişini görebilsem"
+  gibi somut bir talep gelirse ele alınır.
+
+**Aşağıdaki analiz ve tasarım SİLİNMEDİ, olduğu gibi bırakıldı** — ne zaman gerçek bir talep
+gelirse sıfırdan başlamamak için. Ama şu an **aktif bir plan değil**, kod yazılmayacak.
+
+#### Soru 1 — Randevu statüleri
+
+`AppointmentStatus` enum'ının tamamı (7 değer):
+
+| Statü | Anlamı |
+|---|---|
+| `PENDING` | Onay bekliyor |
+| `APPROVED` | Onaylandı |
+| `REJECTED` | İşletme reddetti |
+| `CANCELLED` | Müşteri veya işletme iptal etti |
+| `COMPLETED` | Randevu gerçekleşti ve bitti |
+| `NO_SHOW` | Onaylandı ama müşteri gelmedi — işletme sahibi manuel işaretler |
+| `EXPIRED` | İşletme talebi hiç cevaplamadı, süre doldu |
+
+**"İşletme yanıtsız bırakırsa randevu saati geçince ne olur" — cevap: `EXPIRED`, `PENDING`
+kalmaz.** `AppointmentExpiryPolicy.expiresAt` formülü `randevu saati − min(sabitPay, pencere
+× oran)` — çıkarılan pay her zaman pozitif (varsayılan 1 saat / %10), yani düşme anı
+**HER ZAMAN** randevu saatinden **kesinlikle önce** gelir (`AppointmentExpiryPolicy.java:50-59`
+kanıtı). `AppointmentLifecycleScheduler.expireStaleRequests` bunu 5 dakikada bir tarıyor —
+yani normal çalışmada (scheduler ayakta olduğu sürece) bir randevu, randevu saatine
+ulaşmadan önce zaten `EXPIRED`'a düşmüş olur. "İşletmenin yanıtsız bıraktığı randevu" ile
+`EXPIRED` statüsü birebir aynı şey.
+
+**Sayıma göre statü ayrımı:**
+- **Dahil:** `COMPLETED`, `NO_SHOW` (kesinleşen kural zaten bunu söylüyor)
+- **Hariç:** `PENDING`, `APPROVED` (henüz sonuçlanmamış — terminal değil), `REJECTED` (işletme
+  reddetti — müşterinin suçu değil), `CANCELLED` (iptal — müşterinin ya da işletmenin suçu
+  değil), `EXPIRED` (işletme yanıtsız bıraktı — tam olarak "işletmenin yanıtsız bıraktığı
+  randevu" ibaresinin karşılığı)
+
+#### Soru 2 — `NO_SHOW` kim, ne zaman işaretliyor, zaman sınırı var mı
+
+**Bugün:** `AppointmentService.changeStatus`'ta `NO_SHOW` case'i SADECE işletme sahibi
+tarafından (`requireOwner`) ve SADECE `APPROVED` statüsünden (`requireCurrentStatus`)
+tetiklenebiliyor. **Zaman sınırı YOK** — kod, randevu saatinin üzerinden ne kadar geçtiğine
+hiç bakmıyor.
+
+**Ama bu göründüğü kadar açık değil — `completeElapsedAppointments` ile etkileşimi var.**
+Aynı scheduler'ın diğer görevi (`AppointmentLifecycleScheduler.completeElapsedAppointments`,
+5 dakikada bir) `appointmentDate + hizmet süresi < şu an` olan HER `APPROVED` randevuyu
+otomatik `COMPLETED`'a çeviriyor. `NO_SHOW` sadece `APPROVED`'dan geçerli olduğu için, bu
+otomatik geçiş gerçekleştiği ANDA `NO_SHOW` işaretleme imkanı da kapanıyor (`requireCurrentStatus`
+"Sadece onaylanmış randevular 'gelmedi' olarak işaretlenebilir" hatası verir). Sonuç: **fiilen
+var olan ama kod içinde AÇIKÇA tanımlı olmayan bir pencere** — `[randevu saati, randevu saati +
+hizmet süresi + ~5 dk scheduler gecikmesi]`. Bu pencere hizmetin süresine göre DEĞİŞKEN (30
+dakikalık bir saç kesimi için ~35 dk, yarım günlük bir spa paketi için saatler). "Aylar sonra
+`NO_SHOW` işaretlenebiliyor mu" sorusunun cevabı: **hayır, ama sebebi kasıtlı bir tasarım değil,
+tesadüfen var olan bu etkileşim** — scheduler herhangi bir sebeple (deploy, çökme) birkaç saat
+duraksarsa pencere de o kadar uzar.
+
+**Öneri (aşağıda "Önerilen ek" bölümünde detaylı):** açık, yapılandırılabilir bir
+`no-show-marking-window` eklenmeli — hem netlik hem de scheduler'ın gecikmesine bağımlı
+olmaması için.
+
+#### Soru 3 — Sorgu maliyeti
+
+Oran, randevu detayı her açıldığında hesaplanacak. Gereken sorgu: *"bu müşterinin son 10
+sayıma-dahil (COMPLETED/NO_SHOW) randevusu"* — `LIMIT 10` + `ORDER BY appointment_date DESC`
++ `WHERE customer_id = ? AND status IN ('COMPLETED','NO_SHOW')`.
+
+**Mevcut index durumu (tüm migration'lar tarandı):** `appointments` tablosunda
+`idx_appointments_business_date (business_id, appointment_date)` ve
+`idx_appointments_staff_date (staff_id, appointment_date)` var — **`customer_id` üzerinde
+HİÇBİR index yok.** `AppointmentRepository`'deki `findByCustomerId`/`countByCustomerIdAndStatus`/
+`countByCustomerIdAndAppointmentDateAfterAndStatusIn` gibi TÜM customer_id sorguları bugün
+zaten sequential scan yapıyor — bu yeni özelliğin ürettiği bir sorun değil, önceden var olan
+(beta ölçeğinde şu ana kadar sorun çıkarmamış) bir boşluk, bu özellik sadece aynı deseni bir
+kez daha kullanıyor.
+
+**Ek index gerekir mi — evet, ve ÖZELLİKLE bu sorgu için ucuz bir tanesi öneriliyor:**
+```sql
+CREATE INDEX idx_appointments_customer_counted ON appointments (customer_id, appointment_date DESC)
+    WHERE status IN ('COMPLETED', 'NO_SHOW');
+```
+Bu **partial** index — `WHERE` koşulu sorgunun filtresiyle BİREBİR aynı, `ORDER BY` da index
+sütun sırasıyla aynı yönde — Postgres bu sorguyu ekstra bir sort adımına gerek kalmadan tek
+bir index scan ile `LIMIT 10`'da durarak cevaplayabilir. Aynı desen zaten
+`ux_appointments_active_slot_business`/`_staff`'ta (V1/V5) kullanılıyor. Genel
+`customer_id` index eksikliğini bu PR'da GENİŞ ÇAPLI kapatmıyoruz (kapsam dışı, ayrı bir
+görev) — sadece bu yeni, sık çalışacak sorgu için hedefli bir index ekliyoruz.
+
+---
+
+#### Kesinleşen kurallar (verilen haliyle)
+
+- **Hesaplama:** Sadece `COMPLETED` ve `NO_SHOW` sayılır. `CANCELLED`/`REJECTED`/`EXPIRED`
+  ne paya ne paydaya girer.
+- **Pencere:** Sayıma dahil olan SON 10 KAYIT (10 randevu değil, 10 "sayılan" kayıt).
+- **Eşik:** Sayıma dahil kayıt < 5 ise oran hiçbir yerde hesaplanmaz/gösterilmez.
+- **Görünürlük:** Kullanıcı kendi profilinde kart olarak (+"son X randevunuzun Y tanesine
+  gitmediniz" satırı); işletme SADECE kendisine randevu almış müşterinin oranını, randevu
+  ayrıntısı ekranında görür. Başka kullanıcının oranına erişim YOK.
+- **Otomatik karar YOK:** Sistem orana göre reddetmez/engellemez/uyarmaz — KVKK m.11
+  "münhasıran otomatik sistemle karar" olmaması gerekliliği (bkz. aydınlatma metni taslağının
+  "Randevuya katılım oranı" paragrafı, `AYDINLATMA_METNI_TASLAGI.md`).
+- **Anonimleştirme:** Oran cache'lenmez, her seferinde randevu kayıtlarından anlık hesaplanır.
+
+#### Mimari — kod yazılmadı, sadece tasarım
+
+**Yeni migration `V16__appointment_attendance_rate_index.sql`:** yukarıdaki partial index.
+Başka şema değişikliği yok — oran cache'lenmediği için `users`/`appointments`'a yeni kolon
+gerekmiyor.
+
+**Yeni `AttendanceRateProperties`** (`app.attendance-rate.window-size` varsayılan 10,
+`app.attendance-rate.minimum-counted-threshold` varsayılan 5) — **bu benim eklediğim bir
+öneri, sen sadece NO_SHOW penceresi için config istedin ama CLAUDE.md'nin "İş kuralı
+sayıları asla koda gömülmez" kararı genel, sadece o iki sayı için de geçerli olmalı diye
+düşünüyorum; onayına bağlı, istersen sabit `private static final int` olarak da kalabilir.**
+`AppointmentPolicyProperties` ile aynı `@PostConstruct` doğrulama deseni (geçersiz değerde
+uyarı + güvenli varsayılan).
+
+**Yeni `AttendanceRateService`:**
+- `record AttendanceRate(int missedCount, int totalCounted)` — `ratio()` yardımcı metoduyla.
+- `Optional<AttendanceRate> calculateFor(Long customerId)`:
+  `appointmentRepository.findTop10ByCustomerIdAndStatusInOrderByAppointmentDateDesc(customerId,
+  List.of(COMPLETED, NO_SHOW))` (Spring Data'nın `findTopN...OrderBy...` türetilmiş sorgu
+  deseni, native SQL gerekmiyor) → `totalCounted = liste.size()`, `< 5` ise `Optional.empty()`,
+  değilse `missedCount` = listedeki `NO_SHOW` sayısı.
+- `ProfileStatsService`'teki AYNI desen: durumsuz, `Clock` gerekmiyor (hesap "şimdi"ye değil
+  geçmiş kayıtlara bakıyor).
+
+**Anonimleştirilmiş kullanıcı — kritik kontrol NEREDE olacak.** Randevu satırları
+anonimleştirmede SİLİNMİYOR (bkz. Faz 3.9), yani bir işletmenin geçmiş randevu listesinde
+anonimleşmiş bir müşterinin randevusu hâlâ görünür — `AttendanceRateService.calculateFor`'un
+KENDİSİ bunu bilemez (sadece `customer_id` alıyor). Kontrol, çağıran tarafta:
+`AppointmentController`'da oranı hesaplamadan ÖNCE `appointment.getCustomer().getAnonymizedAt()
+== null` kontrolü yapılacak — zaten elde olan `User` nesnesi üzerinden, ek sorgu gerekmiyor.
+Kullanıcının KENDİ profilindeki görünürlük ise yapısal olarak zaten kapalı: anonimleştirme
+sonrası `enabled=false` olduğu için `/api/users/me/stats`'a hiç erişilemiyor (bkz. Faz 3.9,
+`CustomerUserDetailsService`).
+
+**`ProfileStatsResponse`/`ProfileStatsService` genişletilecek** (yeni uç DEĞİL, mevcut
+`GET /api/users/me/stats`'a yeni alan): `AttendanceRateResponse attendanceRate` (nullable —
+eşik altındaysa `null`). Yeni DTO: `record AttendanceRateResponse(int missedCount, int
+totalCounted)` — oran hesabı (yüzde, cümle metni) frontend'de değil sunucuda BELİRLENMİŞ iki
+sayıdan türetilir, `expiresAt` ile aynı "kural tek yerde" felsefesi.
+
+**`AppointmentResponse`'a yeni nullable alan: `AttendanceRateResponse customerAttendanceRate`.**
+KRİTİK tasarım kararı — bu alan sadece belirli controller metotlarında doldurulacak, yeni bir
+"kullanıcı id'sine göre oran getir" ucu KESİNLİKLE açılmayacak:
+- `AppointmentMapper.toResponse(...)`'a `hasReview`/`expiresAt` ile AYNI desende yeni bir
+  parametre eklenir (mapper durumsuz kalır, `AttendanceRateService`'i kendi içine enjekte
+  etmez).
+- `AppointmentController`'da YENİ bir `private AppointmentResponse toBusinessResponse(Appointment
+  appointment)` metodu eklenir (mevcut `toResponse(Appointment)`'a DOKUNULMAZ) — SADECE
+  `getBusinessAppointments`, `getPendingAppointments`, `getUpcomingBusinessAppointments`
+  (üçü de zaten `OwnershipGuard.assertOwnsBusiness` ile korunan, işletme sahibine özel
+  uçlar) bunu kullanır. `createAppointment`/`updateStatus`'un kullandığı mevcut `toResponse`
+  DEĞİŞMEZ — müşteri kendi randevusunu oluştururken/iptal ederken orana hiç rastlamaz (zaten
+  kendi oranını profilinden görüyor, burada tekrar göstermeye gerek yok).
+- Bu yapı sayesinde "başka kullanıcının oranına hiçbir uçtan erişilemesin" kuralı
+  MİMARİ OLARAK garanti ediliyor: oranın göründüğü TEK yer, işletmenin zaten sahiplik
+  kontrolünden geçmiş KENDİ randevu listesi — ayrı bir sorgulanabilir yüzey hiç yok.
+
+#### Önerilen ek — `NO_SHOW` işaretleme zaman sınırı
+
+Yeni config: **`app.appointment.no-show-marking-window`** (Duration, örnek varsayılan
+**24 saat**) — `AppointmentService.changeStatus`'un `NO_SHOW` case'ine eklenecek kontrol:
+`now.isAfter(appointment.getAppointmentDate().plus(noShowMarkingWindow))` ise
+`BusinessRuleException` ("Bu randevu için 'gelmedi' işaretleme süresi doldu").
+
+**Bunun kendi başına YETMEYECEĞİ, ayrıca karar gerektiren bir nokta:** Soru 2'de açıklanan
+`completeElapsedAppointments` etkileşimi yüzünden, bu yeni pencere kısa süreli hizmetler için
+(çoğu randevu) **anlamsız kalır** — 30 dakikalık bir hizmet, 24 saatlik pencere dolmadan ÇOK
+ÖNCE zaten otomatik `COMPLETED`'a düşer ve `NO_SHOW` artık işaretlenemez hale gelir. Gerçekten
+24 saatlik (ya da seçilecek her ne kadarsa) bir pencere sağlamak için
+`completeElapsedAppointments`'ın kendisinin de değişmesi gerekir: `APPROVED → COMPLETED`
+geçişi artık `appointmentDate + hizmet süresi < now` yerine `appointmentDate +
+max(hizmet süresi, noShowMarkingWindow) < now` koşuluna bağlanmalı. **Bu, var olan ve
+yayında çalışan bir scheduler'ın davranışını değiştirmek — ayrı bir onay gerektiriyor,
+bu planın kapsamına sessizce dahil edilmedi.** Sen bu değişimi istiyor musun, yoksa
+"gelmedi" penceresi bugünkü gibi hizmet süresine bağımlı, sadece ÜST SINIRI 24 saatle
+mi kesilsin (yani hangisi önce gelirse) — karar senin.
+
+#### Testler (yazılacak, henüz yazılmadı)
+
+- Eşik altında (4 sayıma-dahil kayıt) → `attendanceRate` her iki uçta da `null`; 5. kayıtla
+  birlikte görünür.
+- `CANCELLED`/`REJECTED`/`EXPIRED` randevular ne `missedCount`'a ne `totalCounted`'a giriyor
+  (11 randevu oluşturup 6'sını bu üç statüye çekip pencerenin hâlâ doğru 5 kayıttan
+  oluştuğunu doğrulayan bir test).
+- Sayıma-dahil kayıt 10'u aşınca en eskiler pencereden düşüyor (11. `COMPLETED`/`NO_SHOW`
+  eklenince 1. artık sayılmıyor).
+- İşletme, kendisine randevu almamış bir kullanıcının oranını HİÇBİR uçtan göremiyor (yeni
+  bir "id ile oran getir" ucu YOK zaten — bu, "böyle bir uç yok" testiyle değil, mevcut
+  `AppointmentResponse`'un sadece kendi randevu listesinde dolduğunu doğrulayan testle
+  kanıtlanacak).
+- Anonimleştirilmiş kullanıcının oranı hiçbir yerde görünmüyor: (a) işletme tarafında
+  `customerAttendanceRate` `null` dönüyor, (b) kullanıcının kendi `/me/stats`'ı zaten
+  `enabled=false` yüzünden erişilemez durumda (Faz 3.9 testleriyle zaten kanıtlı, burada
+  tekrar kanıtlanmayacak, sadece (a) yeni test).
+- (Zaman sınırı önerisi onaylanırsa) pencere dolmadan önce `NO_SHOW` işaretlenebiliyor,
+  dolduktan sonra `BusinessRuleException`.
+
+#### Frontend (unutulmadı — backend onaylanınca, ayrı adım)
+
+- Profil ekranı: yeni bir kart, "`X` randevunuzun `Y` tanesine gitmediniz" (eşik altındaysa
+  kart hiç render edilmez — `attendanceRate == null` kontrolü yeterli, ayrı bir "gizli" state
+  gerekmiyor).
+- İşletme paneli — randevu ayrıntısı/inbox satırı: `customerAttendanceRate` doluysa küçük bir
+  rozet/metin ("son `X` randevunun `Y`'sine gelmemiş"), boşsa hiçbir şey gösterilmez (yeni
+  müşteri ya da eşik altı — ikisi de aynı görünür, ayrım yapmaya gerek yok, zaten sistem
+  karar vermiyor).
+- Rozet salt bilgi amaçlı: yanına "reddet" kısayolu, renk kodlu uyarı eşiği gibi hiçbir UI
+  öğesi EKLENMEYECEK (kesinleşen "sistem karar vermez" kuralının frontend karşılığı).
+
+---
+
 # DEPLOYMENT — Öğrenci Bütçesiyle Gerçekçi Plan
 
 ## Önerilen kurulum (~5-6 €/ay)
@@ -1163,6 +1395,8 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [ ] 3.9 KVKK ve hukuki metinler — hesap silme akışı backend'i tamamlandı ve test edildi (eaf1c86); frontend + aydınlatma/VERBİS/sözleşme metinleri kaldı
 - [ ] 3.10 E-posta doğrulama (3.4'e bağımlı, açık kayıt öncesi şart)
 - [ ] 3.11 Auth sertleştirme: httpOnly cookie + CSRF ⭐ (3.8'den sonra, beta onboarding'den önce)
+- [ ] 3.12 Randevuya katılım oranı — **ERTELENDİ** (beta ölçeğinde veri birikmez + `NO_SHOW`
+      fiilen işaretlenemiyor, bkz. gerekçe); analiz/plan saklandı, kod yazılmadı
 
 ---
 
