@@ -31,7 +31,7 @@ interface ToastState {
 // Bekleyen randevu talepleri — eskiden PendingAppointments.jsx sayfasıydı,
 // businessId sabit kodluydu (=1). Artık BusinessPanelPage'den seçili
 // işletmenin id'sini prop olarak alıyor.
-export default function InboxTab({ businessId }: { businessId: number | null }) {
+export default function InboxTab({ businessId, suspended = false }: { businessId: number | null; suspended?: boolean }) {
   const [appointments, setAppointments] = useState<AppointmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -198,14 +198,14 @@ export default function InboxTab({ businessId }: { businessId: number | null }) 
                 <div className="flex gap-3 pt-3 border-t border-white/5">
                   <button
                     onClick={() => handleAction(apt.id, "approve")}
-                    disabled={actionLoading === apt.id}
+                    disabled={actionLoading === apt.id || suspended}
                     className="flex-1 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                   >
                     {actionLoading === apt.id ? "İşleniyor..." : "✅ Onayla"}
                   </button>
                   <button
                     onClick={() => handleAction(apt.id, "reject")}
-                    disabled={actionLoading === apt.id}
+                    disabled={actionLoading === apt.id || suspended}
                     className="flex-1 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-rose-700 to-red-700 hover:from-rose-600 hover:to-red-600 rounded-xl shadow-lg shadow-rose-500/20 hover:shadow-rose-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                   >
                     {actionLoading === apt.id ? "İşleniyor..." : "❌ Reddet"}

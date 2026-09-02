@@ -26,7 +26,7 @@ interface ToastState {
 // ham ServiceItem entity'si bekliyor (Faz 1.5 sadece Business için DTO
 // getirdi) — bu yüzden gönderilen alanlar entity'nin setter'larıyla
 // birebir eşleşiyor: name, description, price, durationInMinutes.
-export default function ServicesTab({ businessId }: { businessId: number | null }) {
+export default function ServicesTab({ businessId, suspended = false }: { businessId: number | null; suspended?: boolean }) {
   const [services, setServices] = useState<ServiceItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -155,8 +155,9 @@ export default function ServicesTab({ businessId }: { businessId: number | null 
 
       {!loading && !error && (
         <div className="space-y-4">
-          {/* Yeni hizmet ekle */}
-          {!showAddForm ? (
+          {/* Yeni hizmet ekle -- askidaysa buton hic gorunmuyor (bkz.
+              BusinessPanelPage'deki salt-okunur banner). */}
+          {suspended ? null : !showAddForm ? (
             <button
               onClick={() => setShowAddForm(true)}
               className="w-full py-3 text-sm font-medium text-emerald-400 border border-dashed border-emerald-500/30 rounded-xl hover:bg-emerald-500/5 hover:border-emerald-500/50 transition-all cursor-pointer"
@@ -297,21 +298,23 @@ export default function ServicesTab({ businessId }: { businessId: number | null 
                         <span>⏱ {service.durationInMinutes} dk</span>
                       </div>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        onClick={() => startEdit(service)}
-                        className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-all cursor-pointer"
-                      >
-                        Düzenle
-                      </button>
-                      <button
-                        onClick={() => handleDelete(service.id)}
-                        disabled={deletingId === service.id}
-                        className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
-                      >
-                        {deletingId === service.id ? "Siliniyor..." : "Sil"}
-                      </button>
-                    </div>
+                    {!suspended && (
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => startEdit(service)}
+                          className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-all cursor-pointer"
+                        >
+                          Düzenle
+                        </button>
+                        <button
+                          onClick={() => handleDelete(service.id)}
+                          disabled={deletingId === service.id}
+                          className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {deletingId === service.id ? "Siliniyor..." : "Sil"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

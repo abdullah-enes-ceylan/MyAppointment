@@ -19,7 +19,7 @@ interface ToastState {
 // tablosu, 2026-08-23) — bu ekran SADECE işletme sahibi için, kimin hangi
 // hizmeti verdiğini yönetmek amacıyla. Randevu ataması backend'de görünmez
 // şekilde otomatik yapılıyor (Faz 2.9).
-export default function StaffTab({ businessId }: { businessId: number | null }) {
+export default function StaffTab({ businessId, suspended = false }: { businessId: number | null; suspended?: boolean }) {
   const [staff, setStaff] = useState<StaffResponse[]>([]);
   const [services, setServices] = useState<ServiceItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -173,7 +173,7 @@ export default function StaffTab({ businessId }: { businessId: number | null }) 
 
       {!loading && !error && (
         <div className="space-y-4">
-          {!showAddForm ? (
+          {suspended ? null : !showAddForm ? (
             <button
               onClick={() => setShowAddForm(true)}
               className="w-full py-3 text-sm font-medium text-emerald-400 border border-dashed border-emerald-500/30 rounded-xl hover:bg-emerald-500/5 hover:border-emerald-500/50 transition-all cursor-pointer"
@@ -285,21 +285,23 @@ export default function StaffTab({ businessId }: { businessId: number | null }) 
                         )}
                       </div>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        onClick={() => startEdit(member)}
-                        className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-all cursor-pointer"
-                      >
-                        Düzenle
-                      </button>
-                      <button
-                        onClick={() => handleDelete(member.id)}
-                        disabled={deletingId === member.id}
-                        className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
-                      >
-                        {deletingId === member.id ? "Siliniyor..." : "Sil"}
-                      </button>
-                    </div>
+                    {!suspended && (
+                      <div className="flex gap-2 shrink-0">
+                        <button
+                          onClick={() => startEdit(member)}
+                          className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white border border-white/10 hover:border-white/20 rounded-lg transition-all cursor-pointer"
+                        >
+                          Düzenle
+                        </button>
+                        <button
+                          onClick={() => handleDelete(member.id)}
+                          disabled={deletingId === member.id}
+                          className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {deletingId === member.id ? "Siliniyor..." : "Sil"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -74,9 +74,31 @@ public class BusinessController {
     // /my gibi başka literal path'lerle asla çakışmıyor.
     // Herkese açık: müsaitlik saatlerinde olduğu gibi, randevu almadan
     // önce müşterinin işletme detayını görebilmesi gerekiyor.
+    //
+    // (Faz 3.9) Askıdaki bir işletmede bu uç PUBLIC ziyaretçiye 404 döner,
+    // ama SAHİBİNE değil -- canlı testte bulunan gerçek bir regresyon:
+    // InfoTab/LocationTab (panel) da bu AYNI ucu kullanıyor, "askıdaki
+    // işletme sahibi kendi verisini görmeye devam etmeli" ilkesi ihlal
+    // ediliyordu (sahip kendi panelinde "Yükleniyor..."da sonsuza takılıp
+    // kalıyordu, 404 sessizce hiçbir şey göstermiyordu). authentication
+    // BİLEREK nullable/anonim olabilir (uç permitAll) -- sadece GERÇEKTEN
+    // giriş yapmış VE bu işletmenin sahibi olan biri suspended kontrolünü
+    // atlıyor, herkes için davranış aynı kalıyor.
     @GetMapping("/{id:\\d+}")
-    public BusinessDetailResponse getBusinessById(@PathVariable Long id) {
-        return toDetailResponseWithRating(businessService.getBusinessById(id));
+    public BusinessDetailResponse getBusinessById(@PathVariable Long id, Authentication authentication) {
+        return toDetailResponseWithRating(businessService.getBusinessById(id, resolveViewerIdOrNull(authentication)));
+    }
+
+    private Long resolveViewerIdOrNull(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || authentication instanceof org.springframework.security.authentication.AnonymousAuthenticationToken) {
+            return null;
+        }
+        try {
+            return currentUserService.getCurrentUser(authentication).getId();
+        } catch (com.randevu.backend.exception.ResourceNotFoundException e) {
+            return null;
+        }
     }
 
     // YENİ: kendi işletmelerim. Eskiden /owner/{ownerId} idi — path'teki

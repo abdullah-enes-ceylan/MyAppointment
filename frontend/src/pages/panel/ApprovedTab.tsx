@@ -22,9 +22,10 @@ interface AppointmentCardProps {
   apt: AppointmentResponse;
   onNoShow: (appointmentId: number) => void;
   actionLoading: number | null;
+  suspended: boolean;
 }
 
-function AppointmentCard({ apt, onNoShow, actionLoading }: AppointmentCardProps) {
+function AppointmentCard({ apt, onNoShow, actionLoading, suspended }: AppointmentCardProps) {
   const [confirming, setConfirming] = useState(false);
   const isPast = new Date(apt.appointmentDate) < new Date();
 
@@ -66,7 +67,7 @@ function AppointmentCard({ apt, onNoShow, actionLoading }: AppointmentCardProps)
         </div>
 
         <div className="pt-3 border-t border-white/5">
-          {!confirming ? (
+          {suspended ? null : !confirming ? (
             <button
               onClick={() => setConfirming(true)}
               className="px-4 py-2 text-sm font-semibold text-orange-400 hover:text-white bg-orange-500/10 hover:bg-orange-600 border border-orange-500/20 hover:border-orange-600 rounded-xl transition-all duration-300 cursor-pointer"
@@ -111,7 +112,7 @@ interface ToastState {
 // isaretlemesi tam olarak randevu SAATI GECTIKTEN SONRA yapilir, o yuzden
 // bilerek tum randevulari donen /business/{id} kullanilip client'ta
 // APPROVED'a filtreleniyor.
-export default function ApprovedTab({ businessId }: { businessId: number | null }) {
+export default function ApprovedTab({ businessId, suspended = false }: { businessId: number | null; suspended?: boolean }) {
   const [appointments, setAppointments] = useState<AppointmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -193,7 +194,7 @@ export default function ApprovedTab({ businessId }: { businessId: number | null 
       {!loading && !error && appointments.length > 0 && (
         <div className="space-y-4">
           {appointments.map((apt) => (
-            <AppointmentCard key={apt.id} apt={apt} onNoShow={handleNoShow} actionLoading={actionLoading} />
+            <AppointmentCard key={apt.id} apt={apt} onNoShow={handleNoShow} actionLoading={actionLoading} suspended={suspended} />
           ))}
         </div>
       )}

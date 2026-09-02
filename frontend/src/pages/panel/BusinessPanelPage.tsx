@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import api from "../../api/axios";
 import InboxTab from "./InboxTab";
 import ApprovedTab from "./ApprovedTab";
@@ -92,6 +93,8 @@ export default function BusinessPanelPage() {
     );
   }
 
+  const selectedBusiness = businesses.find((b) => b.id === selectedBusinessId);
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
       {/* Header */}
@@ -127,6 +130,25 @@ export default function BusinessPanelPage() {
         <p className="text-slate-400 text-sm mb-6">{businesses[0].name}</p>
       )}
 
+      {/* Faz 3.9: askıdaki işletme salt-okunur banner'ı. Okuma sekmeleri
+          (İstek Kutusu/Onaylananlar/Personel-Hizmet listeleri) hâlâ çalışır
+          — sadece değiştiren uçlar backend'de 409 döner (bkz.
+          OwnershipGuard.assertOwnsActiveBusiness). Banner bunu ÖNCEDEN
+          söylüyor, form gönderilirse zaten backend'in mesajı toast'ta çıkar. */}
+      {selectedBusiness?.suspended && (
+        <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-2xl px-5 py-4">
+          <p className="text-sm font-semibold text-red-400">Bu işletme hesap silme sürecinde</p>
+          <p className="text-sm text-red-300/90 mt-0.5">
+            Randevularınızı ve verilerinizi görüntülemeye devam edebilirsiniz, ama hizmet/personel/çalışma saati
+            gibi bilgileri değiştiremezsiniz. Devam etmek için{" "}
+            <Link to="/profile" className="underline hover:text-white">
+              profil sayfanızdan
+            </Link>{" "}
+            silme talebinizi iptal edin.
+          </p>
+        </div>
+      )}
+
       {/* Sekmeler */}
       <div className="flex gap-2 mb-6 border-b border-white/10 overflow-x-auto">
         {TABS.map((tab) => (
@@ -145,13 +167,13 @@ export default function BusinessPanelPage() {
       </div>
 
       {/* Sekme İçeriği */}
-      {activeTab === "inbox" && <InboxTab businessId={selectedBusinessId} />}
-      {activeTab === "approved" && <ApprovedTab businessId={selectedBusinessId} />}
-      {activeTab === "services" && <ServicesTab businessId={selectedBusinessId} />}
-      {activeTab === "staff" && <StaffTab businessId={selectedBusinessId} />}
-      {activeTab === "hours" && <WorkingHoursTab businessId={selectedBusinessId} />}
-      {activeTab === "location" && <LocationTab businessId={selectedBusinessId} />}
-      {activeTab === "info" && <InfoTab businessId={selectedBusinessId} />}
+      {activeTab === "inbox" && <InboxTab businessId={selectedBusinessId} suspended={!!selectedBusiness?.suspended} />}
+      {activeTab === "approved" && <ApprovedTab businessId={selectedBusinessId} suspended={!!selectedBusiness?.suspended} />}
+      {activeTab === "services" && <ServicesTab businessId={selectedBusinessId} suspended={!!selectedBusiness?.suspended} />}
+      {activeTab === "staff" && <StaffTab businessId={selectedBusinessId} suspended={!!selectedBusiness?.suspended} />}
+      {activeTab === "hours" && <WorkingHoursTab businessId={selectedBusinessId} suspended={!!selectedBusiness?.suspended} />}
+      {activeTab === "location" && <LocationTab businessId={selectedBusinessId} suspended={!!selectedBusiness?.suspended} />}
+      {activeTab === "info" && <InfoTab businessId={selectedBusinessId} suspended={!!selectedBusiness?.suspended} />}
     </div>
   );
 }

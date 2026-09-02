@@ -1,10 +1,34 @@
 import { useState, useEffect, type ChangeEvent, type FormEvent, type InputHTMLAttributes, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import api from "../api/axios";
-import { getValidationErrors } from "../api/errors";
+import { getErrorMessage, getValidationErrors } from "../api/errors";
 import Toast from "../components/Toast";
 import { useAuth } from "../context/AuthContext";
-import type { ChangePasswordRequest, ProfileStatsResponse, Role, UpdateProfileRequest, UserResponse } from "../types/api";
+import type {
+  ChangePasswordRequest,
+  DeletionImpactResponse,
+  ProfileStatsResponse,
+  Role,
+  UpdateProfileRequest,
+  UserResponse,
+} from "../types/api";
+
+// MyAppointmentsPage'deki formatDate ile ayni kalip -- ayri bir shared util
+// dosyasi yok, her sayfa kendi kucuk bicimlendiricisini tasiyor (bu proje
+// genelinde henuz kurulmus bir "utils/date.ts" yok).
+function formatDateTime(dateStr: string) {
+  const date = new Date(dateStr);
+  const months = [
+    "Oca", "Şub", "Mar", "Nis", "May", "Haz",
+    "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara",
+  ];
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = months[date.getMonth()];
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${day} ${month} ${year}, ${hours}:${minutes}`;
+}
 
 const ROLE_LABELS: Record<Role, string> = {
   USER: "Müşteri",
@@ -81,19 +105,36 @@ export default function ProfilePage() {
   const [pwErrors, setPwErrors] = useState<Record<string, string>>({});
   const [pwSaving, setPwSaving] = useState(false);
 
-  useEffect(() => {
-    async function fetchProfile() {
-      try {
-        const res = await api.get<UserResponse>("/api/users/me");
-        setProfile(res.data);
-        setInfoForm({ name: res.data.name, surName: res.data.surName, phone: res.data.phone });
-      } catch {
-        setToast({ message: "Profil bilgileri yüklenemedi.", type: "error" });
-      } finally {
-        setLoading(false);
-      }
+  // Faz 3.9: hesap silme akışı. deleteExpanded, MyAppointmentsPage'deki
+  // "confirming" ile AYNI iki-adımlı deseni izliyor -- ilk tıklama sadece
+  // formu açar, gerçek istek AYRI bir buton ve zorunlu şifre gerektirir.
+  const [deleteExpanded, setDeleteExpanded] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [cancelDeletionLoading, setCancelDeletionLoading] = useState(false);
+  const [deletionImpact, setDeletionImpact] = useState<DeletionImpactResponse | null>(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+
+  // handlePasswordSubmit/handleDeleteAccount/handleCancelDeletion'dan sonra
+  // profili YENİDEN çekmek için ayrı bir fonksiyon -- DELETE ve
+  // cancel-deletion uçları 204 dönüyor, güncel deletionRequestedAt/deadline
+  // değerlerini görmek için tek yol profili tekrar istemek.
+  async function fetchProfile() {
+    try {
+      const res = await api.get<UserResponse>("/api/users/me");
+      setProfile(res.data);
+      setInfoForm({ name: res.data.name, surName: res.data.surName, phone: res.data.phone });
+    } catch {
+      setToast({ message: "Profil bilgileri yüklenemedi.", type: "error" });
+    } finally {
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
     fetchProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sayılar ayrı uçtan -- profil bilgisinin kendisinden bağımsız, biri
@@ -160,6 +201,64 @@ export default function ProfilePage() {
     }
   }
 
+  // "Hesabımı Sil" ilk tıklama -- sadece formu açar. BUSINESS_OWNER için
+  // AYRICA etki önizlemesini çeker ("N randevunuz iptal edilecek") ki karar
+  // vermeden önce ne olacağını görsün -- bu sayı olmadan uyarı soyut kalırdı.
+  async function handleOpenDeleteForm() {
+    setDeleteExpanded(true);
+    setDeleteError("");
+    if (isOwner) {
+      setImpactLoading(true);
+      try {
+        const res = await api.get<DeletionImpactResponse>("/api/users/me/deletion-impact");
+        setDeletionImpact(res.data);
+      } catch {
+        // Sessizce yut -- onizleme sayisi gorunmese bile silme akisinin
+        // KENDISI calismaya devam etmeli, bu sadece bilgilendirme.
+      } finally {
+        setImpactLoading(false);
+      }
+    }
+  }
+
+  function handleCloseDeleteForm() {
+    setDeleteExpanded(false);
+    setDeletePassword("");
+    setDeleteError("");
+    setDeletionImpact(null);
+  }
+
+  async function handleDeleteAccountConfirm() {
+    setDeleteError("");
+    setDeleteLoading(true);
+    try {
+      await api.delete("/api/users/me", { data: { password: deletePassword } });
+      handleCloseDeleteForm();
+      await fetchProfile();
+      setToast({
+        message: "Hesap silme talebiniz alındı. Aşağıdaki banner'dan istediğiniz zaman iptal edebilirsiniz.",
+        type: "success",
+      });
+    } catch (err) {
+      setDeleteError(getErrorMessage(err, "Hesap silme talebi gönderilirken hata oluştu."));
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
+  async function handleCancelDeletion() {
+    setCancelDeletionLoading(true);
+    try {
+      await api.post("/api/users/me/cancel-deletion");
+      await fetchProfile();
+      setToast({ message: "Hesap silme talebiniz iptal edildi.", type: "success" });
+    } catch (err) {
+      setToast({ message: getErrorMessage(err, "Talep iptal edilirken hata oluştu."), type: "error" });
+    } finally {
+      setCancelDeletionLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="bg-slate-50 min-h-[calc(100vh-4rem)] flex justify-center items-start pt-24">
@@ -180,6 +279,52 @@ export default function ProfilePage() {
     <div className="bg-slate-50 min-h-[calc(100vh-4rem)]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+        {/* Faz 3.9: askıdaki silme talebi banner'ı. Rol bazlı iki farklı
+            mesaj -- USER için tek eşik (kimlik anonimleştirmesi), BUSINESS_OWNER
+            için İKİ eşik (geri dönüş penceresi ÖNCE, kimlik anonimleştirmesi
+            SONRA) -- ikisini karıştırmamak CLAUDE.md'nin "Hesap silme
+            eşikleri" kararının ta kendisi. */}
+        {profile?.deletionRequestedAt && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl px-5 py-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="text-xl shrink-0">⚠️</span>
+                <div>
+                  <p className="text-sm font-semibold text-red-800">Hesabınız silinecek</p>
+                  {isOwner ? (
+                    <p className="text-sm text-red-700 mt-0.5">
+                      İşletmeniz askıya alındı. Talebi{" "}
+                      <strong>{profile.businessReversalDeadlineAt && formatDateTime(profile.businessReversalDeadlineAt)}</strong>{" "}
+                      tarihine kadar iptal etmezseniz kalan tüm randevularınız topluca iptal edilir. Kimlik
+                      bilgileriniz{" "}
+                      <strong>
+                        {profile.identityAnonymizationDeadlineAt && formatDateTime(profile.identityAnonymizationDeadlineAt)}
+                      </strong>{" "}
+                      tarihinde geri döndürülemez şekilde anonimleştirilir.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-red-700 mt-0.5">
+                      Kimlik bilgileriniz{" "}
+                      <strong>
+                        {profile.identityAnonymizationDeadlineAt && formatDateTime(profile.identityAnonymizationDeadlineAt)}
+                      </strong>{" "}
+                      tarihinde geri döndürülemez şekilde anonimleştirilecek. Bu tarihe kadar hesabınızda hiçbir şey
+                      değişmez, istediğiniz zaman iptal edebilirsiniz.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={handleCancelDeletion}
+                disabled={cancelDeletionLoading}
+                className="shrink-0 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+              >
+                {cancelDeletionLoading ? "İptal ediliyor..." : "Silme Talebini İptal Et"}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Kimlik başlığı */}
         <div className="flex items-center gap-4 mb-6">
@@ -338,6 +483,74 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
+
+        {/* Tehlikeli Bölge — hesap silme. Zaten aktif bir talep varsa bu kart
+            HİÇ gösterilmiyor (yukarıdaki kırmızı banner zaten "iptal et"
+            aksiyonunu taşıyor, backend de ikinci bir talebi 409 ile
+            reddediyor -- bkz. AccountDeletionService.requestDeletion). */}
+        {!profile?.deletionRequestedAt && (
+          <div className="bg-white border border-red-200 shadow-sm rounded-2xl p-5 sm:p-6 mt-5">
+            <h2 className="text-lg font-semibold text-red-700 mb-1">Tehlikeli Bölge</h2>
+            <p className="text-sm text-slate-500 mb-4">
+              Hesabınızı silme talebinde bulunabilirsiniz.{" "}
+              {isOwner
+                ? "İşletmeniz anında askıya alınır, yakın randevularınız hemen iptal edilir."
+                : "30 gün boyunca hesabınızda hiçbir şey değişmez, istediğiniz zaman iptal edebilirsiniz."}
+            </p>
+
+            {!deleteExpanded ? (
+              <button
+                onClick={handleOpenDeleteForm}
+                className="px-4 py-2.5 text-sm font-semibold text-red-600 hover:text-white bg-red-50 hover:bg-red-600 border border-red-200 hover:border-red-600 rounded-xl transition-all duration-200 cursor-pointer"
+              >
+                Hesabımı Sil
+              </button>
+            ) : (
+              <div className="space-y-4 max-w-md">
+                {isOwner && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                    {impactLoading ? (
+                      <p className="text-sm text-red-700">Etkilenecek randevular hesaplanıyor...</p>
+                    ) : deletionImpact && deletionImpact.affectedAppointmentCount > 0 ? (
+                      <p className="text-sm font-semibold text-red-800">
+                        ⚠️ {deletionImpact.affectedAppointmentCount} randevunuz iptal edilecek.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-red-700">Şu an bekleyen veya onaylı randevunuz yok.</p>
+                    )}
+                  </div>
+                )}
+
+                <Field
+                  id="deletePassword"
+                  label="Onaylamak için şifrenizi girin"
+                  type="password"
+                  placeholder="••••••••"
+                  value={deletePassword}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) => setDeletePassword(e.target.value)}
+                  error={deleteError}
+                />
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleDeleteAccountConfirm}
+                    disabled={deleteLoading || !deletePassword}
+                    className="px-4 py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-500 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  >
+                    {deleteLoading ? "Gönderiliyor..." : "Evet, Hesabımı Sil"}
+                  </button>
+                  <button
+                    onClick={handleCloseDeleteForm}
+                    disabled={deleteLoading}
+                    className="px-4 py-2.5 text-sm font-medium text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    Vazgeç
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

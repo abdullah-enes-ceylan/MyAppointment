@@ -35,7 +35,8 @@ public final class BusinessMapper {
                 business.getLatitude(),
                 business.getLongitude(),
                 business.isVerified(),
-                cardUrl(business, photoStorage));
+                cardUrl(business, photoStorage),
+                business.getSuspendedAt() != null);
     }
 
     // business.getServiceItems() TÜM hizmetleri (soft-delete edilmişler
@@ -65,7 +66,8 @@ public final class BusinessMapper {
                 business.getLongitude(),
                 business.isVerified(),
                 cardUrl(business, photoStorage),
-                detailUrl(business, photoStorage));
+                detailUrl(business, photoStorage),
+                business.getSuspendedAt() != null);
     }
 
     // Dosya adı türetme kuralı TEK bu iki metotta yaşıyor (bkz. plan madde 2:

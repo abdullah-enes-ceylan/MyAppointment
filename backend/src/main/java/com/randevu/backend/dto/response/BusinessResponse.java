@@ -32,5 +32,12 @@ public record BusinessResponse(
         // gradyan kapağı gösterir. Sadece kart boyutu: bu DTO liste
         // görünümlerinde kullanılıyor, detay boyutuna ihtiyaç yok
         // (bkz. BusinessDetailResponse.coverPhotoDetailUrl).
-        String coverPhotoCardUrl) {
+        String coverPhotoCardUrl,
+        // Faz 3.9: sahibi hesap silme talep etmiş mi. Bu DTO'yu kullanan
+        // uçların hepsi zaten suspendedAt IS NULL filtreli listeler DÖNDÜĞÜ
+        // için (bkz. BusinessService.getAllBusinesses/getBusinessesByCategory)
+        // burada normalde hep false görünür — bu alan asıl işlevini işletme
+        // sahibinin KENDİ panelinde (findByOwnerId, BİLEREK filtresiz) görür:
+        // frontend panelin salt-okunur banner'ını bu alana bakarak gösterir.
+        boolean suspended) {
 }

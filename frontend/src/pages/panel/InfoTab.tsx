@@ -36,7 +36,7 @@ interface ToastState {
 // TÜM alanları request'ten kopyalıyor, bu yüzden değiştirmediğimiz alanları
 // (saatler, konum) da olduğu gibi geri göndermek zorundayız -- yoksa null'a
 // düşerler.
-export default function InfoTab({ businessId }: { businessId: number | null }) {
+export default function InfoTab({ businessId, suspended = false }: { businessId: number | null; suspended?: boolean }) {
   const [business, setBusiness] = useState<BusinessDetailResponse | null>(null);
   const [form, setForm] = useState<InfoFormState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -228,7 +228,7 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
               <button
                 type="button"
                 onClick={handlePhotoUpload}
-                disabled={!photoFile || uploadingPhoto}
+                disabled={!photoFile || uploadingPhoto || suspended}
                 className="px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 {uploadingPhoto ? "Yükleniyor..." : "Fotoğrafı Yükle"}
@@ -239,7 +239,7 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
                 <button
                   type="button"
                   onClick={handleRemovePhoto}
-                  disabled={removingPhoto || uploadingPhoto}
+                  disabled={removingPhoto || uploadingPhoto || suspended}
                   className="px-4 py-2 text-xs font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
                 >
                   {removingPhoto ? "Kaldırılıyor..." : "Fotoğrafı Kaldır"}
@@ -338,7 +338,7 @@ export default function InfoTab({ businessId }: { businessId: number | null }) {
 
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || suspended}
           className="px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           {saving ? "Kaydediliyor..." : "Kaydet"}

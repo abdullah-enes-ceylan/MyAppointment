@@ -4,11 +4,13 @@ import com.randevu.backend.dto.request.ChangePasswordRequest;
 import com.randevu.backend.dto.request.DeleteAccountRequest;
 import com.randevu.backend.dto.request.RegisterRequest;
 import com.randevu.backend.dto.request.UpdateProfileRequest;
+import com.randevu.backend.dto.response.DeletionImpactResponse;
 import com.randevu.backend.dto.response.ProfileStatsResponse;
 import com.randevu.backend.dto.response.UserResponse;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.mapper.UserMapper;
 import com.randevu.backend.service.AccountDeletionService;
+import com.randevu.backend.service.AccountDeletionService.DeletionDeadlines;
 import com.randevu.backend.service.CurrentUserService;
 import com.randevu.backend.service.ProfileStatsService;
 import com.randevu.backend.service.UserService;
@@ -69,10 +71,15 @@ public class UserController {
     // /businesses/my ile ayni desen -- kullanicinin kendi ID'sini URL'de
     // tasimasi IDOR'un tanimidir (bkz. ROADMAP Faz 0.4).
 
-    // Kendi profil bilgilerim.
+    // Kendi profil bilgilerim. deletionRequestedAt DOLUYSA (Faz 3.9),
+    // frontend'in banner'da gosterecegi hazir deadline'lari da hesaplayip
+    // ekliyoruz -- bkz. AccountDeletionService.computeDeadlines'teki gerekce.
     @GetMapping("/me")
     public UserResponse getMyProfile(Authentication authentication) {
-        return UserMapper.toResponse(currentUserService.getCurrentUser(authentication));
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        DeletionDeadlines deadlines = accountDeletionService.computeDeadlines(currentUser);
+        return UserMapper.toResponse(currentUser, deadlines.identityAnonymizationDeadlineAt(),
+                deadlines.businessReversalDeadlineAt());
     }
 
     // Ad/soyad/telefon guncelleme. E-posta ve rol degistirilemez
@@ -81,7 +88,10 @@ public class UserController {
     public UserResponse updateMyProfile(@Valid @RequestBody UpdateProfileRequest request,
             Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        return UserMapper.toResponse(userService.updateProfile(currentUser, request));
+        User updated = userService.updateProfile(currentUser, request);
+        DeletionDeadlines deadlines = accountDeletionService.computeDeadlines(updated);
+        return UserMapper.toResponse(updated, deadlines.identityAnonymizationDeadlineAt(),
+                deadlines.businessReversalDeadlineAt());
     }
 
     // Sifre degistirme -- profil guncellemeden ayri, cunku mevcut sifrenin
@@ -113,6 +123,17 @@ public class UserController {
         User currentUser = currentUserService.getCurrentUser(authentication);
         accountDeletionService.requestDeletion(currentUser, request.getPassword());
         return ResponseEntity.noContent().build();
+    }
+
+    // Silme talebi ONAYLANMADAN ONCE onay diyaloğunun gösterdiği etki
+    // önizlemesi -- BUSINESS_OWNER için "N randevunuz iptal edilecek" uyarısı
+    // buradan besleniyor (USER'da her zaman 0, bkz. DeletionImpactResponse).
+    // Salt okunur, hiçbir şeyi değiştirmiyor -- şifre de istemiyor, sadece
+    // bir sayı gösteriyor.
+    @GetMapping("/me/deletion-impact")
+    public DeletionImpactResponse getMyDeletionImpact(Authentication authentication) {
+        User currentUser = currentUserService.getCurrentUser(authentication);
+        return new DeletionImpactResponse(accountDeletionService.previewAffectedAppointmentCount(currentUser));
     }
 
     // Silme talebini geri alir. gracePeriod dolmadigi surece (anonymizedAt

@@ -62,10 +62,24 @@ public class BusinessService {
     // "boyle bir isletme yok" arasinda fark belli edilmemeli, aksi halde
     // dogrudan URL ile bir isletmenin silinme surecinde oldugu anlasilirdi
     // (bkz. path traversal/SecurityConfigUnmatchedPathTest'teki ayni desen).
+    //
+    // viewerUserId null (public/anonim cagiran) icin bu davranis DEGISMEDI.
+    // SADECE viewerUserId GERCEKTEN bu isletmenin sahibiyse 404 atlanir --
+    // sahip kendi askidaki isletmesini panelinden (InfoTab/LocationTab, ikisi
+    // de bu ucu kullaniyor) gormeye devam etmeli, sadece degistirememeli
+    // (bkz. OwnershipGuard.assertOwnsActiveBusiness, mutasyon uclarindaki
+    // AYRI kontrol). Canlida bulunan gercek bir regresyon: bu overload
+    // eklenmeden once sahip kendi paneli "Yukleniyor..."da takilip
+    // kaliyordu.
     public Business getBusinessById(Long id) {
+        return getBusinessById(id, null);
+    }
+
+    public Business getBusinessById(Long id, Long viewerUserId) {
         Business business = businessRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
-        if (business.getSuspendedAt() != null) {
+        boolean isOwnerViewing = viewerUserId != null && business.getOwner().getId().equals(viewerUserId);
+        if (business.getSuspendedAt() != null && !isOwnerViewing) {
             throw new ResourceNotFoundException("İşletme bulunamadı.");
         }
         return business;

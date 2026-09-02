@@ -16,7 +16,7 @@ interface ToastState {
 // longitude göndersek diğer alanlar null'a düşerdi. Bu yüzden önce
 // işletmenin GÜNCEL tüm bilgisi çekilip, PUT'ta olduğu gibi geri
 // gönderiliyor, sadece konum değişiyor.
-export default function LocationTab({ businessId }: { businessId: number | null }) {
+export default function LocationTab({ businessId, suspended = false }: { businessId: number | null; suspended?: boolean }) {
   const [business, setBusiness] = useState<BusinessDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +130,7 @@ export default function LocationTab({ businessId }: { businessId: number | null 
         </div>
         <button
           onClick={handleSave}
-          disabled={!pendingLocation || saving}
+          disabled={!pendingLocation || saving || suspended}
           className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
         >
           {saving ? "Kaydediliyor..." : "Kaydet"}

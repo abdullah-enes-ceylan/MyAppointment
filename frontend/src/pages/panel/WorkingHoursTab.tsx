@@ -43,7 +43,7 @@ interface ToastState {
 // HTML <input type="time"> "HH:mm" verir, backend'deki LocalTime alanı
 // (Jackson ISO_LOCAL_TIME) saniyesiz "HH:mm"i de kabul ediyor — ayrıca
 // dönüştürmeye gerek yok.
-export default function WorkingHoursTab({ businessId }: { businessId: number | null }) {
+export default function WorkingHoursTab({ businessId, suspended = false }: { businessId: number | null; suspended?: boolean }) {
   const [days, setDays] = useState<DaysState>(emptyDayState());
   const [closures, setClosures] = useState<BusinessClosureResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -225,7 +225,7 @@ export default function WorkingHoursTab({ businessId }: { businessId: number | n
 
                 <button
                   onClick={() => saveDay(d.key)}
-                  disabled={savingDay === d.key}
+                  disabled={savingDay === d.key || suspended}
                   className="ml-auto px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
                 >
                   {savingDay === d.key ? "Kaydediliyor..." : "Kaydet"}
@@ -258,7 +258,7 @@ export default function WorkingHoursTab({ businessId }: { businessId: number | n
           />
           <button
             type="submit"
-            disabled={addingClosure}
+            disabled={addingClosure || suspended}
             className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
           >
             {addingClosure ? "Ekleniyor..." : "Ekle"}
@@ -280,7 +280,7 @@ export default function WorkingHoursTab({ businessId }: { businessId: number | n
                 </div>
                 <button
                   onClick={() => handleDeleteClosure(c.id)}
-                  disabled={deletingClosureId === c.id}
+                  disabled={deletingClosureId === c.id || suspended}
                   className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
                 >
                   {deletingClosureId === c.id ? "Siliniyor..." : "Sil"}

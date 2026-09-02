@@ -47,6 +47,11 @@ export interface BusinessResponse {
   longitude: number | null;
   verified: boolean;
   coverPhotoCardUrl: string | null;
+  // Faz 3.9: sahibi hesap silme talep etmiş mi. GET /api/businesses gibi
+  // herkese açık uçlarda hep false (askıdakiler zaten listeden düşüyor) --
+  // asıl anlamı GET /api/businesses/my'de: sahip kendi işletmesini görmeye
+  // devam ediyor ama panelin salt-okunur banner'ı bu alana bakıyor.
+  suspended: boolean;
 }
 
 // backend/src/main/java/com/randevu/backend/entity/Role.java
@@ -61,6 +66,14 @@ export interface UserResponse {
   email: string;
   phone: string;
   role: Role;
+  // Faz 3.9: hesap silme talebi. null = talep yok. Deadline'lar backend'de
+  // AccountDeletionProperties'ten HAZIR hesaplanıp geliyor -- burada 30
+  // gün/48 saat gibi bir sayı YOK, config değişirse bu dosyanın
+  // güncellenmesi gerekmiyor (bkz. UserResponse.java'daki gerekçe).
+  deletionRequestedAt: string | null;
+  identityAnonymizationDeadlineAt: string | null;
+  // Sadece BUSINESS_OWNER + aktif talep varken dolu.
+  businessReversalDeadlineAt: string | null;
 }
 
 // backend/src/main/java/com/randevu/backend/dto/response/ProfileStatsResponse.java
@@ -103,6 +116,11 @@ export interface UpdateProfileRequest {
 export interface ChangePasswordRequest {
   currentPassword: string;
   newPassword: string;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/request/DeleteAccountRequest.java
+export interface DeleteAccountRequest {
+  password: string;
 }
 
 // backend/src/main/java/com/randevu/backend/dto/response/ErrorResponse.java
@@ -191,6 +209,14 @@ export type AppointmentStatus =
 export interface BusinessSummary {
   id: number;
   name: string;
+  // Faz 3.9: doluysa geçmiş randevu ekranında işletme adı link DEĞİL düz
+  // metin olarak gösterilmeli (askıdaki işletmenin sayfası zaten 404).
+  suspended: boolean;
+}
+
+// backend/src/main/java/com/randevu/backend/dto/response/DeletionImpactResponse.java
+export interface DeletionImpactResponse {
+  affectedAppointmentCount: number;
 }
 
 // backend/src/main/java/com/randevu/backend/dto/response/CustomerSummary.java

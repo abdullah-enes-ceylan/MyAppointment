@@ -144,6 +144,46 @@ public class AccountDeletionService {
         }
     }
 
+    // Frontend'in banner'ında gösterdiği iki tarih. HAM deletionRequestedAt'i
+    // donup 30 gun/48 saat gibi sayilari frontend'de tekrar uretmek yerine
+    // (config degisirse frontend'i de guncellemek gerekirdi) hazir tarihleri
+    // buradan veriyoruz -- AppointmentResponse.expiresAt'teki "kural sunucuda
+    // hesaplanir" gerekcesiyle ayni.
+    public record DeletionDeadlines(LocalDateTime identityAnonymizationDeadlineAt,
+            LocalDateTime businessReversalDeadlineAt) {
+    }
+
+    public DeletionDeadlines computeDeadlines(User user) {
+        if (user.getDeletionRequestedAt() == null) {
+            return new DeletionDeadlines(null, null);
+        }
+        LocalDateTime identityDeadline = user.getDeletionRequestedAt().plus(properties.getGracePeriod());
+        LocalDateTime reversalDeadline = user.getRole() == Role.BUSINESS_OWNER
+                ? user.getDeletionRequestedAt().plus(properties.getBusinessReversalWindow())
+                : null;
+        return new DeletionDeadlines(identityDeadline, reversalDeadline);
+    }
+
+    // Silme talebi ONAYLANMADAN ONCE frontend'in gosterecegi uyari icin:
+    // "N randevunuz iptal edilecek". USER icin anlamsiz (kendi randevulari
+    // ANINDA degil, sadece gracePeriod sonunda etkilenir, bkz. anonymize) --
+    // 0 doner. BUSINESS_OWNER icin, su an suspendedAt'ten BAGIMSIZ olarak
+    // (talep henuz verilmemis olabilir, bu YUZDEN "onizleme") isletmelerindeki
+    // TUM bitmemis (PENDING/APPROVED) randevu sayisi -- bunlarin HEPSI, talep
+    // verilirse er ya da gec (hemen ya da 48 saat sonra) iptal olacak.
+    public int previewAffectedAppointmentCount(User user) {
+        if (user.getRole() != Role.BUSINESS_OWNER) {
+            return 0;
+        }
+        List<Business> businesses = businessRepository.findByOwnerId(user.getId());
+        if (businesses.isEmpty()) {
+            return 0;
+        }
+        List<Long> businessIds = businesses.stream().map(Business::getId).toList();
+        List<AppointmentStatus> nonTerminal = List.of(AppointmentStatus.PENDING, AppointmentStatus.APPROVED);
+        return appointmentRepository.findByBusinessIdInAndStatusIn(businessIds, nonTerminal).size();
+    }
+
     // businessReversalWindow gecmis, talep hala aktif bir BUSINESS_OWNER'in
     // kalan TUM randevularini iptal eder. Sorgu SADECE PENDING/APPROVED
     // getirdigi icin idempotent -- AccountDeletionScheduler'in bir sonraki

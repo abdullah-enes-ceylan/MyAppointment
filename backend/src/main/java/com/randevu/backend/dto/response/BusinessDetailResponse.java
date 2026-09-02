@@ -34,5 +34,7 @@ public record BusinessDetailResponse(
         // mevcut gradyan kapağı gösterir. BusinessResponse'tan farklı olarak
         // burada İKİSİ de var: bu DTO hem kart hem detay sayfasında kullanılıyor.
         String coverPhotoCardUrl,
-        String coverPhotoDetailUrl) {
+        String coverPhotoDetailUrl,
+        // Faz 3.9 — bkz. BusinessResponse'daki aynı alanın açıklaması.
+        boolean suspended) {
 }
