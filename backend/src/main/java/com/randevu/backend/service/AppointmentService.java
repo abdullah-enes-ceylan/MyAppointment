@@ -468,21 +468,6 @@ public class AppointmentService {
         throw new BusinessRuleException(message);
     }
 
-    // Müşterinin şu andan sonraki, hâlâ aktif (PENDING/APPROVED) randevularını
-    // getirir. İptal/ret edilmiş bir randevu tarihi gelecekte olsa bile
-    // burada görünmez -- profil özetindeki "yaklaşan randevu" sayısıyla
-    // aynı tanımı kullanır (bkz. AppointmentStatus.ACTIVE_STATUSES).
-    public List<Appointment> getUpcomingCustomerAppointments(Long customerId) {
-        return appointmentRepository.findByCustomerIdAndAppointmentDateAfterAndStatusIn(
-                customerId, LocalDateTime.now(clock), AppointmentStatus.ACTIVE_STATUSES);
-    }
-
-    // İşletmenin şu andan sonraki, hâlâ aktif (PENDING/APPROVED) randevularını
-    // getirir. Aynı tanım için bkz. getUpcomingCustomerAppointments.
-    public List<Appointment> getUpcomingBusinessAppointments(Long businessId) {
-        return appointmentRepository.findByBusinessIdAndAppointmentDateAfterAndStatusIn(
-                businessId, LocalDateTime.now(clock), AppointmentStatus.ACTIVE_STATUSES);
-    }
 
     // Belirtilen gün için işletmenin ve hizmetin süresine uygun boş saat
     // dilimlerini hesaplar. Bu metodun işi artık sadece veriyi TOPLAMAK

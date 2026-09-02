@@ -103,17 +103,6 @@ class AppointmentControllerOwnershipTest {
         verify(appointmentService, never()).getPendingAppointmentsForBusiness(any());
     }
 
-    @Test
-    @DisplayName("getUpcomingBusinessAppointments: saldirgan baska isletmenin yaklasan randevularini goremez")
-    void getUpcomingBusinessAppointments_saldirgan_AccessDenied() {
-        actingAs(ATTACKER_ID);
-
-        assertThatThrownBy(() -> controller.getUpcomingBusinessAppointments(BUSINESS_ID, authentication))
-                .isInstanceOf(AccessDeniedException.class);
-
-        verify(appointmentService, never()).getUpcomingBusinessAppointments(any());
-    }
-
     // Var olmayan bir isletmeye erisim denemesi -- OwnershipGuard'in kendi
     // 404 davranisinin controller uzerinden de dogru calistigini kanitlar.
     @Test

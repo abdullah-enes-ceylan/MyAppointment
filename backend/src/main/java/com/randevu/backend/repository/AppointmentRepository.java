@@ -20,15 +20,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     List<Appointment> findByCustomerIdAndStatus(Long customerId, AppointmentStatus status);
 
-    // "Yaklaşan randevu" listeleri -- statüye göre filtreli (bkz.
-    // AppointmentStatus.ACTIVE_STATUSES): iptal/ret/süresi-dolmuş bir
-    // randevu tarihi gelecekte olsa bile bu listede görünmez.
-    List<Appointment> findByCustomerIdAndAppointmentDateAfterAndStatusIn(
-            Long customerId, LocalDateTime appointmentDate, List<AppointmentStatus> statuses);
-
-    List<Appointment> findByBusinessIdAndAppointmentDateAfterAndStatusIn(
-            Long businessId, LocalDateTime appointmentDate, List<AppointmentStatus> statuses);
-
     // Belirli bir dükkanda, belirli bir saatte ve belirli durumlarda randevu var mı
     // kontrolü
     boolean existsByBusinessIdAndAppointmentDateAndStatusIn(

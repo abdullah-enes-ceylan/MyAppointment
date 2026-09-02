@@ -1258,9 +1258,11 @@ KRİTİK tasarım kararı — bu alan sadece belirli controller metotlarında do
   etmez).
 - `AppointmentController`'da YENİ bir `private AppointmentResponse toBusinessResponse(Appointment
   appointment)` metodu eklenir (mevcut `toResponse(Appointment)`'a DOKUNULMAZ) — SADECE
-  `getBusinessAppointments`, `getPendingAppointments`, `getUpcomingBusinessAppointments`
-  (üçü de zaten `OwnershipGuard.assertOwnsBusiness` ile korunan, işletme sahibine özel
-  uçlar) bunu kullanır. `createAppointment`/`updateStatus`'un kullandığı mevcut `toResponse`
+  `getBusinessAppointments`, `getPendingAppointments` (ikisi de zaten
+  `OwnershipGuard.assertOwnsBusiness` ile korunan, işletme sahibine özel uçlar) bunu kullanır.
+  (Not: `getUpcomingBusinessAppointments`/`GET /business/{id}/upcoming` 2026-09-03'te
+  silindi — frontend'de hiç çağrılmıyordu, bkz. CLAUDE.md karar tablosu. Bu plan yeniden
+  ele alınırsa referans artık geçersiz.) `createAppointment`/`updateStatus`'un kullandığı mevcut `toResponse`
   DEĞİŞMEZ — müşteri kendi randevusunu oluştururken/iptal ederken orana hiç rastlamaz (zaten
   kendi oranını profilinden görüyor, burada tekrar göstermeye gerek yok).
 - Bu yapı sayesinde "başka kullanıcının oranına hiçbir uçtan erişilemesin" kuralı

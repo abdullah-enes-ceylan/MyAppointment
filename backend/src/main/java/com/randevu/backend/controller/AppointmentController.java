@@ -199,27 +199,7 @@ public class AppointmentController {
         return ResponseEntity.ok(toResponse(updated));
     }
 
-    // 5. Kendi Yaklaşan Randevularımı Listeleme — /customer/{id}/upcoming ile
-    // aynı IDOR sorununu taşıyordu, aynı sebeple /me/upcoming'e taşındı.
-    @GetMapping("/me/upcoming")
-    public List<AppointmentResponse> getMyUpcomingAppointments(Authentication authentication) {
-        User currentUser = currentUserService.getCurrentUser(authentication);
-        return appointmentService.getUpcomingCustomerAppointments(currentUser.getId()).stream()
-                .map(this::toResponse)
-                .toList();
-    }
-
-    // 6. Dükkanın Yaklaşan ve Onay Bekleyen Randevularını Listeleme
-    @GetMapping("/business/{businessId}/upcoming")
-    public List<AppointmentResponse> getUpcomingBusinessAppointments(@PathVariable Long businessId, Authentication authentication) {
-        User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsBusiness(currentUser.getId(), businessId);
-        return appointmentService.getUpcomingBusinessAppointments(businessId).stream()
-                .map(this::toResponse)
-                .toList();
-    }
-
-    // 7. BOŞ SAATLERİ GETİRME UÇ NOKTASI — bilerek herkese açık (permitAll).
+    // 5. BOŞ SAATLERİ GETİRME UÇ NOKTASI — bilerek herkese açık (permitAll).
     // Randevu almadan önce müşterinin müsait saatleri görebilmesi gerekiyor,
     // bu yüzden kimlik doğrulaması istemiyoruz; işletmenin kendi hassas verisi
     // (müşteri listesi vb.) burada dönmüyor, sadece boş saat listesi dönüyor.
