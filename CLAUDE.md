@@ -128,6 +128,7 @@ Bu kararlar tartışılıp verildi; yeniden açmadan önce sor.
 | Hesap silme eşikleri (Faz 3.9) | **(2026-09-02)** Üç ayrı, birbirine KARIŞTIRILMAMASI gereken süre: **gracePeriod** (30 gün, varsayılan) — kimlik anonimleştirmesine kadar, USER ve BUSINESS_OWNER PAYLAŞIYOR, bu süre boyunca hesapta GERÇEKTEN hiçbir şey değişmez (geri dönüş/ele geçirme kurtarma senaryosu için). **businessNoticePeriod** (72 saat) — SADECE BUSINESS_OWNER, talep ANINDA bu süre içindeki randevular hemen iptal + bildirim. **businessReversalWindow** (48 saat) — SADECE BUSINESS_OWNER, talep geri alınmazsa kalan TÜM randevular topluca iptal. `reversalWindow <= noticePeriod` matematiksel zorunluluk (`AccountDeletionProperties`'in `@PostConstruct`'ı doğruluyor) — aksi halde iki eşik arasına düşen bir randevu hiç yakalanamaz. Üçü de `application.properties`'te ayrı ayrı config, koda gömülü değil. |
 | Askıdaki işletme sahibi panelde ne yapabilir | **(2026-09-02)** Salt okunur + sadece "talebi iptal et" aktif. Okuma uçları (`OwnershipGuard.assertOwnsBusiness`/`assertOwnsServiceItem`/`assertOwnsStaff`) askıda olsa da geçer — sahip randevularını/inbox'ını/personelini görmeye devam eder. Mutasyon uçları (`assertOwnsActiveBusiness`/`assertOwnsActiveServiceItem`/`assertOwnsActiveStaff` + `AppointmentService.changeStatus`'ta APPROVE/REJECT/NO_SHOW engeli) askıdaysa 409. CANCEL bilerek istisna — hem müşteri kendi randevusunu her zaman iptal edebilmeli hem de silme akışının kendi otomatik iptalleri aynı yolu kullanıyor. |
 | Silme talebi anında JWT'ler geçersiz kılınmıyor | **(2026-09-02) Bilinçli kabul.** `deletionRequestedAt` dolduğunda (henüz `anonymizedAt` değil) mevcut token'lar çalışmaya devam eder — bu bir açık değil: talep zaten şifre istiyor (ele geçirilmiş şifresiz oturum senaryosu yok), gerçek sahip `enabled=true` olduğu sürece şifresiyle yeniden login olup iptal ucuna ulaşabilir (kurtarma buna bağımlı değil). Bu projede JWT tamamen stateless — şifre değişikliğinde bile "bu andan önceki token'lar geçersiz" mekanizması yok, SADECE silme talebi için eklemek tutarsız olurdu. Genel bir oturum sonlandırma ihtiyacı doğarsa (ör. "şüpheli giriş"), hem şifre değişikliğini hem silme talebini kapsayan ayrı bir görev olmalı. **AYRI ve GERÇEK bir bug olarak canlı bulunup düzeltildi:** anonimleştirme SONRASI (`anonymizedAt` dolu) eski bir token'la istek atılırsa, `JwtFilter`'ın `loadUserByUsername` çağrısı token'daki artık-var-olmayan eski email'i bulamayıp `UsernameNotFoundException` fırlatıyordu — bu, `ExceptionTranslationFilter`'a hiç ulaşmadan (zincirde ondan önce çalıştığı için) kontrolsüz bir 500'e düşüyordu. `JwtFilter` artık bunu yakalayıp kimliksiz devam ediyor, temiz 401 dönüyor (bkz. `JwtFilterAnonymizedUserTest`). |
+| Askıdaki işletme sızıntı taraması: `businessRepository` grep'i YETMEZ | **(2026-09-02)** İlk turda "businessRepository çağrı noktaları tarandı, `findByOwnerId` dışında filtresiz kalan yok" denip kapatılmıştı — YANLIŞTI. `FavoriteService.getFavoriteBusinesses`, `Business`'a `businessRepository` üzerinden değil `Favorite.getBusiness()` ENTITY İLİŞKİSİ üzerinden erişiyordu, bu yüzden hiçbir grep'te görünmedi: favorilenen bir işletme sonradan askıya alınınca `GET /api/favorites/me` tam profilini (ad/adres/telefon/hizmetler) döndürmeye devam ediyordu. Aynı taramada `ReviewService.getReviewsForBusiness`'in de `suspendedAt`'e hiç bakmadığı bulundu — `ReviewResponse` profil verisi taşımasa da, ilgisiz herhangi bir giriş yapmış kullanıcı gerçek müşteri adı+yorumunu okuyabiliyordu. **Kural: bir entity'nin "askıda/silinmiş/pasif" durumu eklendiğinde, o entity'ye giden HER yol taranmalı — repository çağrıları YETMEZ, `entity.getX()` ilişki erişimleri de (mapper'lar, `.map(Y::getX)` stream'leri) aynı şekilde taranmalı.** `GET /api/businesses/{id}`'ye sahip için eklenen istisna ayrıca denetlendi: gerçek sahiplik kontrolü (`business.getOwner().getId().equals(viewerUserId)`), sadece "kimliği doğrulanmış kullanıcı" değil — testle kanıtlandı (başka bir giriş yapmış kullanıcı hâlâ 404 alır). Bu turda ayrıca kendi hatam düzeltildi: `/reviews/business/{id}`'yi ilk başta "kimliksiz/herkese açık" sanmıştım, test 401 verince `SecurityConfig`'te bu uç için `permitAll` olmadığını (genel `authenticated()` kuralına tabi olduğunu) fark edip düzelttim. |
 
 ---
 
@@ -207,10 +208,13 @@ için oraya bak.
 `RUNBOOK.md` (Faz 3.7/3.8'de) hazırlandı, ama gerçek sunucuya ilk deploy (3.8a) daha
 yapılmadı. Tek veritabanı hâlâ yerel geliştirme ortamı.
 
-**Faz 3.9 (hesap silme akışı, KVKK unutulma hakkı) — backend tamamlandı ve test
-edildi, frontend ve hukuki metinler (aydınlatma/VERBİS/sözleşme) yapılmadı.** Detay:
-ROADMAP.md 3.9, karar tablosundaki "Hesap silme eşikleri" ve "Askıdaki işletme sahibi
-panelde ne yapabilir" satırları.
+**Faz 3.9 (hesap silme akışı, KVKK unutulma hakkı) — backend VE frontend tamamlandı,
+canlı tarayıcıda doğrulandı; sadece hukuki metinler (aydınlatma/VERBİS/sözleşme,
+avukat onayı) kaldı.** Taslak metin `AYDINLATMA_METNI_TASLAGI.md`'de. Detay: ROADMAP.md
+3.9, karar tablosundaki "Hesap silme eşikleri" ve "Askıdaki işletme sahibi panelde ne
+yapabilir" satırları. **3.12 (Randevuya Katılım Oranı) ERTELENDİ** — analiz/plan yazıldı
+ama beta ölçeğinde veri birikmeyeceği ve `NO_SHOW`'un fiilen işaretlenemediği (bkz.
+`completeElapsedAppointments` etkileşimi) gerekçesiyle koda geçilmedi.
 
 ### Bu aşamada eklenenler (git geçmişinde detaylı gerekçeleriyle)
 
@@ -225,7 +229,7 @@ panelde ne yapabilir" satırları.
 - Bildirim altyapısı (`NotificationPort`, kanal-bağımsız), rate limiting, loglama/izleme
 - İşletme kapak fotoğrafı yükleme (`BusinessPhotoService`, yerel disk depolama)
 - Konteynerleştirme (Dockerfile'lar, docker-compose, Caddy) — henüz deploy edilmedi
-- Hesap silme akışı (USER + BUSINESS_OWNER, backend) — bkz. yukarısı
+- Hesap silme akışı (USER + BUSINESS_OWNER, backend + frontend) — bkz. yukarısı
 
 ### Bilinen açık işler
 
@@ -237,8 +241,9 @@ panelde ne yapabilir" satırları.
 | `/me/upcoming` ile profil "yaklaşan" sayısı tutarsız | `CANCELLED`/`NO_SHOW` sayıyor; ayrı görev olarak açıldı |
 | `favorites.created_at`'te `DEFAULT now()` | Kullanılmıyor ama şemada duruyor; ayrı küçük migration ile temizlenecek |
 | İl/ilçe ile manuel konum seçimi | Tasarım konuşuldu (`city`/`district` alanları), yazılmadı |
-| Hesap silme akışı — frontend | **Yapılmadı** — silme UI'ı (şifre onaylı), askıdaki hesap banner'ı, geçmiş randevuda askıdaki işletme adının link değil düz metin olması |
 | Faz 3.8 deploy (sunucu, DNS, ilk canlı deploy, yedekleme) | **Başlamadı** — plan/RUNBOOK.md hazır |
+| KVKK hukuki metinleri (aydınlatma/VERBİS/sözleşme) | Taslak yazıldı (`AYDINLATMA_METNI_TASLAGI.md`), avukat onayı bekliyor |
+| Randevuya katılım oranı (ROADMAP 3.12) | **Ertelendi** — beta ölçeğinde veri birikmez + `NO_SHOW` fiilen işaretlenemiyor |
 
 ### Doğrulama beklentisi
 

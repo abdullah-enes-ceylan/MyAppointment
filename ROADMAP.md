@@ -909,12 +909,36 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
   - **Doğrudan URL:** `GET /api/businesses/{id}` (detay ucu, `BusinessService.getBusinessById`)
     `suspendedAt != null` ise **404** döner (403 değil — path traversal'daki gibi, "var ama
     erişemiyorsun" ile "böyle bir şey yok" arasında fark belli edilmez). **Yapıldı.**
-  - **Eski randevu detayında tıklanabilir link — henüz yapılmadı (frontend).** Backend'in
-    404'ü zaten gerçek güvenlik sınırı (frontend ne yaparsa yapsın tıklanınca 404 alınır) —
-    ama frontend'de de `BusinessSummary`'nin (`AppointmentResponse.business`) taşıdığı bilgiye
-    `suspendedAt`/`active` gibi bir alan eklenip, geçmiş randevu ekranlarında işletme adı
-    `suspendedAt` doluysa tıklanabilir link DEĞİL düz metin olarak gösterilmeli — kırık bir
-    link gibi görünmesin.
+  - **Eski randevu detayında tıklanabilir link — kontrol edildi, zaten hiç link DEĞİLMİŞ.**
+    `MyAppointmentsPage.tsx` grep'lendi: işletme adı zaten düz `<p>` olarak basılıyor, hiçbir
+    `<Link>` sarmalayıcısı yok — yapılacak bir şey çıkmadı. Yine de `BusinessSummary`'ye
+    `suspended` alanı eklendi (`AppointmentMapper` doldurur) — bugün kullanılmıyor ama ileride
+    bu ekranda görsel bir "askıda" rozeti gösterilmek istenirse hazır.
+  - **Favoriler — canlı denetimde bulunan gerçek bir sızıntı, kapatıldı.**
+    `FavoriteService.getFavoriteBusinesses`, `businessRepository` ÜZERİNDEN değil
+    `Favorite.getBusiness()` entity ilişkisi üzerinden erişiyordu — bu yüzden
+    "businessRepository çağrı noktaları" taramasında hiç görünmedi. Bir kullanıcı önceden
+    favorilediği bir işletme sonradan askıya alınırsa, `GET /api/favorites/me` tam profilini
+    (`BusinessDetailResponse`: ad/adres/telefon/hizmetler/`suspended:true`) döndürmeye devam
+    ediyordu. Düzeltme: aynı `suspendedAt IS NULL` filtresi burada da (`.filter(business ->
+    business.getSuspendedAt() == null)`). **Ders:** sızıntı taraması `businessRepository.`
+    çağrılarını grep'lemekle bitmiyor — entity ilişkileri (`X.getBusiness()`) üzerinden de
+    erişim mümkün, onlar da taranmalı.
+  - **Yorumlar — aynı taramada bulunan ikinci sızıntı, kapatıldı.** `ReviewService.
+    getReviewsForBusiness` de `suspendedAt`'e hiç bakmıyordu. `ReviewResponse`'un kendisi hiçbir
+    işletme profil alanı taşımadığı için bu "profil verisi" sızıntısı değil, ama askıya alınmış
+    bir işletmenin ID'sini bilen, bu işletmeyle hiç ilgisi olmayan (ne müşteri ne sahip) giriş
+    yapmış HERHANGİ bir kullanıcı, gerçek müşteri adı+puan+yorumunu okumaya devam edebiliyordu —
+    "hiçbir yoldan görüntülenemesin" ilkesinin ihlali. Düzeltme: business bulunamıyorsa ya da
+    askıdaysa boş liste dönüyor. **Kendi hatamı düzelttim:** ilk yazdığımda bu ucu "kimliksiz/
+    herkese açık" sandım — testi 401 ile patlayınca fark ettim, `SecurityConfig`'te bu uç için
+    `permitAll` YOK, genel `authenticated()` kuralına tabi; gerçek açık "kimliksiz erişim" değil
+    "kimlik doğrulanmış ama sahiplik/ilgi kontrolsüz erişim"di — hem kodu hem yorumu buna göre
+    düzelttim.
+  - **`GET /api/businesses/{id}`'ye eklenen sahip istisnası — ayrıca denetlendi.** Bu istisna
+    "kimliği doğrulanmış herhangi bir kullanıcı" değil, GERÇEK sahiplik kontrolü
+    (`business.getOwner().getId().equals(viewerUserId)`) — testle kanıtlandı: askıdaki
+    işletmede sahip 200 alır, İLGİSİZ başka bir giriş yapmış kullanıcı YİNE 404 alır.
 
   **Uygulama durumu (backend, teyit edildi — test edilerek doğrulandı, iddia değil):**
   - Migration `V15__account_deletion.sql` — `users.deletion_requested_at`, `users.anonymized_at`,
@@ -969,10 +993,11 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
     gerek kalmadı çünkü tek gerçek görünüm zaten sahibinki. Canlı MockMvc testiyle doğrulandı
     (`OwnerOnlyEndpointsUnauthenticatedTest`): kimliksiz istek üçünde de 401.
   - **Testler — kullanıcının istediği 5 senaryo + 2 ek soru (idempotency, anonimleştirilmiş
-    hesapta cancelDeletion) + askıdaki işletme mutasyon kısıtı + üç ucun kilidi,
-    `Clock` manipülasyonuyla (`AccountDeletionIntegrationTest` gerçek Testcontainers Postgres,
-    `OwnershipGuardTest`/`AppointmentServiceStateMachineTest`/`OwnerOnlyEndpointsUnauthenticatedTest`
-    birim/MockMvc), hepsi yeşil (142/142):**
+    hesapta cancelDeletion) + askıdaki işletme mutasyon kısıtı + üç ucun kilidi + favoriler/
+    yorumlar sızıntı düzeltmeleri, `Clock` manipülasyonuyla (`AccountDeletionIntegrationTest`
+    gerçek Testcontainers Postgres, `OwnershipGuardTest`/`AppointmentServiceStateMachineTest`/
+    `OwnerOnlyEndpointsUnauthenticatedTest`/`AccountDeletionResponseFieldsTest` birim/MockMvc),
+    hepsi yeşil (153/153, Docker Desktop açıkken doğrulandı):**
     47. saatte geri alma → hiçbir randevu iptal olmadı + hesap normale döndü, bildirim
     gitmedi; 49. saatte scheduler → geri dönüş penceresi dolduğu için kalan randevular iptal +
     müşteriye `APPOINTMENT_CANCELLED_BUSINESS_CLOSED` bildirimi `SENT` loglandı; talep anında
@@ -981,7 +1006,31 @@ Gerçek kişilerin ad, telefon ve randevu geçmişini işleyeceksin.
     randevu satırı duruyor (CANCELLED, silinmedi), kişisel alanlar temiz, favori hard-delete
     edildi; ikinci silme talebi 409 ile reddedilir, ilk talebin zaman damgası sıfırlanmaz;
     anonimleştirilmiş hesapta `cancelDeletion` 409 ile reddedilir; askıdaki işletme sahibi
-    APPROVE/REJECT/NO_SHOW yapamaz ama CANCEL hâlâ çalışır.
+    APPROVE/REJECT/NO_SHOW yapamaz ama CANCEL hâlâ çalışır; `GET /businesses/{id}`'de sahip
+    200 başkası 404 alır; favorilenen/yorumlanan askıdaki işletme sırasıyla `/favorites/me` ve
+    `/reviews/business/{id}`'den düşer.
+
+  **Frontend — tamamlandı, gerçek tarayıcıda canlı doğrulandı (kod okuyup "çalışır görünüyor"
+  değil).** Kendi kurduğum test hesaplarıyla (USER + BUSINESS_OWNER, gerçek randevularla) uçtan
+  uca akışı çalıştırdım:
+  - `ProfilePage`: rol bazlı silme banner'ı (USER tek eşik/identity deadline, BUSINESS_OWNER
+    iki eşik/reversal+identity deadline — ikisi de backend'den HAZIR tarih olarak geliyor, bkz.
+    `UserResponse.identityAnonymizationDeadlineAt`/`businessReversalDeadlineAt`, frontend hiçbir
+    yerde "30 gün"/"48 saat" gibi bir sayı tekrar üretmiyor). "Tehlikeli Bölge" kartı — şifre
+    onaylı, iki adımlı (MyAppointmentsPage'deki "confirming" deseniyle aynı), BUSINESS_OWNER
+    için yeni `GET /api/users/me/deletion-impact` ucundan gelen "N randevunuz iptal edilecek"
+    önizlemesi.
+  - `BusinessPanelPage` + 7 sekme: askıdaki işletme banner'ı + mutasyon butonları (Onayla/
+    Reddet/Müşteri Gelmedi/Kaydet/Ekle/Sil/+Yeni...) disabled ya da tamamen gizli, okuma
+    sekmeleri (İstek Kutusu/Onaylananlar listesi) değişmeden çalışıyor.
+  - **Canlı testte bulunan gerçek bir regresyon, düzeltildi:** `InfoTab`/`LocationTab` da
+    `GET /api/businesses/{id}` ucunu kullanıyor — sahip istisnası eklenmeden önce askıdaki
+    işletmenin sahibi kendi panelinde "Yükleniyor..."da sonsuza dek takılı kalıyordu (404
+    sessizce hiçbir şey göstermiyordu). Bu yüzden o istisna eklendi (yukarıdaki madde).
+  - `curl`/`psql` ile: işletme askıya alınınca `/my`'de `suspended:true`, genel listede yok,
+    doğrudan `GET /businesses/{id}` 404 — üç katman da canlı kanıtlandı. DOM'dan `button.disabled`
+    okunarak panel butonlarının GERÇEKTEN devre dışı olduğu (sadece görünüşte değil) doğrulandı.
+    Test verisi (3 hesap, 1 işletme, randevular) psql ile temizlendi.
 
 - Log erişim kontrolü ve saklama süresi: kim (hangi rol) sunucu loglarına erişebilir, loglar
   ne kadar süre tutulur, rotasyon/silme politikası var mı. Faz 3.6'da `PiiMasker` ile
@@ -1392,7 +1441,9 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.7 Konteynerleştirme
 - [ ] 3.8a Sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama
 - [ ] 3.8b Yedekleme + restore provası + izleme (3.8a bitmeden başlanmaz)
-- [ ] 3.9 KVKK ve hukuki metinler — hesap silme akışı backend'i tamamlandı ve test edildi (eaf1c86); frontend + aydınlatma/VERBİS/sözleşme metinleri kaldı
+- [ ] 3.9 KVKK ve hukuki metinler — hesap silme akışı backend'i (eaf1c86) VE frontend'i
+      (847fe9a, canlı doğrulandı) tamamlandı; sadece aydınlatma metni/VERBİS/sözleşmenin
+      avukatla kesinleştirilmesi kaldı (taslak: `AYDINLATMA_METNI_TASLAGI.md`)
 - [ ] 3.10 E-posta doğrulama (3.4'e bağımlı, açık kayıt öncesi şart)
 - [ ] 3.11 Auth sertleştirme: httpOnly cookie + CSRF ⭐ (3.8'den sonra, beta onboarding'den önce)
 - [ ] 3.12 Randevuya katılım oranı — **ERTELENDİ** (beta ölçeğinde veri birikmez + `NO_SHOW`
