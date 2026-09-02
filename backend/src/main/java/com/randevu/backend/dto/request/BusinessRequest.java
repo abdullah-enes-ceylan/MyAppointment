@@ -58,4 +58,15 @@ public class BusinessRequest {
     @DecimalMin(value = "-180", message = "Boylam -180 ile 180 arasında olmalıdır.")
     @DecimalMax(value = "180", message = "Boylam -180 ile 180 arasında olmalıdır.")
     private Double longitude;
+
+    // İşletme başına "otomatik onay" anahtarı (bkz. Business.autoApprove).
+    // BİLEREK primitive boolean, Boolean değil: bu alanı düzenlemeyen bir
+    // ekran (ör. LocationTab) bile isteği gönderirken mevcut değeri geri
+    // yollamak ZORUNDA (applyToEntity TÜM alanları kopyalıyor) — primitive
+    // olması, istemcinin yanlışlıkla alanı hiç göndermeyip null bırakmasını
+    // (ve @NotNull olmadığı için sessizce geçmesini) imkansız kılıyor,
+    // eksik JSON alanı Jackson'da false'a düşer ama bu proje zaten HER
+    // çağıranın alanı açıkça doldurmasını gerektiriyor (frontend'de her
+    // iki sekme de business.autoApprove'u geri gönderiyor).
+    private boolean autoApprove;
 }

@@ -115,10 +115,16 @@ public class AppointmentService {
         // Eskiden controller'da atanıyordu (AppointmentController.createAppointment)
         // ama orası bu kararı verebilecek bilgiye sahip değil: controller elinde
         // sadece "new Business(); setId(...)" şeklinde bir stub tutuyor, gerçek
-        // Business'ı hiç yüklemiyor. Dolayısıyla işletmeye bağlı herhangi bir
-        // kuralı (ör. ileride eklenebilecek "otomatik onay" seçeneği) okuyamazdı.
-        // Gerçek Business burada, yukarıda yükleniyor -- karar da buraya ait.
-        newAppointment.setStatus(AppointmentStatus.PENDING);
+        // Business'ı hiç yüklemiyor. Gerçek Business burada, yukarıda yükleniyor
+        // -- karar da buraya ait.
+        //
+        // İşletme başına "otomatik onay" (bkz. CLAUDE.md karar tablosu): açıksa
+        // talep İstek Kutusu'nu (PENDING) hiç görmeden doğrudan APPROVED doğar.
+        // Bu SADECE başlangıç durumunu değiştiriyor -- çakışma/slot kontrolü
+        // (aşağıda), randevu ufku, açık talep sınırı gibi HİÇBİR kural atlanmıyor;
+        // "otomatik onay" sadece işletme sahibinin manuel onay adımını atlaması,
+        // güvenlik/tutarlılık kontrollerini değil.
+        newAppointment.setStatus(business.isAutoApprove() ? AppointmentStatus.APPROVED : AppointmentStatus.PENDING);
 
         // Zaman kaynagi DAIMA enjekte edilen Clock -- ciplak LocalDateTime.now()
         // yok (bkz. TimeConfig). Ayni "now" hem createdAt hem ufuk kontrolu

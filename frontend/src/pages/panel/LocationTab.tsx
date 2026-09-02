@@ -59,6 +59,10 @@ export default function LocationTab({ businessId, suspended = false }: { busines
         // grubu her konum kaydında sıfırlanırdı (ayrıca @NotNull olduğu
         // için istek 400 dönerdi).
         servedGender: business.servedGender,
+        // autoApprove de aynı sebeple geçmek ZORUNDA -- bu sekme onu
+        // düzenlemiyor ama gönderilmezse (primitive boolean) sessizce
+        // false'a döner (bkz. InfoTab'daki gerçek düzenleme ekranı).
+        autoApprove: business.autoApprove,
         latitude: pendingLocation[0],
         longitude: pendingLocation[1],
       };

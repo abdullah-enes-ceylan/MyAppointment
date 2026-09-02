@@ -36,5 +36,7 @@ public record BusinessDetailResponse(
         String coverPhotoCardUrl,
         String coverPhotoDetailUrl,
         // Faz 3.9 — bkz. BusinessResponse'daki aynı alanın açıklaması.
-        boolean suspended) {
+        boolean suspended,
+        // "Otomatik onay" anahtarı — bkz. BusinessResponse'daki aynı alanın açıklaması.
+        boolean autoApprove) {
 }

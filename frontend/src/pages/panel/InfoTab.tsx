@@ -20,6 +20,7 @@ interface InfoFormState {
   description: string;
   category: BusinessCategory;
   servedGender: ServedGender;
+  autoApprove: boolean;
 }
 
 interface ToastState {
@@ -142,6 +143,7 @@ export default function InfoTab({ businessId, suspended = false }: { businessId:
         description: res.data.description ?? "",
         category: res.data.category,
         servedGender: res.data.servedGender,
+        autoApprove: res.data.autoApprove,
       });
     } catch {
       setToast({ message: "İşletme bilgileri yüklenemedi.", type: "error" });
@@ -334,6 +336,28 @@ export default function InfoTab({ businessId, suspended = false }: { businessId:
             size boşuna randevu talebi göndermez. İkisine de hizmet veriyorsanız "Unisex".
           </p>
           {errors.servedGender && <p className="mt-1 text-xs text-red-400">{errors.servedGender}</p>}
+        </div>
+
+        {/* Otomatik onay — varsayılan kapalı (İstek Kutusu). Açılırsa yeni
+            talepler İstek Kutusu'nu hiç görmeden doğrudan onaylanmış olarak
+            doğar (bkz. AppointmentService.createAppointment). Çakışma/slot
+            kontrolü ve diğer tüm kurallar aynı şekilde çalışmaya devam eder --
+            sadece işletme sahibinin manuel onay adımı atlanır. */}
+        <div className="bg-bg-light border border-white/10 rounded-xl px-4 py-3">
+          <label className="flex items-center justify-between gap-4 cursor-pointer">
+            <span>
+              <span className="block text-sm font-medium text-white">Otomatik Onay</span>
+              <span className="block text-xs text-slate-400 mt-0.5">
+                Açıksa yeni randevu talepleri İstek Kutusu'na düşmeden doğrudan onaylanır.
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={form.autoApprove}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, autoApprove: e.target.checked })}
+              className="w-5 h-5 shrink-0 accent-emerald-500 cursor-pointer"
+            />
+          </label>
         </div>
 
         <button

@@ -52,6 +52,10 @@ export interface BusinessResponse {
   // asıl anlamı GET /api/businesses/my'de: sahip kendi işletmesini görmeye
   // devam ediyor ama panelin salt-okunur banner'ı bu alana bakıyor.
   suspended: boolean;
+  // İşletme başına "otomatik onay" anahtarı. Açıksa yeni randevu talepleri
+  // İstek Kutusu'na hiç düşmeden doğrudan APPROVED doğar (bkz.
+  // AppointmentService.createAppointment).
+  autoApprove: boolean;
 }
 
 // backend/src/main/java/com/randevu/backend/entity/Role.java
@@ -331,4 +335,10 @@ export interface BusinessRequest {
   servedGender: ServedGender;
   latitude?: number | null;
   longitude?: number | null;
+  // İşletme başına "otomatik onay" anahtarı. Backend'de primitive boolean --
+  // bu alanı DÜZENLEMEYEN bir ekran (LocationTab) bile isteği gönderirken
+  // mevcut değeri (business.autoApprove) geri yollamak ZORUNDA, aksi halde
+  // BusinessMapper.applyToEntity TÜM alanları kopyaladığı için sessizce
+  // false'a döner (bkz. InfoTab/LocationTab'daki kullanım).
+  autoApprove: boolean;
 }

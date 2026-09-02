@@ -36,7 +36,8 @@ public final class BusinessMapper {
                 business.getLongitude(),
                 business.isVerified(),
                 cardUrl(business, photoStorage),
-                business.getSuspendedAt() != null);
+                business.getSuspendedAt() != null,
+                business.isAutoApprove());
     }
 
     // business.getServiceItems() TÜM hizmetleri (soft-delete edilmişler
@@ -67,7 +68,8 @@ public final class BusinessMapper {
                 business.isVerified(),
                 cardUrl(business, photoStorage),
                 detailUrl(business, photoStorage),
-                business.getSuspendedAt() != null);
+                business.getSuspendedAt() != null,
+                business.isAutoApprove());
     }
 
     // Dosya adı türetme kuralı TEK bu iki metotta yaşıyor (bkz. plan madde 2:
@@ -105,6 +107,7 @@ public final class BusinessMapper {
                 .servedGender(request.getServedGender())
                 .latitude(request.getLatitude())
                 .longitude(request.getLongitude())
+                .autoApprove(request.isAutoApprove())
                 .build();
     }
 
@@ -123,5 +126,6 @@ public final class BusinessMapper {
         business.setServedGender(request.getServedGender());
         business.setLatitude(request.getLatitude());
         business.setLongitude(request.getLongitude());
+        business.setAutoApprove(request.isAutoApprove());
     }
 }

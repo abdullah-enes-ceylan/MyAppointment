@@ -39,5 +39,10 @@ public record BusinessResponse(
         // burada normalde hep false görünür — bu alan asıl işlevini işletme
         // sahibinin KENDİ panelinde (findByOwnerId, BİLEREK filtresiz) görür:
         // frontend panelin salt-okunur banner'ını bu alana bakarak gösterir.
-        boolean suspended) {
+        boolean suspended,
+        // İşletme başına "otomatik onay" anahtarı (bkz. Business.autoApprove).
+        // Hassas bir veri değil (PII değil), o yüzden herkese açık listelerde
+        // de görünmesinde sakınca yok -- asıl işlevi işletme sahibinin kendi
+        // panelinde mevcut durumu okuyup gösterebilmesi (InfoTab).
+        boolean autoApprove) {
 }

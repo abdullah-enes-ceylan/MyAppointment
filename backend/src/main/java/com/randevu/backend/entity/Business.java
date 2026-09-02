@@ -84,6 +84,19 @@ public class Business {
     @Column(name = "suspended_at")
     private LocalDateTime suspendedAt;
 
+    // Isletme basina "otomatik onay" anahtari (bkz. CLAUDE.md karar tablosu,
+    // "Randevu istek mi, direkt mi"). Varsayilan false: yeni randevu talepleri
+    // Istek Kutusu'na (PENDING) duser, isletme sahibi onaylamadan hicbir sey
+    // olmaz. true ise AppointmentService.createAppointment talebi dogrudan
+    // APPROVED olarak olusturur -- Istek Kutusu tamamen atlanir. @Builder.Default
+    // sart: verified/servedGender'daki AYNI Lombok tuzagi (builder() olmadan
+    // olusturulan nesnede false olurdu zaten, ama @Builder.Default olmadan
+    // builder() ile olusturulan nesnede JVM varsayilanina degil bu alana
+    // yazilan degere guvenilemez).
+    @Builder.Default
+    @Column(name = "auto_approve", nullable = false)
+    private boolean autoApprove = false;
+
     // Getter ve Setter metotları
     public BusinessCategory getCategory() {
         return category;
