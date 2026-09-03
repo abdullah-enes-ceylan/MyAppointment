@@ -2,7 +2,7 @@ package com.randevu.backend.controller;
 
 import com.randevu.backend.config.JwtUtil;
 import com.randevu.backend.config.RateLimitProperties;
-import com.randevu.backend.dto.LoginRequest;
+import com.randevu.backend.dto.request.LoginRequest;
 import com.randevu.backend.dto.response.LoginResponse;
 import com.randevu.backend.exception.RateLimitExceededException;
 import com.randevu.backend.ratelimit.RateLimitPort;
