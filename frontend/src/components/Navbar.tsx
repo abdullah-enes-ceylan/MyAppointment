@@ -1,5 +1,5 @@
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useState, useEffect, useRef, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import logoIcon from "../assets/logo-icon.png";
 
@@ -31,13 +31,6 @@ export function setLocationLabel(label: string | null) {
 
 export default function Navbar() {
   const navigate = useNavigate();
-  const location = useLocation();
-  // Arama sadece ana sayfada anlamli: HomePage disindaki her sayfa zaten
-  // arama sonucu gostermiyor, kutuyu orada tutmak sadece kafa karistirirdi.
-  // Konum butonu ise HER sayfada gorunur -- tiklaninca ana sayfaya donup
-  // Hero'nun "yakinimdakiler" akisini tetikliyor.
-  const isHomePage = location.pathname === "/";
-  const [searchParams] = useSearchParams();
   const { isAuthenticated, user, logout } = useAuth();
   // user?.role tipi string | null -- "?? ''" gerekcesi RoleProtectedRoute'daki
   // ile ayni (bkz. o dosya): null hicbir role stringiyle eslesmez, davranis
@@ -45,7 +38,6 @@ export default function Navbar() {
   const isOwner = OWNER_ROLES.includes(user?.role ?? "");
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [locationLabel, setLabel] = useState(() => localStorage.getItem(LOCATION_STORAGE_KEY));
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -54,14 +46,6 @@ export default function Navbar() {
     window.addEventListener(LOCATION_CHANGED_EVENT, sync);
     return () => window.removeEventListener(LOCATION_CHANGED_EVENT, sync);
   }, []);
-
-  // Arama kutusu URL'e yazılan q parametresiyle çalışıyor; kullanıcı geri
-  // tuşuna basıp aramadan çıkarsa kutu da temizlensin. Hero'daki arama
-  // kutusu da aynı q parametresini okuyup yazıyor -- ikisi URL üzerinden
-  // senkron kalıyor.
-  useEffect(() => {
-    setQuery(searchParams.get("q") ?? "");
-  }, [searchParams]);
 
   // Dropdown dışına tıklayınca kapansın.
   useEffect(() => {
@@ -81,27 +65,17 @@ export default function Navbar() {
     navigate("/");
   }
 
-  // Arama tamamen istemci tarafında (HomePage yüklü listeyi filtreliyor) --
-  // backend'de arama ucu yok. Sorgu URL'e yazılıyor ki hem HomePage okuyabilsin
-  // hem de arama sonucu paylaşılabilir/yer imine eklenebilir olsun.
-  function handleSearch(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    navigate(query.trim() ? `/?q=${encodeURIComponent(query.trim())}` : "/");
-  }
-
   const initial = (user?.email?.[0] ?? "?").toUpperCase();
 
   return (
     <nav className="sticky top-0 z-40 bg-brand">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        {/* Tek satır: logo — konum (kompakt, her sayfada) — arama (kompakt,
-            sadece ana sayfada) — Randevularım/Favorilerim — bildirim/profil.
-            Google AI Studio prototipiyle 2. karşılaştırma sonrası
-            (2026-08-30): konum+arama Navbar'a GERİ eklendi, Hero'daki büyük
-            arama/konum kutusu da AYRICA duruyor -- prototipin orijinal
-            Header+HeroSection ikilisiyle aynı, bilerek iki kez var (biri
-            kompakt/her an erişilebilir, biri Hero'nun görsel odak noktası).
-            "Ana Sayfa" linki kaldırıldı -- logo zaten aynı işi görüyor,
+        {/* Tek satır: logo — konum (kompakt, her sayfada) — Randevularım/
+            Favorilerim — bildirim/profil. Navbar'daki kompakt arama kutusu
+            (2026-08-30'da eklenmişti) kaldırıldı -- Hero'nun büyük arama
+            kutusuyla aynı işi görüyordu, iki tane olması sadece gereksiz
+            tekrardı (Hero'daki zaten HomePage'in tek arama kaynağı).
+            "Ana Sayfa" linki de yok -- logo zaten aynı işi görüyor,
             referans görselde de yoktu. */}
         <div className="flex items-center gap-2 sm:gap-3 h-14 sm:h-16">
           <Link to="/" className="flex items-center gap-2 shrink-0">
@@ -119,29 +93,11 @@ export default function Navbar() {
             </svg>
           </button>
 
-          {/* flex-1 sarmalayıcı HER sayfada var (sağ grubu doğru itmesi
-              için) -- içeriği (arama kutusu) sadece ana sayfada dolu. */}
-          <div className="flex-1 min-w-0">
-            {isHomePage && (
-              <form onSubmit={handleSearch} className="hidden sm:block max-w-md mx-auto">
-                <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="11" cy="11" r="7" />
-                      <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                    </svg>
-                  </span>
-                  <input
-                    type="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="İşletme, kuaför veya hizmet ara..."
-                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-white/10 border border-transparent focus:border-white/30 focus:bg-white text-sm text-white focus:text-slate-900 placeholder-white/50 focus:placeholder-slate-400 transition-all outline-none"
-                  />
-                </div>
-              </form>
-            )}
-          </div>
+          {/* Boş sarmalayıcı -- sağ grubu (Randevularım/Favorilerim/profil)
+              sağa iten flex-1 spacer. İçinde eskiden ana sayfaya özel bir
+              arama kutusu vardı (bkz. üstteki not), o kaldırılınca boş
+              kaldı ama spacer'ın kendisi hâlâ gerekli. */}
+          <div className="flex-1 min-w-0" />
 
           {isAuthenticated && (
             <div className="hidden sm:flex items-center gap-1 shrink-0">
