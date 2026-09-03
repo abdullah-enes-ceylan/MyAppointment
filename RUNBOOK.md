@@ -353,32 +353,35 @@ bir satır varsa Caddy o siteyi hiç açamaz, A9'da fark edilir).
 yaptıysan bu zaten doğru çıkar, ama `sudo` ile herhangi bir adım atladıysan sahiplik root'a
 kayabilir, kontrol et).
 
-## A6. `restart: unless-stopped` — kontrol et, eksikse ekle
+## A6. `restart: unless-stopped` — UYGULANDI, sunucuda sadece doğrula
 
-Şu an `docker-compose.yml`'de sadece `backend` ve `caddy`'de `restart: on-failure` var,
-`postgres`'te HİÇ yok — ve `on-failure` bir VPS reboot'undan sonra container'ları otomatik
-başlatmaz (sadece çöken bir container'ı yeniden dener). Deploy etmeden önce üç servise de
-`restart: unless-stopped` ekle (`docker-compose.yml`'de `restart:` satırlarını bul, değiştir).
+**(2026-09-03) Zaten yapıldı** — daha önce `backend`/`caddy`'de `restart: on-failure`,
+`postgres`'te HİÇ restart politikası yoktu (ve `on-failure` bir VPS reboot'undan sonra
+container'ları otomatik başlatmaz, sadece çöken bir container'ı yeniden dener). Üçü de
+`docker-compose.yml`'de `unless-stopped`'a çevrildi — bu, sunucu satın alınmadan/DNS
+kurulmadan önce yapılabilecek, koddan bağımsız bir adım olduğu için deploy'u beklemeden
+uygulandı.
 
-**Kanıt:** `grep -n "restart:" docker-compose.yml` → üç satır da `unless-stopped` olmalı.
-
-## A7. Rollback için image adlandırması
-
-`docker-compose.yml`'deki `backend` ve `caddy` servislerine sabit bir `image:` adı ekle (yoksa
-Docker, dizin adından otomatik bir isim üretir — sunucuda dizin adı farklıysa etiketleme
-tutarsız olur):
-
-```yaml
-  backend:
-    image: randevum-backend
-    build: ...
-  caddy:
-    image: randevum-caddy
-    build: ...
+**Kanıt — sunucuda tekrar doğrula** (kod sunucuya çekildikten sonra, deploy'dan önce):
+```bash
+grep -n "restart:" docker-compose.yml
 ```
+→ üç satır da `unless-stopped` olmalı. A9'daki reboot testi bunu fiilen kanıtlıyor.
 
-**Kanıt:** `grep -A 1 "^  backend:\|^  caddy:" docker-compose.yml` → her ikisinde de `image:`
-satırı görünmeli.
+## A7. Rollback için image adlandırması — UYGULANDI, sunucuda sadece doğrula
+
+**(2026-09-03) Zaten yapıldı** — `docker-compose.yml`'deki `backend` ve `caddy` servislerine
+sabit `image:` adı eklendi (`randevum-backend`, `randevum-caddy`). Bu isimler runbook'un son
+bölümündeki `docker tag randevum-backend:latest randevum-backend:$PREV_SHA` komutlarıyla
+BİREBİR eşleşiyor — sunucuda dizin adı `/opt/randevum`'dan farklı çıksa bile (Docker'ın
+otomatik ürettiği isim dizin adına bağlı olurdu) rollback komutları hep aynı, sabit isme
+karşı çalışır. Koddan bağımsız bir adım olduğu için deploy'u beklemeden uygulandı.
+
+**Kanıt — sunucuda tekrar doğrula:**
+```bash
+grep -n "^    image: randevum-" docker-compose.yml
+```
+→ iki satır dönmeli: `randevum-backend` ve `randevum-caddy`.
 
 ## A8. İlk deploy — Let's Encrypt STAGING CA ile
 

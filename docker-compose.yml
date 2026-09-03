@@ -36,8 +36,21 @@ services:
       interval: 3s
       timeout: 3s
       retries: 10
+    # unless-stopped, on-failure DEGIL: on-failure sadece COKEN bir
+    # container'i yeniden dener, DURDURULMUS bir daemon'dan sonra (ornegin
+    # VPS reboot'u) container'lari OTOMATIK baslatmaz. unless-stopped hem
+    # cokmeyi hem reboot'u kapsiyor, tek istisnasi elle "docker compose
+    # stop" ile durdurulmus olmasi (bkz. RUNBOOK.md A6, reboot testiyle
+    # dogrulaniyor).
+    restart: unless-stopped
 
   backend:
+    # Sabit isim -- yoksa Docker dizin adindan (compose project name) otomatik
+    # bir isim uretir, sunucuda dizin adi farkliysa (RUNBOOK.md A4: /opt/randevum
+    # varsayiliyor ama garanti degil) rollback'in bekledigi "randevum-backend"
+    # etiketiyle uyusmaz (bkz. RUNBOOK.md'nin son bolumundeki `docker tag`
+    # komutlari, aynen bu ismi kullaniyor).
+    image: randevum-backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -89,11 +102,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Healthcheck'in kendi bekleme penceresini asan nadir bir gecikme
-    # olursa diye ek guvence -- healthcheck zaten ana korumayi sagliyor.
-    restart: on-failure
+    # unless-stopped -- postgres servisindeki gerekce ayni sekilde gecerli
+    # (bkz. RUNBOOK.md A6): on-failure bir VPS reboot'undan sonra bu
+    # container'i otomatik baslatmazdi.
+    restart: unless-stopped
 
   caddy:
+    # Sabit isim -- ayni gerekce (bkz. backend servisindeki not).
+    image: randevum-caddy
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -141,7 +157,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    restart: on-failure
+    # unless-stopped -- ayni gerekce (bkz. RUNBOOK.md A6).
+    restart: unless-stopped
 
 volumes:
   postgres_data:

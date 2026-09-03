@@ -693,11 +693,13 @@ kanal seçilip gerçek bir adapter yazıldığında gündeme gelecek.
    Docker Desktop izin sorunuyla aynı sınıf bir yerel test kısıtı) — sadece ECMAScript
    spesifikasyonunun garantisine dayanıyor. Container'a ayrıca `TZ=Europe/Istanbul` eklemeye
    GEREK YOK (JVM zaten kendi ayarını okumuyor bile).
-10. **`restart: unless-stopped` — kontrol edildi, EKSİK.** Şu an sadece backend ve caddy'de
-    `restart: on-failure` var (postgres'te hiç yok), ve `on-failure` bir VPS reboot'undan sonra
-    container'ları OTOMATİK başlatmaz (sadece çöken bir container'ı yeniden dener, durdurulmuş
-    bir daemon'dan sonra değil). Üç servise de `restart: unless-stopped` eklenmesi gerekiyor —
-    reboot testi runbook'un doğrulama turunda var.
+10. **`restart: unless-stopped` — (2026-09-03) UYGULANDI.** Daha önce sadece backend ve
+    caddy'de `restart: on-failure` vardı (postgres'te hiç yok), ve `on-failure` bir VPS
+    reboot'undan sonra container'ları OTOMATİK başlatmıyordu (sadece çöken bir container'ı
+    yeniden dener, durdurulmuş bir daemon'dan sonra değil). Üç servise de `docker-compose.yml`'de
+    `restart: unless-stopped` eklendi — sunucu/DNS gerektirmeyen bir kod değişikliği olduğu için
+    deploy günü beklenmeden yapıldı. Reboot testiyle sunucuda ayrıca doğrulanacak
+    (RUNBOOK.md A6/A9).
 11. **Prod secret'ları sunucuda YENİDEN üretilecek.** Dev'deki JWT secret ve DB şifresi asla
     sunucuya taşınmıyor — `openssl rand -base64 32` (JWT) ve benzeri komutlarla sunucuda taze
     üretilip `.env`'e yazılıyor (`chmod 600`). Komutlar RUNBOOK.md'de.
