@@ -243,8 +243,6 @@ ama beta ölçeğinde veri birikmeyeceği ve `NO_SHOW`'un fiilen işaretlenemedi
 
 | Konu | Durum |
 |---|---|
-| `MyAppointmentsPage`: `EXPIRED` rozeti + `expiresAt` gösterimi | **Yapılmadı** — backend hazır, `expiresAt` API'den geliyor |
-| `InboxTab`'de son tarih gösterimi | **Yapılmadı** (canlı yenileme yapıldı) |
 | `favorites.created_at`'te `DEFAULT now()` | Kullanılmıyor ama şemada duruyor; ayrı küçük migration ile temizlenecek |
 | İl/ilçe ile manuel konum seçimi | Tasarım konuşuldu (`city`/`district` alanları), yazılmadı |
 | Faz 3.8 deploy (sunucu, DNS, ilk canlı deploy, yedekleme) | **Başlamadı** — plan/RUNBOOK.md hazır |
