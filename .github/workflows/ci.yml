@@ -1,0 +1,101 @@
+name: CI
+
+# main'e PR + main'e push + elle tetikleme. Her branch push'unda DEGIL --
+# Testcontainers'li ~150 backend testi hizli bir is degil, private repo'nun
+# aylik runner-dakika kotasi ara commit'lerde bosa harcanmasin diye.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Ayni PR'a arka arkaya push atinca eski kosu iptal olsun -- kota tasarrufunun
+# en ucuz yolu.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Varsayilan GITHUB_TOKEN'in yazma yetkisi olmasin (en az yetki ilkesi) --
+# bu workflow hicbir sekilde repoya yazmiyor, sadece okuyup calistiriyor.
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend testleri
+    runs-on: ubuntu-latest
+    # Testcontainers bir konteyner beklerken takilirsa varsayilan limit 6
+    # saat -- tek bir kosu butun aylik kotayi yakabilir, ust sinir sart.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Testleri calistir
+        working-directory: backend
+        run: ./mvnw --batch-mode test
+
+  frontend:
+    name: Frontend kontrolleri
+    runs-on: ubuntu-latest
+    # Backend'i beklemesi icin hicbir sebep yok -- ayri job, paralel calisir.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # npm install DEGIL -- lock dosyasina sadik kalsin, CI'da surpriz
+      # surum degisikligi olmasin.
+      - name: Bagimliliklari kur
+        working-directory: frontend
+        run: npm ci
+
+      - name: Tip kontrolu
+        working-directory: frontend
+        run: npm run typecheck
+
+      # --max-warnings=18: bugunku uyari sayisi (kontrol edildi) donduruluyor.
+      # Yeni uyari eklenirse kirmizi yanar, ama mevcut borcu temizlemeden
+      # CI'i geciktirmiyoruz. Zamanla bu sayi asagi cekilebilir.
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint -- --max-warnings=18
+
+      - name: Sinir ihlali kontrolu
+        working-directory: frontend
+        run: npm run check:boundaries
+
+      - name: Prod build
+        working-directory: frontend
+        run: npm run build
+
+  docker-build:
+    name: Docker build dogrulamasi
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Gercek deploy YAPMIYOR, sadece Dockerfile'larin hala derlendigini
+      # kanitliyor -- deploy stratejimiz "build sunucuda yapilacak" oldugu
+      # icin Dockerfile'in bozulmasi ancak deploy gununde fark edilirdi,
+      # bu is onu her push'ta erken yakalar. docker-compose.yml'deki
+      # ${VAR:?...} zorunlu degiskenleri sadece interpolasyon icin sahte
+      # degerlerle dolduruluyor -- build asamasinda gercek deger hic
+      # kullanilmiyor.
+      - name: Image'lari derle
+        env:
+          JWT_SECRET: ci-build-only-not-a-real-secret
+          POSTGRES_PASSWORD: ci-build-only-not-a-real-secret
+        run: docker compose build
