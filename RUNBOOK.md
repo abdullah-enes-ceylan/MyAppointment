@@ -248,6 +248,68 @@ ayrı ayrı ele alınmalı:
   arasında sürebilir, yayılmadan A8'deki (ACME) adıma geçme. Prod CA'nın saatte 5 hata limiti
   var, yayılmayı beklemeden denemek bu limiti gereksiz yere tüketir.
 
+## A3.1. Caddy syntax/smoke testi — DNS yayılmadan asla prod CA'ya istek gitmez
+
+**Kural, DNS henüz yayılmamışken (ya da hiç yayılmasını beklemeden, sadece syntax doğrulamak
+için) geçerli — sebep ne olursa olsun:** `frontend/Caddyfile`'ı hiçbir şekilde gerçek (production)
+Let's Encrypt CA'sına karşı test etme. Bunu bir kez, sırf syntax kontrolü için yaptık — DNS henüz
+`randevumweb.com`'a işaret etmiyorken container'ı `caddy run` ile gerçekten ayağa kaldırdık,
+Caddy production CA'ya karşı gerçek bir hesap açtı ve gerçek bir authorization denemesi yaptı
+(başarısız oldu, çünkü DNS yok — ama deneme yine de SAYILDI). O anki DNS durumu masumdu (domain
+gerçek trafiğe hiç açılmamıştı), ama **deploy gününde aynı hatayı yapmak masum olmaz**: A8'deki
+ilk gerçek deploy tam da "Caddyfile/DNS ayarı ilk seferde tutmayabilir, birkaç kez düzeltip
+tekrar deneyeceksin" varsayımıyla kurulu — her "düzelttim, bi' bakayım" denemesi prod CA'ya
+gidiyorsa, tam da o güne, tam da o ana ayrılmış olan saatte-5-hata bütçesini gerçek deploy'dan
+ÖNCE tüketebilirsin. Bütçe bittiğinde bir saat beklemekten başka çare yok — deploy günü bu
+kabul edilebilir bir kayıp değil.
+
+**İki güvenli yöntem — hangisini test ettiğine göre seç:**
+
+**(a) Salt syntax kontrolü (ağa hiç çıkmaz) — `auto_https off` ile TLS tamamen kapalı.**
+Herhangi bir CA'ya (staging dahil) hiç istek gitmesin istiyorsan, bunu kullan (bizzat
+çalıştırılıp doğrulandı):
+```bash
+cd frontend
+{ printf '{\n\tauto_https off\n}\n'; cat Caddyfile; } > ./Caddyfile.smoketest
+# Dosya frontend/ ICINDE olmali, /tmp DEGIL: bu makinede (Windows + Docker
+# Desktop) /tmp'yi mount etmeye calismak "mount src=/tmp/...: not a
+# directory" hatasiyla patladi -- Docker Desktop'in dosya paylasimi proje
+# dizinini icerir, /tmp'yi degil. Ayrica MSYS_NO_PATHCONV olmadan Git Bash
+# container-ici /etc/caddy/... yolunu host yoluna cevirip "no such file"
+# hatasi verir (bu oturumda ikisi de yasandi).
+MSYS_NO_PATHCONV=1 docker run --rm \
+  -v "$(pwd)/Caddyfile.smoketest:/etc/caddy/Caddyfile" \
+  -e DOMAIN=randevumweb.com -e WWW_DOMAIN=www.randevumweb.com \
+  caddy:2-alpine \
+  caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+rm -f ./Caddyfile.smoketest
+```
+**Beklenen:** `Valid configuration`, log satırında `automatic HTTPS is completely disabled`.
+Sıfır ağ isteği — parse/adapte etme dışında hiçbir şey yapmaz, bu yüzden DNS durumundan
+tamamen bağımsız, HER ZAMAN güvenli. (`Caddyfile.smoketest` `.gitignore`'da — yine de `rm`'i
+atlama.)
+
+**(b) Gerçek ACME akışını da görmek istiyorsan — staging CA'ya sabitle, ASLA prod'a değil.**
+A8'deki geçici bloğun aynısını, ayrı bir dosyada dene (bizzat çalıştırılıp doğrulandı):
+```bash
+cd frontend
+{ printf '{\n\tacme_ca https://acme-staging-v02.api.letsencrypt.org/directory\n}\n'; cat Caddyfile; } \
+  > ./Caddyfile.smoketest
+MSYS_NO_PATHCONV=1 docker run --rm -d --name caddy-smoke-test \
+  -v "$(pwd)/Caddyfile.smoketest:/etc/caddy/Caddyfile" \
+  -e DOMAIN=randevumweb.com -e WWW_DOMAIN=www.randevumweb.com \
+  caddy:2-alpine \
+  caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+sleep 3 && docker logs caddy-smoke-test
+docker stop caddy-smoke-test
+rm -f ./Caddyfile.smoketest
+```
+**Beklenen:** loglarda **sadece** `"ca":"https://acme-staging-v02.api.letsencrypt.org/directory"`
+— `acme-v02.api.letsencrypt.org` (`-staging` OLMADAN) görürsen DUR, yanlış dosyayı
+çalıştırıyorsun, container'ı hemen durdur. DNS henüz yoksa yine `no valid A records found`
+hatası görürsün, ama bu STAGING'e karşı olduğu için ZARARSIZ — saatte-5 sınırı olan gerçek
+bütçeyi hiç etkilemez.
+
 ## A4. Kod sunucuya
 
 ```bash
@@ -320,9 +382,22 @@ satırı görünmeli.
 
 ## A8. İlk deploy — Let's Encrypt STAGING CA ile
 
-Gerçek (production) CA'nın saatte 5 başarısız deneme sınırı var. Caddyfile/DNS ayarını ilk
-seferde doğru kurmayabilirsin — staging CA'da bu sınıra hiç takılmazsın, sertifika "güvensiz"
-görünür ama mekanizmanın çalıştığını kanıtlamak için yeterli.
+**Neden staging, prod değil — deploy günü tipik olarak TEK seferde tutmaz.** Gerçek
+(production) Let's Encrypt CA'nın hostname başına **saatte 5 başarısız doğrulama denemesi**
+sınırı var. İlk deploy'da bir şeyin ilk seferde tam doğru olmasını BEKLEME — DNS'in son bir
+kaydı eksik kalmış olabilir, `.env`'deki `DOMAIN`/`WWW_DOMAIN` yanlış yazılmış olabilir,
+`ufw`'de 80 portu unutulmuş olabilir; her biri bir authorization denemesini başarısız
+bitirir. Deploy günü doğal akış "dene → başarısız → düzelt → tekrar dene" döngüsü olduğu
+için, bu döngüyü PROD CA'ya karşı çalıştırırsan saatte-5 bütçesini tam da gerçek deploy'un
+ortasında tüketip bir saat kilitlenmiş olursun. Staging CA'nın kendi (çok daha gevşek) sınırı
+var, sertifika tarayıcıda "güvensiz" görünür ama mekanizmanın (ACME akışı, DNS, port 80/443
+erişimi) uçtan uca çalıştığını kanıtlamak için yeterli — asıl güvenilir sertifika A10'da,
+her şey doğrulandıktan SONRA, tek bir prod CA denemesiyle alınır.
+
+**Bu kural sadece A8'in kendisi için değil — DNS henüz yayılmamışken/Caddyfile'ı sadece
+syntax olarak denerken de aynı riski taşır (bkz. A3.1).** O ayrım orada: A8 gerçek deploy
+akışının bir parçası, A3.1 ise DNS'ten TAMAMEN bağımsız, herhangi bir zamanda yapılan bir
+syntax/smoke testi — ikisi de aynı gerekçeyle prod CA'dan kaçınıyor.
 
 `frontend/Caddyfile`'ın en başına, geçici olarak ekle:
 

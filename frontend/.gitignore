@@ -16,6 +16,10 @@ dist-ssr
 # ortama ozel deger tasir, git'e girmez. Sablon icin .env.example'a bak.
 .env
 
+# RUNBOOK.md A3.1'deki Caddy syntax/smoke testi bunu Caddyfile'in yaninda
+# uretiyor -- gercek Caddyfile degil, gecici bir kopya, git'e girmemeli.
+Caddyfile.smoketest
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
