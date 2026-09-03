@@ -29,7 +29,7 @@ jobs:
     # saat -- tek bir kosu butun aylik kotayi yakabilir, ust sinir sart.
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v4
         with:
@@ -47,7 +47,7 @@ jobs:
     # Backend'i beklemesi icin hicbir sebep yok -- ayri job, paralel calisir.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -85,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Gercek deploy YAPMIYOR, sadece Dockerfile'larin hala derlendigini
       # kanitliyor -- deploy stratejimiz "build sunucuda yapilacak" oldugu
