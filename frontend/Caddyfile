@@ -88,3 +88,19 @@
 		file_server
 	}
 }
+
+# www -> apex kalici yonlendirme. Beta'da adres sozlu tarif edilecek (bkz.
+# RUNBOOK.md A3) -- biri "www" yazarsa hata sayfasi degil, dogru siteyi
+# gormeli. www icin de DNS'te ayri bir kayit sart (A3), yoksa bu blok hic
+# eslesmez -- Caddy kendisi bir alt domain "icat" etmez. Caddy bu ikinci
+# site adresi icin de kendi sertifikasini otomatik yonetir, ayrica bir
+# ayar gerekmiyor.
+#
+# AYRI bir degisken (WWW_DOMAIN), "www.{$DOMAIN}" DEGIL: yerel/dev'de DOMAIN
+# varsayilani ":80" (duz HTTP portu) -- "www.:80" gecersiz bir site adresi
+# olur ve Caddy hic ayaga kalkmaz. WWW_DOMAIN'in kendi varsayilani (bkz.
+# docker-compose.yml) yerelde zararsiz, ayri bir porta denk gelecek sekilde
+# secildi.
+{$WWW_DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}

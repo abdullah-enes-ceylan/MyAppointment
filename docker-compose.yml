@@ -121,6 +121,11 @@ services:
       - NET_BIND_SERVICE
     environment:
       DOMAIN: ${DOMAIN:-:80}
+      # www -> apex yonlendirme sitesi (bkz. Caddyfile). Varsayilan ":8081"
+      # bilerek DOMAIN'in yerel varsayilani (":80") ile CAKISMAYAN, disaridan
+      # hic erisilmeyen bir port -- yerelde zararsiz bir no-op, prod'da
+      # gercek "www.<domain>" degeriyle ezilir (bkz. RUNBOOK.md A5).
+      WWW_DOMAIN: ${WWW_DOMAIN:-:8081}
     ports:
       - "80:80"
       - "443:443"

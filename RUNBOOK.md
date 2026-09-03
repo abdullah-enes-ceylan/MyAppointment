@@ -214,24 +214,39 @@ Bu adımdan sonra **çıkış yapıp tekrar SSH ile bağlan** (grup üyeliğinin
 
 ## A3. DNS — Caddy'nin ACME denemesinden ÖNCE
 
-Alan adı sağlayıcında (Cloudflare, vs.) bir **A kaydı** ekle: `randevum.com` (ya da gerçek
-domain'in) → sunucunun IP'si. Alt domain de istiyorsan (`www`) ayrı bir A kaydı.
+**⚠️ Domain Cloudflare'den alındıysa: kayıtları eklerken proxy KAPALI olacak (gri bulut,
+"DNS only" — turuncu "Proxied" DEĞİL).** Proxy açıkken Cloudflare kendi IP'sini döndürür ve
+gerçek trafiği kendi üzerinden geçirir — Let's Encrypt'in HTTP-01 doğrulaması (A8/A10)
+sunucuna DOĞRUDAN ulaşamadığı için **başarısız olur**, Caddy hiçbir zaman geçerli bir
+sertifika alamaz. Cloudflare DNS panelinde her kayıt satırının yanındaki bulut ikonu gri
+olmalı, turuncu değil.
+
+Alan adı sağlayıcında bir **A kaydı** ekle: `randevumweb.com` → sunucunun IP'si. Ayrıca
+**`www` için ayrı bir A kaydı** (aynı IP, ya da CNAME → `randevumweb.com`) — Caddyfile'da
+`www.` yönlendirmesi bu kayıt OLMADAN hiç eşleşmez, kimse `www` yazınca site açılmaz.
 
 **Kanıt — HARİCİ bir resolver'a sor, yerel/ISS resolver'ına DEĞİL.** Yerel resolver'ın kendi
 önbelleği "hazır" gibi görünüp asıl yayılma tamamlanmadan seni yanıltabilir. Kendi makinenden:
 ```bash
-dig @8.8.8.8 +short randevum.com
+dig @8.8.8.8 +short randevumweb.com
+dig @8.8.8.8 +short www.randevumweb.com
 ```
 Ayrıca **sunucunun kendisinden**, dış dünyanın onu nasıl gördüğünü kontrol et (sunucu kendi
 DNS'ini farklı görüyor olabilir):
 ```bash
-dig @8.8.8.8 +short randevum.com
+dig @8.8.8.8 +short randevumweb.com
 curl -s ifconfig.me
 ```
-İkisi de sunucunun gerçek IP'siyle eşleşmeli. Eşleşmiyorsa ya da eski bir IP dönüyorsa **bekle**
-— DNS yayılması dakikalar ile saatler arasında sürebilir, yayılmadan A8'deki (ACME) adıma geçme.
-Prod CA'nın saatte 5 hata limiti var, yayılmayı beklemeden denemek bu limiti gereksiz yere
-tüketir.
+**Beklenen: ikisi de sunucunun gerçek IP'si, BİREBİR aynı.** İki farklı yanlış çıktı türü var,
+ayrı ayrı ele alınmalı:
+- Sunucunun IP'sinden TAMAMEN farklı, ama **Cloudflare'in kendi IP aralığına ait** (`104.16.*`,
+  `104.17.*`, `172.64-71.*`, `162.158.*` gibi) bir sonuç dönüyorsa — bu "DNS henüz yayılmadı"
+  DEĞİL, **proxy hâlâ açık (turuncu bulut)** demektir. Cloudflare panelinden kaydı "DNS only"a
+  çevir, birkaç dakika bekleyip tekrar dene.
+- Sunucunun IP'sinden farklı ama Cloudflare aralığına da benzemeyen (ör. eski bir hosting IP'si)
+  bir sonuç dönüyorsa, bu gerçek DNS yayılma gecikmesi — **bekle**, dakikalar ile saatler
+  arasında sürebilir, yayılmadan A8'deki (ACME) adıma geçme. Prod CA'nın saatte 5 hata limiti
+  var, yayılmayı beklemeden denemek bu limiti gereksiz yere tüketir.
 
 ## A4. Kod sunucuya
 
@@ -255,18 +270,21 @@ JWT_SECRET=$(openssl rand -base64 32)
 POSTGRES_PASSWORD=$(openssl rand -base64 24)
 sed -i "s|BURAYA_OPENSSL_ILE_URETTIGIN_SECRET|$JWT_SECRET|" .env
 sed -i "s|BURAYA_GUCLU_BIR_PAROLA_YAZ|$POSTGRES_PASSWORD|" .env
-sed -i "s|BURAYA_GERCEK_DOMAIN_YAZ|randevum.com|g" .env
+sed -i "s|BURAYA_GERCEK_DOMAIN_YAZ|randevumweb.com|g" .env
 chmod 600 .env
 ```
 
-`CORS_ALLOWED_ORIGINS` değerini gerçek domain'inle (`https://randevum.com`) elle kontrol et —
-yukarıdaki `sed` `DOMAIN` ve `CORS_ALLOWED_ORIGINS`'i aynı anda değiştiriyor, ikisinin de doğru
+`CORS_ALLOWED_ORIGINS` değerini gerçek domain'inle (`https://randevumweb.com`) elle kontrol et —
+yukarıdaki `sed` `DOMAIN`, `WWW_DOMAIN` ve `CORS_ALLOWED_ORIGINS`'i AYNI ANDA değiştiriyor (hepsi
+`.env.example`'da aynı `BURAYA_GERCEK_DOMAIN_YAZ` yer tutucusunu paylaşıyor), üçünün de doğru
 göründüğünden emin ol.
 
 **Kanıt:**
 ```bash
 cat .env
 ```
+`WWW_DOMAIN=www.randevumweb.com` olmalı (`www.BURAYA_GERCEK_DOMAIN_YAZ` DEĞİL — sed'in kaçırdığı
+bir satır varsa Caddy o siteyi hiç açamaz, A9'da fark edilir).
 → `JWT_SECRET` ve `POSTGRES_PASSWORD` rastgele karakter dizileri olmalı, **dev'deki
 `xmcU1nTSzObx7z9SDUvOZxEGVSyE...` değeri OLMAMALI**. `ls -la .env` → izin `-rw-------` (600),
 **sahip `deploy` kullanıcısı olmalı** (root değil — `git clone`'u `deploy` kullanıcısıyla
@@ -389,24 +407,33 @@ Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan ma
   ```
   **Beklenen:** `uid=1000(appuser) gid=1000(appgroup)`.
 
-- [ ] **`[SUNUCUDA DOĞRULANACAK]` HTTPS sertifikası + HSTS.** Tarayıcıda `https://randevum.com`
+- [ ] **`[SUNUCUDA DOĞRULANACAK]` HTTPS sertifikası + HSTS.** Tarayıcıda `https://randevumweb.com`
   aç. Staging CA kullandıysan tarayıcı "güvenli değil" uyarısı verecek — BU AŞAMADA BEKLENEN,
   devam et (A10'da prod CA'ya geçilecek). Sertifikanın gerçekten sunulduğunu doğrula:
   ```bash
-  curl -kI https://randevum.com
+  curl -kI https://randevumweb.com
   ```
   **Beklenen:** `Strict-Transport-Security: max-age=31536000; includeSubDomains` header'ı
   yanıtta olmalı (`-k`, staging'in güvenilmeyen sertifikasını görmezden gelmek için).
 
-- [ ] **`[SUNUCUDA DOĞRULANACAK]` Deep-link F5.** Tarayıcıda doğrudan `https://randevum.com/randevularim`
+- [ ] **`[SUNUCUDA DOĞRULANACAK]` `www` yönlendirmesi.**
+  ```bash
+  curl -kI https://www.randevumweb.com
+  ```
+  **Beklenen:** `HTTP/2 301` (veya `308`) + `location: https://randevumweb.com/` header'ı —
+  hata sayfası değil, apex'e temiz bir yönlendirme. `www` için de bir sertifika sunulduğundan
+  emin ol (`-k` staging sertifikasını görmezden gelmek için, prod CA'ya geçtikten sonra `-k`
+  olmadan da dene).
+
+- [ ] **`[SUNUCUDA DOĞRULANACAK]` Deep-link F5.** Tarayıcıda doğrudan `https://randevumweb.com/randevularim`
   adresine git (linke tıklamadan, adres çubuğuna yazıp Enter), sayfa açılınca F5 bas.
   **Beklenen:** `404` değil, sayfa yeniden yükleniyor ve React uygulaması render oluyor.
 
 - [ ] **Actuator kapalı uçlar.**
   ```bash
-  curl -k -o /dev/null -w "%{http_code}\n" https://randevum.com/actuator
-  curl -k -o /dev/null -w "%{http_code}\n" https://randevum.com/actuator/env
-  curl -k -o /dev/null -w "%{http_code}\n" https://randevum.com/actuator/health
+  curl -k -o /dev/null -w "%{http_code}\n" https://randevumweb.com/actuator
+  curl -k -o /dev/null -w "%{http_code}\n" https://randevumweb.com/actuator/env
+  curl -k -o /dev/null -w "%{http_code}\n" https://randevumweb.com/actuator/health
   ```
   **Beklenen:** İlk ikisi `401`, üçüncüsü `200`.
 
@@ -457,13 +484,13 @@ docker compose up -d caddy
 **Kanıt — sertifikanın GERÇEKTEN production CA'dan geldiğini doğrula, sadece "kilit yeşil mi"
 diye bakma:**
 ```bash
-echo | openssl s_client -connect randevum.com:443 -servername randevum.com 2>/dev/null \
+echo | openssl s_client -connect randevumweb.com:443 -servername randevumweb.com 2>/dev/null \
   | openssl x509 -noout -issuer
 ```
 **Beklenen:** `issuer=C=US, O=Let's Encrypt, CN=R...` (gerçek bir intermediate adı, ör. `R10`,
 `R11`, `E5` vb.) — **`STAGING` veya `Fake LE Intermediate` GEÇMEMELİ**, geçiyorsa hâlâ staging
 sertifikası servis ediliyor demektir, `docker compose logs caddy` ile ACME denemesinin gerçekten
-tetiklendiğini kontrol et. Tarayıcıda da `https://randevum.com` — "güvenli değil" uyarısı YOK,
+tetiklendiğini kontrol et. Tarayıcıda da `https://randevumweb.com` — "güvenli değil" uyarısı YOK,
 kilit simgesi normal.
 
 ## A11. Karar: `/actuator/health` dışarıda kalsın mı? — ✅ ONAYLANDI, açık kalıyor
@@ -483,7 +510,7 @@ döngü). Bu yüzden uptime monitor'ü **şimdi, burada** kur — yedekleme ve d
 (Bölüm B'nin geri kalanı) hâlâ 3.8b'de.
 
 - [ ] UptimeRobot ya da healthchecks.io'da ücretsiz bir hesap aç.
-- [ ] Yeni bir HTTP(S) monitörü `https://randevum.com/actuator/health` adresine, 5 dakikalık
+- [ ] Yeni bir HTTP(S) monitörü `https://randevumweb.com/actuator/health` adresine, 5 dakikalık
   kontrol aralığıyla kur.
 - [ ] Bildirim e-postanı ekle.
 

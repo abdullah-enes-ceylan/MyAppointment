@@ -623,7 +623,25 @@ kanal seçilip gerçek bir adapter yazıldığında gündeme gelecek.
    parola auth kapalı, `ufw` ile sadece 22/80/443 açık, `fail2ban`, `unattended-upgrades`.
    Runbook'un **ilk** bölümü.
 5. **Domain + DNS, ACME denemesinden önce.** A kaydı eklenip yayılması beklenmeden Caddy'nin
-   gerçek sertifika denemesine geçilmez.
+   gerçek sertifika denemesine geçilmez. `www` için de ayrı bir A kaydı + Caddyfile'da apex'e
+   yönlendiren ikinci bir site bloğu var (beta'da işletmelere adres sözlü tarif edileceği için
+   `www` yazan biri hata sayfası görmemeli) — detay ve doğrulama RUNBOOK.md A3/A9'da.
+   **(2026-09-03) Domain Cloudflare'den alındı — üç karar:**
+   - **Beta boyunca Cloudflare proxy (turuncu bulut) KAPALI kalacak, DNS-only.** Hem ACME
+     doğrulaması için ZORUNLU (proxy açıkken Let's Encrypt sunucuya doğrudan ulaşamaz, HTTP-01
+     hep başarısız olur) HEM de bilinçli bir devam kararı: proxy açık olsaydı gerçek istemci
+     IP'si `X-Forwarded-For` yerine `CF-Connecting-IP` header'ında gelirdi — `InMemoryRateLimiter`
+     ve RUNBOOK'un A9'daki "gerçek istemci IP'si görülüyor mu" doğrulama adımı bunu okumuyor,
+     yani rate limiter sessizce her isteği TEK bir IP (Cloudflare'in kendi çıkış IP'si) sanıp
+     ya herkesi tek kişi gibi limitler ya da limiti hiç tetiklemez. Beta ölçeğinde (tek sunucu,
+     DDoS/CDN ihtiyacı yok) proxy'nin gerçek bir faydası da yok, bu yüzden basitçe kapalı tutuluyor.
+   - **İleride proxy açılırsa** (trafik/DDoS gerekçesiyle), Cloudflare SSL/TLS modu **Full
+     (strict)** olmalı — "Flexible" tarayıcı↔Cloudflare arası HTTPS'i Cloudflare↔sunucu arasında
+     düz HTTP'ye çevirir, yani Caddy'nin kendi HTTPS'i (ve HSTS'in vaat ettiği uçtan uca şifreleme)
+     boşa gider. O noktada rate limiter'ın `CF-Connecting-IP`'yi okuyacak şekilde güncellenmesi
+     de ayrı bir iş olur.
+   - **DNS yayılma kontrolünde (A3) Cloudflare IP'si dönmesi** "henüz yayılmadı" değil "proxy
+     hâlâ açık" anlamına gelir — ikisi karıştırılmasın, RUNBOOK'ta ayrı ayrı ele alındı.
 6. **Build stratejisi ve sunucu specs.** CI/registry altyapısı yok (kurmak bu ölçekte orantısız
    karmaşıklık) — build **sunucuda**, `docker compose build` ile yapılacak. Bu makinede ölçülen
    GERÇEK çalışma-zamanı bellek kullanımı (idle, yeni açılmış, eski container'lar rebuild
@@ -1331,7 +1349,7 @@ mi kesilsin (yani hangisi önce gelirse) — karar senin.
 |---|---|---|---|
 | Sunucu | **Hetzner CX22** (2 vCPU / 4 GB / 40 GB) | ~4,5 €/ay | Bu paranın karşılığında en iyi donanım. Tam kontrol, cold start yok. Alternatif: **Oracle Cloud Always Free** (4 ARM vCPU / 24 GB, gerçekten ücretsiz) — ama kapasite bulmak ve hesap onayı sancılı olabilir. |
 | Veritabanı | Aynı sunucuda **Docker Postgres** | 0 | Beta ölçeğinde (5-10 işletme) fazlasıyla yeterli. Yönetilen alternatif Neon/Supabase ücretsiz kotası, ama boşta uyur ve ilk istek yavaşlar. |
-| Frontend | **Cloudflare Pages / Vercel** ücretsiz | 0 | Statik build, global CDN, otomatik HTTPS. |
+| Frontend | Aynı sunucuda, **Caddy**'nin statik servis ettiği build | 0 | **(2026-09-01 güncellemesi)** Bu satır Cloudflare Pages/Vercel öneriyordu — o karardan SONRA aynı origin mimarisine geçildi (bkz. CLAUDE.md "Frontend/backend origin mimarisi"), RUNBOOK.md zaten buna göre yazıldı (`frontend/Caddyfile`). Ayrı bir statik hosting platformu YOK. |
 | HTTPS | **Caddy** (otomatik Let's Encrypt) | 0 | Nginx'ten farklı olarak sertifika yenilemesi tamamen otomatik, konfigürasyon 5 satır. |
 | Yedek deposu | **Cloudflare R2** (10 GB ücretsiz) veya Backblaze B2 | 0 | Yedeği aynı sunucuda tutmak yedek değildir. |
 | Alan adı | `.com` veya `.com.tr` | ~150-400 ₺/yıl | |
