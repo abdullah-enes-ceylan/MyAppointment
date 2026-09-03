@@ -22,14 +22,20 @@ import com.randevu.backend.service.AccountDeletionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -45,8 +51,35 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // desen (token'ı login akışından değil doğrudan JwtUtil'den üretiyoruz,
 // tek amacımız bu alanların yanıtta olup olmadığı, login akışı ayrı test
 // edilmiş zaten).
+//
+// Sabit Clock (2026-09-04) -- gercek saatle KARARSIZ (flaky) cikan bir hata
+// bulundu: deadline alanlarini karsilastiran testler ("expectedIdentityDeadline
+// .toString()" ile JSON'daki degeri kiyasliyor) gercek `now()`'in nanosaniyesi
+// TESADUFEN sifirla bitince (yaklasik her 10 calistirmadan birinde) patliyordu.
+// Sebep yaris kosulu DEGIL, iki AYRI bicimlendiricinin (Java'nin
+// LocalDateTime.toString()'i saniye/kesir grubunu TAMAMEN ATLIYOR sifirsa,
+// Jackson'in ISO serilestiricisi ise saniyeyi HER ZAMAN basip sadece kesri
+// atliyor) AYNI ani bazen farkli yazdirmasi. Nanosaniye != 0 iken 3/6/9 hane
+// gruplamasi farkli davranip son hanesi tesaduf sifir cikinca patliyordu
+// (ilk deneme buydu); saniye+nanosaniye TAM sifirken de (ikinci deneme,
+// 10:00:00 gibi "yuvarlak" bir saat secince) bu sefer HER ZAMAN patliyordu,
+// cunku LocalDateTime.toString() saniyeyi de hic basmiyor ama Jackson
+// basiyor. Guvenli tek secim: saniyesi SIFIR OLMAYAN, nanosaniyesi SIFIR
+// bir an -- boylece hicbir bicimlendirici hicbir grubu (ne saniye ne kesir)
+// atlamiyor, ikisi de birebir ayni string'i basiyor. AccountDeletionIntegrationTest'teki
+// @Primary Clock deseniyle ayni yaklasim, sadece "hangi anin guvenli
+// oldugu" bu iki basarisiz denemeyle netlesti.
 @AutoConfigureMockMvc
 class AccountDeletionResponseFieldsTest extends AbstractIntegrationTest {
+
+    @TestConfiguration
+    static class FixedClockConfig {
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(Instant.parse("2026-09-01T07:00:05Z"), ZoneId.of("Europe/Istanbul"));
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
