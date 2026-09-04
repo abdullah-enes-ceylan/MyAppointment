@@ -160,6 +160,35 @@ Access Key ID/Secret Access Key hiçbir dosyaya (git'e giren hiçbir yere) yazı
 sadece geliştiricinin kendi güvenli notunda; koda bağlanınca `application-dev.properties`
 (gitignore'da) içine girecek.
 
+**(2026-09-05) Custom domain `cdn.randevumweb.com` R2 panelinden bağlandı, Minimum TLS
+1.3'e yükseltildi** (varsayılan 1.0'dı — modern hiçbir istemci zaten 1.0/1.1 kullanmıyor,
+yükseltmenin maliyeti yok, gereksiz eski bir yüzeyi kapatıyor). DNS canlı doğrulandı:
+`cdn.randevumweb.com` gerçekten Cloudflare edge IP aralığına (`172.67.*`, `104.21.*`)
+çözülüyor; apex (`randevumweb.com`) henüz hiç A kaydı taşımıyor (sunucu kurulmadı,
+3.8a bekliyor) — yani `cdn`'in proxied olması, ileride apex/`www`'nin DNS-only kalması
+gereken kararla (bkz. Cloudflare proxy notu) hiç ÇAKIŞMIYOR, ayrı bir subdomain.
+**(2026-09-05) R2'ye tam uçtan uca doğrulama YAPILDI, ROADMAP 3.15 tamamlandı.** Gerçek
+işletmeye (`randevum-storage` bucket, `cdn.randevumweb.com`) panelden fotoğraf yüklendi:
+`coverPhotoCardUrl` gerçek bir CDN URL'i döndü, o URL tarayıcıdan/curl'den gerçekten
+görüntü döndürdü (`Content-Type: image/jpeg`, `Cache-Control: public, max-age=31536000,
+immutable` — beklenen), ikinci yüklemede eski nesnenin R2'den gerçekten silindiği (eski
+URL 404), `DELETE /photo` sonrası hem card hem detail dosyasının silindiği ve DB'de
+`coverPhotoCardUrl`'in `null`'a döndüğü, `GET /api/business-photos/**`'ün `r2` modunda
+gerçek bir key ile bile hep 404 döndüğü (uç hiç yayınlanmıyor) — hepsi tek tek doğrulandı.
+Test verisi temizlendi, DB'de iz kalmadı.
+
+**Tuzak — CDN önbelleği "silindi" ile "artık dönmüyor"u AYNI ANDA garanti etmez.** Bir
+fotoğraf silindikten hemen sonra AYNI URL'e (cache-busting OLMADAN) istek atılırsa, eğer o
+URL daha önce en az bir kez o CDN edge'inde cache'lenmişse, edge R2'ye hiç sormadan eski
+(silinmiş) içeriği `200` ile dönmeye devam edebilir — `immutable, max-age=31536000`
+dediğimiz için bu TAM OLARAK istenen davranış, hata değil. Gerçek silinme R2 tarafında
+zaten olmuş oluyor; sadece o BELİRLİ URL'in edge cache'i kendi ömrünü doldurana kadar
+sürebilir. Uygulama etkilenmiyor çünkü DB hiçbir zaman silinmiş bir URL'i tekrar
+referanslamıyor (her yükleme yeni UUID). Doğrulama sırasında gerçek silinmeyi kanıtlamak
+için URL'e cache-busting sorgu parametresi (`?_t=...`) eklenip CDN'in origin'e (R2'ye)
+tekrar sormaya zorlanması gerekti — bir sonraki oturum aynı şeyi test ederken bu yöntemi
+hatırlamalı, aksi halde "silme çalışmıyor" diye yanlış bir sonuca varılabilir.
+
 ---
 
 ## Bilinen Sorunlar (Çözülmemiş)
