@@ -4,7 +4,6 @@ import com.randevu.backend.config.BusinessPhotoProperties;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,8 +21,14 @@ import java.nio.file.Paths;
 // Kalici disk riski BILEREK kabul edildi (bkz. CLAUDE.md karar tablosu):
 // deploy ortaminin dosya sistemi kalici olmayan bir platform olursa tum
 // fotograflar sessizce kaybolur. BusinessPhotoStorage arayuzu sayesinde bu,
-// ileride tek bir implementasyon degisikligiyle (S3/R2) cozulebilir.
-@Component
+// ileride tek bir implementasyon degisikligiyle (S3/R2) cozulebilir -- bkz.
+// R2BusinessPhotoStorage, NOTLAR.md "R2'ye tasima" karari.
+//
+// BILEREK @Component DEGIL: R2BusinessPhotoStorage ile birlikte iki
+// BusinessPhotoStorage implementasyonu var, hangisinin bean olacagini
+// BusinessPhotoStorageConfig (storage-provider'a gore @ConditionalOnProperty)
+// seciyor. Ikisi de @Component olsaydi Spring NoUniqueBeanDefinitionException
+// atardi.
 public class LocalDiskBusinessPhotoStorage implements BusinessPhotoStorage {
 
     private static final Logger log = LoggerFactory.getLogger(LocalDiskBusinessPhotoStorage.class);

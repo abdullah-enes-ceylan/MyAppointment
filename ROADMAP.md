@@ -1428,14 +1428,19 @@ diye ayrı bir iş hiç doğmuyor.
   (hesap/bucket/kimlik bilgisi config'i, `secretAccessKey` hiçbir `toString`'e girmiyor),
   `pom.xml`'e AWS SDK v2 `s3` + `url-connection-client` (2.46.7, senkron/hafif istemci).
   Geçersiz `storage-provider` değerinde açılışın gerçekten patladığı canlı doğrulandı.
-- **R2:** `BusinessPhotoStorageConfig` — iki implementasyonu (`local`/`r2`) `@ConditionalOnProperty`'li
-  `@Bean` metotlarına taşıma (ikisi de artık `@Component` OLMAYACAK, yoksa Spring iki bean
-  bulup patlar). `BusinessPhotoController` de aynı koşula bağlanacak — `r2` modunda bu uç hiç
-  yayınlanmayacak (hotlink/bandwidth/cache-atlama riskine karşı).
-- **R3:** `R2BusinessPhotoStorage` (store/delete/read/urlFor), `Region.of("auto")`,
-  `publicBaseUrl` sonundaki `/` normalize edilecek, makul bir `apiCallTimeout`, `Cache-Control`
-  upload anında object metadata olarak set edilecek. Mock `S3Client` testi YETERLİ KANIT
-  DEĞİL — gerçek doğrulama R5'te.
+- **R2+R3 — tamamlandı (tek PR'da birleştirildi).** Ayrı bir "önce iskelet, sonra doldur"
+  PR'ı yarım-implementasyon (bkz. CLAUDE.md "no half-finished implementations") anlamına
+  gelirdi, bu yüzden bean seçimiyle gerçek implementasyon birlikte yapıldı.
+  `BusinessPhotoStorageConfig` — iki implementasyon (`local`/`r2`) artık `@Component` DEĞİL,
+  `@ConditionalOnProperty`'li `@Bean` metotlarından seçiliyor. `BusinessPhotoController` aynı
+  koşula bağlandı — `r2` modunda bu uç hiç yayınlanmıyor (hotlink/bandwidth/cache-atlama
+  riskine karşı). `R2BusinessPhotoStorage`: `Region.of("auto")`, `forcePathStyle(true)`,
+  `publicBaseUrl` sonundaki `/` normalize ediliyor, 15sn `apiCallTimeout`, `Cache-Control`
+  upload anında object metadata olarak set ediliyor, eksik R2 ayarıyla constructor'da açık
+  `IllegalStateException` (hangi anahtarların eksik olduğunu söyleyen). Birim test (mock
+  `S3Client` DEĞİL — S3Client'in kendisi tembel/ağsız kurulduğu için) sadece deterministik
+  kısmı (validasyon + URL birleştirme) kanıtlıyor; store/delete/read'in R2'ye karşı GERÇEKTEN
+  doğru çalıştığı bu testle KANITLANMADI — o kanıt R5'te.
 - **R4 — ERTELENDİ, ayrı iş kalemi** (bkz. NOTLAR.md "WebP'ye geçiş" notu — native kütüphane
   gerektiriyor, önce fizibilite testi lazım).
 - **R5 (altyapı):** R2 bucket (`randevum-storage`) ve API token oluşturuldu (bkz. NOTLAR.md
@@ -1583,7 +1588,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [ ] 3.13 Randevu özel not alanı — kapsam yazıldı, kod yazılmadı
 - [ ] 3.14 "Bugün En Erken" rozeti: toplu (N+1'siz) hesaplama — kapsam yazıldı, kod yazılmadı
 - [ ] 3.15 İşletme kapak fotoğrafı: Cloudflare R2'ye taşıma (3.8'den ÖNCE bitirilecek) —
-      R1 tamamlandı, R2-R5 devam ediyor
+      R1-R3 tamamlandı (kod), R5 (gerçek staging bucket doğrulaması + custom domain) kaldı
 
 ---
 
