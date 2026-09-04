@@ -1443,13 +1443,13 @@ diye ayrı bir iş hiç doğmuyor.
   doğru çalıştığı bu testle KANITLANMADI — o kanıt R5'te.
 - **R4 — ERTELENDİ, ayrı iş kalemi** (bkz. NOTLAR.md "WebP'ye geçiş" notu — native kütüphane
   gerektiriyor, önce fizibilite testi lazım).
-- **R5 (altyapı):** R2 bucket (`randevum-storage`) ve API token oluşturuldu (bkz. NOTLAR.md
-  "Ortam/Altyapı"). Kalan: custom domain (`cdn.randevumweb.com`) R2 panelinden bağlama,
-  `docker-compose.yml`/`application-prod.properties`'e fail-fast R2 env var'ları, RUNBOOK.md
-  güncellemesi. Doğrulama: staging bucket'a gerçek yükleme + CDN'den görüntüleme, `curl -I` ile
-  `Cache-Control` header'ının doğru olduğu, DNS değişikliğinden sonra apex/`www` için Let's
-  Encrypt yenilemesinin hâlâ çalıştığı, `GET /api/business-photos/**`'ün `r2` modunda hiç
-  yayınlanmadığı (404).
+- **R5 (altyapı) — tamamlandı.** R2 bucket (`randevum-storage`) + API token, custom domain
+  (`cdn.randevumweb.com`, Minimum TLS 1.3) R2 panelinden bağlandı, `docker-compose.yml`/
+  `application-prod.properties`'e fail-fast R2 env var'ları eklendi, RUNBOOK.md'ye A3.2
+  bölümü eklendi. **Gerçek uçtan uca doğrulama YAPILDI** (2026-09-05): staging bucket'a
+  gerçek yükleme + CDN'den görüntüleme, `Cache-Control` header'ının doğru olduğu, eski
+  nesnenin silme/güncelleme akışında R2'den gerçekten kaybolduğu, `GET /api/business-photos/**`'ün
+  `r2` modunda hiç yayınlanmadığı (404) — hepsi kanıtlandı, bkz. NOTLAR.md.
 
 **Ek, ayrı bir görev olarak:** R2'deki nesnelerin versiyonlama/lifecycle (ör. yanlışlıkla
 silinen bir fotoğrafı geri alma penceresi) desteği Cloudflare dokümanından değerlendirilip
@@ -1587,8 +1587,9 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
       fiilen işaretlenemiyor, bkz. gerekçe); analiz/plan saklandı, kod yazılmadı
 - [ ] 3.13 Randevu özel not alanı — kapsam yazıldı, kod yazılmadı
 - [ ] 3.14 "Bugün En Erken" rozeti: toplu (N+1'siz) hesaplama — kapsam yazıldı, kod yazılmadı
-- [ ] 3.15 İşletme kapak fotoğrafı: Cloudflare R2'ye taşıma (3.8'den ÖNCE bitirilecek) —
-      R1-R3 tamamlandı (kod), R5 (gerçek staging bucket doğrulaması + custom domain) kaldı
+- [x] 3.15 İşletme kapak fotoğrafı: Cloudflare R2'ye taşıma — 2c4cdec (R1), 1711fa3 (R2+R3),
+      f3272a6 (R5) + custom domain bağlama ve gerçek uçtan uca doğrulama (2026-09-05,
+      canlı kanıtlandı, bkz. NOTLAR.md). R4 (WebP) BİLEREK ayrı, ertelendi.
 
 ---
 
