@@ -1416,6 +1416,43 @@ bir alt adımı olarak değerlendirilmeli.
 
 ---
 
+### 3.15 — İşletme kapak fotoğrafı depolamasını Cloudflare R2'ye taşıma `[BE]` `[SEN]`
+
+**(2026-09-04)** Kararların tam gerekçesi NOTLAR.md'de ("İşletme kapak fotoğrafı depolaması
+yerel diskten Cloudflare R2'ye taşınıyor" maddesi) — burası sadece iş kalemi/durum takibi.
+3.8 (deploy) öncesinde bitirilecek: henüz gerçek prod verisi yok, şimdi yapılırsa veri göçü
+diye ayrı bir iş hiç doğmuyor.
+
+**PR bölümlemesi (R1→R2→R3 sıralı zorunlu, R4 bağımsız/ertelendi, R5 altyapı):**
+- **R1 — tamamlandı.** `BusinessPhotoStorageProvider` enum (`LOCAL`/`R2`), `R2StorageProperties`
+  (hesap/bucket/kimlik bilgisi config'i, `secretAccessKey` hiçbir `toString`'e girmiyor),
+  `pom.xml`'e AWS SDK v2 `s3` + `url-connection-client` (2.46.7, senkron/hafif istemci).
+  Geçersiz `storage-provider` değerinde açılışın gerçekten patladığı canlı doğrulandı.
+- **R2:** `BusinessPhotoStorageConfig` — iki implementasyonu (`local`/`r2`) `@ConditionalOnProperty`'li
+  `@Bean` metotlarına taşıma (ikisi de artık `@Component` OLMAYACAK, yoksa Spring iki bean
+  bulup patlar). `BusinessPhotoController` de aynı koşula bağlanacak — `r2` modunda bu uç hiç
+  yayınlanmayacak (hotlink/bandwidth/cache-atlama riskine karşı).
+- **R3:** `R2BusinessPhotoStorage` (store/delete/read/urlFor), `Region.of("auto")`,
+  `publicBaseUrl` sonundaki `/` normalize edilecek, makul bir `apiCallTimeout`, `Cache-Control`
+  upload anında object metadata olarak set edilecek. Mock `S3Client` testi YETERLİ KANIT
+  DEĞİL — gerçek doğrulama R5'te.
+- **R4 — ERTELENDİ, ayrı iş kalemi** (bkz. NOTLAR.md "WebP'ye geçiş" notu — native kütüphane
+  gerektiriyor, önce fizibilite testi lazım).
+- **R5 (altyapı):** R2 bucket (`randevum-storage`) ve API token oluşturuldu (bkz. NOTLAR.md
+  "Ortam/Altyapı"). Kalan: custom domain (`cdn.randevumweb.com`) R2 panelinden bağlama,
+  `docker-compose.yml`/`application-prod.properties`'e fail-fast R2 env var'ları, RUNBOOK.md
+  güncellemesi. Doğrulama: staging bucket'a gerçek yükleme + CDN'den görüntüleme, `curl -I` ile
+  `Cache-Control` header'ının doğru olduğu, DNS değişikliğinden sonra apex/`www` için Let's
+  Encrypt yenilemesinin hâlâ çalıştığı, `GET /api/business-photos/**`'ün `r2` modunda hiç
+  yayınlanmadığı (404).
+
+**Ek, ayrı bir görev olarak:** R2'deki nesnelerin versiyonlama/lifecycle (ör. yanlışlıkla
+silinen bir fotoğrafı geri alma penceresi) desteği Cloudflare dokümanından değerlendirilip
+karara bağlanmalı — bugün hiç kurulmadı, bilinçli olarak ("R2'nin kendi dayanıklılığı zaten
+mevcut duruma göre net iyileşme" gerekçesiyle) ertelendi, ama unutulmamalı.
+
+---
+
 # DEPLOYMENT — Öğrenci Bütçesiyle Gerçekçi Plan
 
 ## Önerilen kurulum (~5-6 €/ay)
@@ -1543,6 +1580,10 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [ ] 3.11 Auth sertleştirme: httpOnly cookie + CSRF ⭐ (3.8'den sonra, beta onboarding'den önce)
 - [ ] 3.12 Randevuya katılım oranı — **ERTELENDİ** (beta ölçeğinde veri birikmez + `NO_SHOW`
       fiilen işaretlenemiyor, bkz. gerekçe); analiz/plan saklandı, kod yazılmadı
+- [ ] 3.13 Randevu özel not alanı — kapsam yazıldı, kod yazılmadı
+- [ ] 3.14 "Bugün En Erken" rozeti: toplu (N+1'siz) hesaplama — kapsam yazıldı, kod yazılmadı
+- [ ] 3.15 İşletme kapak fotoğrafı: Cloudflare R2'ye taşıma (3.8'den ÖNCE bitirilecek) —
+      R1 tamamlandı, R2-R5 devam ediyor
 
 ---
 
