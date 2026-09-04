@@ -1,6 +1,7 @@
 package com.randevu.backend.controller;
 
 import com.randevu.backend.storage.BusinessPhotoStorage;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -18,8 +19,16 @@ import java.util.regex.Pattern;
 // resource handler'i DEGIL) ki asagidaki path traversal + format
 // dogrulamasi HER istekte calissin -- bkz. plan "Isletme Kapak Fotografi"
 // madde 1 ve 8.
+//
+// BILEREK SADECE storage-provider=local iken yayinlaniyor (bkz. NOTLAR.md
+// "R2'ye tasima" karari). R2 modunda urlFor() dogrudan CDN URL'i dondugu icin
+// tarayici bu uca hic ugramiyor -- eger yine de acik kalsaydi, biri CDN
+// yerine bu ucu (VPS uzerinden) kullanip edge cache'i atlayarak hem
+// bandwidth'imizi hem R2'nin class B operasyon kotasini tuketebilirdi.
 @RestController
 @RequestMapping("/api/business-photos")
+@ConditionalOnProperty(prefix = "app.business-photo", name = "storage-provider", havingValue = "local",
+        matchIfMissing = true)
 public class BusinessPhotoController {
 
     // Sadece BusinessPhotoService'in urettigi kalibi kabul eder:
