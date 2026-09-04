@@ -1343,6 +1343,79 @@ mi kesilsin (yani hangisi önce gelirse) — karar senin.
 
 ---
 
+### 3.13 — Randevu özel not alanı `[BE]` `[AI]`
+
+**(2026-09-04)** Google AI Studio prototipinin randevu alma ekranında ("İletişim Bilgileri"
+bölümü) bir "Özel Not (Opsiyonel)" alanı var — müşteri randevu alırken serbest metin bir not
+bırakabiliyor (ör. "Hassas cilt yapısına sahibim"). Bugün backend'de bunun hiçbir karşılığı yok
+(`AppointmentRequest`'te böyle bir alan yok) — bu yüzden yeni `BusinessDetailPage` tasarımında
+bu bölüm bilerek atlandı (Ad Soyad/Telefon yerine hesaptan gelen salt-okunur bir özet kart
+olarak kaldı, not alanı hiç yok). Kullanıcı onayı: kapsamı büyüttüğü için ayrı bir iş kalemi
+olarak buraya yazılsın, o an kod yazılmasın.
+
+**Kapsam:**
+- `appointments` tablosuna nullable `customer_note` kolonu (yeni migration, V16'dan sonraki
+  ilk boş numara — bkz. mevcut migration seviyesi CLAUDE.md'de).
+- `Appointment` entity + `AppointmentRequest` DTO'suna alan, backend'de uzunluk sınırı (500
+  karakter) ve trim doğrulaması.
+- Randevu alma formunda bir textarea; randevu detayı (müşteri tarafı) ve işletme panelinde
+  (inbox/randevu satırı) görüntüleme — not boşsa alan hiç render edilmez.
+- **Tek yönlü ve tek seferlik:** işletme bu nota cevap yazamaz (bu, item 5'te reddedilen
+  "işletmeye mesaj gönderme" özelliğine kapı açmamalı — bkz. CLAUDE.md'deki randevu alma akışı
+  kararları). Randevu silinince/anonimleştirilince not da silinir (ayrı bir KVKK istisnası
+  değil, randevu kaydının doğal bir parçası).
+- Formda "gerekli olmayan kişisel/hassas bilgi paylaşmayın" uyarısı (KVKK farkındalığı —
+  müşteri sağlık bilgisi gibi hassas veri yazabileceği bir serbest metin alanı olduğu için).
+
+---
+
+### 3.14 — "Bugün En Erken" rozeti: toplu (N+1'siz) hesaplama `[BE]` `[SEN]`
+
+**(2026-09-04)** Canlı bulunan gerçek bir kullanıcı sorunu: HomePage'deki her işletme kartı
+"Bugün En Erken" rozeti için AYRI bir `GET /api/appointments/available-slots` isteği atıyor
+(kart sayısı kadar istek, her kategori değişiminde/geri dönüşte tekrar). Bu, hem genel rate
+limit tavanını (`app.rate-limit.global-max-requests`, IP başına dakikada 300 — bkz.
+`RateLimitFilter`) hem `available-slots`'un kendi tavanını (dakikada 60) hızla dolduruyor;
+tavan dolunca `/api/businesses` isteği de 429 dönüyor. **(Bu turda ayrıca düzeltildi, bu
+maddenin kapsamında DEĞİL:** frontend artık bu hatayı sessizce yutup "bu kategoride işletme
+yok" gibi yanlış bir mesaj göstermek yerine gerçek hata mesajı + "Tekrar Dene" gösteriyor —
+bkz. `HomePage.tsx`/`BusinessDetailPage.tsx`'teki `loadError` state'i. Ayrıca `getAvailableTimeSlots`
+artık "bugün" için geçmiş saatleri filtreliyor, `AppointmentPolicyProperties.minimumBookingLeadTime`
+— bu madde SADECE istek hacmini kaynağında azaltmakla ilgili.)
+
+**Kapsam (rapor edildi, henüz kod yazılmadı):**
+- Yeni toplu metot: `AppointmentService.getTodayEarliestSlots(List<Business>, LocalDate)` →
+  `Map<businessId, LocalTime>`. Her işletmenin ilk hizmetini (`serviceItems.get(0)`, frontend'in
+  bugün zaten yaptığı varsayımla aynı) kullanır.
+- Yeni toplu (`IN` clause) repository metotları: `businessClosureRepository.findByBusinessIdInAndDate`,
+  `workingHourRepository.findByBusinessIdInAndDayOfWeek`, `staffRepository.findByBusinessIdInAndIsActiveTrue`,
+  `staffWorkingHourRepository.findByStaffIdInAndDayOfWeek`,
+  `appointmentRepository.findByBusinessIdInAndAppointmentDateBetweenAndStatusIn`,
+  `appointmentRepository.findByStaffIdInAndAppointmentDateBetweenAndStatusIn`. N işletme için
+  sorgu sayısı sabit (~6) kalır, mevcut `AvailabilityCalculator.calculate`/`calculateForStaff`
+  algoritması (CPU maliyeti aynı) önceden yüklenmiş verilerle bellekte çalıştırılır.
+- `BusinessResponse`/`BusinessDetailResponse` (Java record) yeni bir `todayEarliestSlot` alanı
+  alır — tek çağrı noktası `BusinessMapper`, ama `BusinessController`'daki
+  `getAllBusinesses`/`getBusinessesByCategory`/`getNearbyBusinesses` şu an her işletmeyi
+  bağımsız `.map(this::toResponseWithRating)` ile işliyor; bunun yerine ÖNCE tüm listeyi
+  toplayıp TEK seferde `getTodayEarliestSlots(...)` çağırıp haritadan okuyacak şekilde
+  yeniden yazılmalı. `getBusinessById`/`getMyBusinesses` bu alana ihtiyaç duymuyor (detay
+  sayfası kendi gün/saat seçicisini gösteriyor, sahip paneli rozeti hiç kullanmıyor) —
+  onlara `null` geçilir, gereksiz hesaplama yapılmaz.
+- Cache YOK (beta ölçeğinde, ~20 işletme, gerek yok — taze hesaplanır); sayfalama yok
+  (mevcut, ayrı bir kısıt, bu maddeyle ilgisi yok).
+
+**Ek not — aynı toplu yaklaşımla çözülebilecek, BAĞIMSIZ bir N+1:** `BusinessController`'daki
+puan ortalaması da hâlâ işletme başına 1 sorgu (`toResponseWithRating`/`toDetailResponseWithRating`
+içindeki `businessService.getRatingStats(business.getId())`, bkz. o metotların üstündeki
+"Faz 2.7: ... İş listesi başına bir sorgu (N+1) — bilerek" yorumu) — şu an dokunulmuyor, ama
+bu madde uygulanırken (liste endpoint'leri zaten "tüm işletmeleri toplayıp bir kerede işle"
+şekline geçeceği için) aynı `IN` clause deseniyle (`reviewRepository.findRatingStatsByBusinessIdIn`
+gibi) tek seferde çözülmesi doğal bir ek kapsam olur — ayrı bir görev olarak değil, bu maddenin
+bir alt adımı olarak değerlendirilmeli.
+
+---
+
 # DEPLOYMENT — Öğrenci Bütçesiyle Gerçekçi Plan
 
 ## Önerilen kurulum (~5-6 €/ay)

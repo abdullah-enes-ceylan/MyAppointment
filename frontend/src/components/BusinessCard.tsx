@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BadgeCheck, Clock, Heart, MapPin, Star } from "lucide-react";
 import { getCategory, getCategoryLabel, getGenderLabel } from "./CategoryIcons";
 import { resolvePhotoUrl } from "../utils/photo";
 import type { BusinessResponse, ServedGender } from "../types/api";
@@ -12,27 +13,6 @@ const GENDER_STYLES: Record<ServedGender, string> = {
   FEMALE: "bg-pink-500/25 text-pink-100",
   UNISEX: "bg-white/15 text-white/90",
 };
-
-// Prototip tasarımdaki (FavoritesDrawer.tsx) aynı kalp path'i -- tutarlılık
-// için birebir kopyalandı. Emoji yerine SVG: fill/stroke currentColor'a
-// bağlı olduğu için favori durumuna göre renk (accent) CSS'ten kontrol
-// edilebiliyor, emoji ile bu mümkün değildi.
-function HeartIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 20.3l-1.4-1.3C5.4 14.4 2 11.3 2 7.6 2 4.9 4.1 3 6.6 3c1.6 0 3.1.8 4 2 .9-1.2 2.4-2 4-2C17.9 3 20 4.9 20 7.6c0 3.7-3.4 6.8-8.6 11.4z" />
-    </svg>
-  );
-}
 
 // business: uc farkli uctan gelen, ortusen ama farkli sekiller kabul ediyor
 // (GET /api/businesses -> BusinessResponse, GET /api/favorites/me ->
@@ -49,16 +29,18 @@ interface BusinessCardProps {
   onOpen: (businessId: number) => void;
 }
 
-// Tüm kartlar aynı boyutta. Bir ara ilk kartı 2 sütun genişliğinde
-// "öne çıkan kart" yapmayı denedik ama ızgarada yanındaki sütunun
-// altında büyük bir boşluk bırakıyor ve kart oranlarını bozuyordu.
-//
-// Google AI Studio prototipiyle karşılaştırma sonrası (2026-08-30) kapak
-// gorseli kart kenarlarina tasip (bleed) tam genislikte oldu, kart geneli
-// tiklanabilir hale geldi (eskiden sadece "Randevu Al" butonu). "Puan",
-// "Muhsaitlik" gibi ayri etiketli bloklar yerine basliginin yanina
-// kompakt bir puan rozeti geldi -- prototipteki SalonCard'in bilgi
-// hiyerarsisiyle ayni.
+// 2. Google AI Studio prototipiyle karşılaştırma sonrası (2026-09-04):
+// kapak görseli üstüne koyu navy gradyan + puan/müsaitlik rozetleri
+// görselin İÇİNE taşındı (eskiden görsel altında ayrı bir bilgi satırıydı).
+// AI Studio'daki "3 tıklanabilir hızlı saat" özelliği BİLEREK taşınmadı --
+// bu, her kart için 3 ayrı müsaitlik isteği demek olurdu (şu an zaten TEK
+// slot için işletme başına 1 istek atılıyor ve bu bile ana sayfada rate
+// limit'e takılabiliyor, bkz. bilinen açık iş); tek "Bugün En Erken"
+// rozeti + "Randevu Al" butonu kalıyor. ₺ (priceLevel) rozeti de BİLEREK
+// yok -- backend'de fiyat seviyesi kavramı yok, uydurma sembol yanıltıcı
+// olurdu. Tagline slotu gerçek `business.description` ile dolduruluyor
+// (AI Studio'daki ayrı "tagline" alanının backend karşılığımız yok, ama
+// description kavramsal olarak aynı işi görüyor).
 export default function BusinessCard({
   business,
   earliestSlot,
@@ -80,15 +62,12 @@ export default function BusinessCard({
   return (
     <div
       onClick={() => onOpen(business.id)}
-      className="group flex flex-col bg-white rounded-2xl border border-slate-200 hover:border-slate-300 shadow-[0_4px_20px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_30px_rgba(10,30,66,0.12)] transition-all duration-300 overflow-hidden cursor-pointer transform hover:-translate-y-1"
+      className="group flex flex-col bg-white rounded-2xl border border-slate-200/90 hover:border-slate-300 shadow-xs hover:shadow-md transition-all duration-300 overflow-hidden cursor-pointer"
     >
-      {/* Görsel alanı -- kart kenarına tam bleed (prototipteki gibi), 16:10
-          oranlı. İşletme kapak fotoğrafı yüklediyse onu gösterir, yüklemediyse
-          VEYA yükleme başarısız olduysa (coverUrl null ya da imgFailed)
-          kategoriye göre stilize kapağa (marka gradyanı + o kategorinin çizgi
-          ikonu) düşer. aspect-[16/10] sabit oran, fotoğraf gec/hic yüklenmese
-          bile alanı ANINDA rezerve eder -- eski sabit h-36 ile aynı CLS
-          güvenliği, sadece orantısal (kart genişliğine göre ölçekleniyor). */}
+      {/* Görsel alanı -- kart kenarına tam bleed, 16:10 oranlı. İşletme
+          kapak fotoğrafı yüklediyse onu gösterir, yüklemediyse VEYA yükleme
+          başarısız olduysa (coverUrl null ya da imgFailed) kategoriye göre
+          stilize kapağa (marka gradyanı + o kategorinin çizgi ikonu) düşer. */}
       <div className="relative shrink-0 aspect-[16/10] w-full overflow-hidden bg-gradient-to-br from-brand via-brand-mid to-brand-glow flex items-center justify-center">
         {showPhoto ? (
           <img
@@ -105,109 +84,111 @@ export default function BusinessCard({
           </span>
         )}
 
-        <div className="absolute top-1.5 left-1.5 flex items-center gap-1 max-w-[calc(100%-2.75rem)]">
-          <span className="text-[10px] font-medium text-white/90 bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-md truncate">
-            {getCategoryLabel(business.category)}
-          </span>
-          {business.servedGender && (
-            <span
-              className={`text-[10px] font-medium backdrop-blur-sm px-1.5 py-0.5 rounded-md shrink-0 ${
-                GENDER_STYLES[business.servedGender] ?? GENDER_STYLES.UNISEX
+        {/* Koyu navy gradyan -- alttaki rozetlerin okunurluğu için (AI
+            Studio'daki BusinessCard ile aynı yaklaşım). */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0a1726]/70 via-transparent to-[#0a1726]/10 pointer-events-none" />
+
+        <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1">
+          <div className="flex items-center gap-1 flex-wrap min-w-0">
+            <span className="text-[10px] font-bold text-white bg-[#0d2238]/90 backdrop-blur-sm px-2 py-0.5 rounded-full uppercase tracking-wide truncate">
+              {getCategoryLabel(business.category)}
+            </span>
+            {business.servedGender && (
+              <span
+                className={`text-[10px] font-semibold backdrop-blur-sm px-2 py-0.5 rounded-full shrink-0 ${
+                  GENDER_STYLES[business.servedGender] ?? GENDER_STYLES.UNISEX
+                }`}
+              >
+                {getGenderLabel(business.servedGender)}
+              </span>
+            )}
+          </div>
+
+          {onToggleFavorite && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleFavorite(business.id);
+              }}
+              title={isFavorited ? "Favorilerden çıkar" : "Favorilere ekle"}
+              className={`w-7 h-7 rounded-full backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer shrink-0 ${
+                isFavorited ? "bg-white text-rose-500" : "bg-black/30 hover:bg-white/90 text-white hover:text-rose-500"
               }`}
             >
-              {getGenderLabel(business.servedGender)}
-            </span>
+              <Heart className="w-3.5 h-3.5" fill={isFavorited ? "currentColor" : "none"} />
+            </button>
           )}
         </div>
 
-        {business.distanceKm != null && (
-          <span className="absolute bottom-1.5 left-1.5 text-[10px] font-medium text-white/90 bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-md">
-            {business.distanceKm.toFixed(1)} km
-          </span>
-        )}
-
-        {onToggleFavorite && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite(business.id);
-            }}
-            title={isFavorited ? "Favorilerden çıkar" : "Favorilere ekle"}
-            className={`absolute top-1.5 right-1.5 w-6.5 h-6.5 rounded-full backdrop-blur-sm flex items-center justify-center transition-all duration-200 cursor-pointer ${
-              isFavorited ? "bg-white text-accent scale-110" : "bg-black/30 hover:bg-white/90 text-white hover:text-accent"
-            }`}
-          >
-            <HeartIcon filled={!!isFavorited} />
-          </button>
-        )}
-      </div>
-
-      {/* İçerik -- 4'lü sıra grid'ine sığması için kompakt (2026-08-31):
-          eskiden p-4/text-lg/py-2.5 idi, dar sütunda taşıyordu. Açıklama
-          satırı bilerek kaldırıldı -- bu genişlikte 2 satır bile kartı
-          gereksiz uzatıyordu, başlık+adres+CTA yeterli bilgiyi veriyor. */}
-      <div className="flex flex-col flex-1 p-2.5 sm:p-3">
-        {/* Başlık + kompakt puan rozeti yan yana -- prototipteki SalonCard
-            deseni. Puan yoksa rozet yerine sağda küçük bir "Henüz yorum
-            yok" metni kalıyor, satır boş görünmesin diye. */}
-        <div className="flex items-start justify-between gap-1.5">
-          <h3 className="font-bold text-slate-900 text-xs sm:text-sm group-hover:text-brand transition-colors line-clamp-1 flex items-center gap-1 min-w-0">
-            <span className="truncate">{business.name}</span>
-            {business.verified && (
-              <span
-                title="Onaylı işletme"
-                className="shrink-0 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-blue-500 text-white text-[8px] leading-none"
-              >
-                ✓
-              </span>
-            )}
-          </h3>
-
-          {/* averageRating null kontrolü BİLEREK reviewCount>0 kontrolüne
-              EKLENDİ (backend sözleşmesi ikisinin hep birlikte doğru olacağını
-              garanti ediyor, ama TS bunu tek başına reviewCount'tan çıkaramaz
-              -- bu ek kontrol olmadan averageRating "null olabilir" kalırdı). */}
+        {/* Alt rozetler -- puan (ya da yeniyse "Yeni") solda, mesafe/müsaitlik
+            sağda. Uydurma veri yok: puan sadece gerçek yorum varsa, müsaitlik
+            sadece gerçek slot verisi bulunduğunda çıkıyor. */}
+        <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-white text-xs">
           {hasRating ? (
-            <div className="flex items-center gap-0.5 bg-canvas-soft text-brand px-1.5 py-0.5 rounded-md text-[10px] font-bold shrink-0">
-              <span className="text-amber-400">★</span>
+            <div className="flex items-center gap-1 bg-[#0a1a2c]/85 backdrop-blur-sm px-2 py-0.5 rounded-full font-bold border border-white/10">
+              <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
               <span>{business.averageRating!.toFixed(1)}</span>
+              <span className="text-slate-300 font-normal text-[10px]">({business.reviewCount})</span>
             </div>
           ) : (
-            <span className="shrink-0 text-[9px] text-slate-400 italic whitespace-nowrap">Yeni</span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#0a1a2c]/85 backdrop-blur-sm border border-white/10 italic">
+              Yeni
+            </span>
           )}
+
+          {business.distanceKm != null ? (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-black/40 backdrop-blur-sm">
+              {business.distanceKm.toFixed(1)} km
+            </span>
+          ) : (
+            earliestSlot && (
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-sky-600/90 backdrop-blur-sm">
+                Bugün Uygun
+              </span>
+            )
+          )}
+        </div>
+      </div>
+
+      {/* İçerik */}
+      <div className="flex flex-col flex-1 p-3 sm:p-4">
+        <div className="flex items-start justify-between gap-1.5">
+          <h3 className="font-bold text-slate-900 text-sm group-hover:text-brand transition-colors line-clamp-1 flex items-center gap-1 min-w-0">
+            <span className="truncate">{business.name}</span>
+            {business.verified && <BadgeCheck className="w-4 h-4 text-sky-600 shrink-0" aria-label="Onaylı işletme" />}
+          </h3>
         </div>
 
         {business.address && (
           <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500 min-w-0">
-            <span className="shrink-0">📍</span>
+            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
             <span className="truncate">{business.address}</span>
           </div>
         )}
 
-        {/* Müsaitlik rozeti gerçek slot verisi bulunduğunda çıkıyor; yoksa
-            hiç gösterilmiyor -- uydurma saat göstermiyoruz. */}
-        {earliestSlot && (
-          <span className="mt-1.5 inline-flex items-center gap-1 self-start text-[9px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">
-            <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-emerald-500 text-white text-[7px] leading-none">
-              ✓
-            </span>
-            {earliestSlot.slice(0, 5)}
-          </span>
+        {business.description && (
+          <p className="text-xs text-slate-600 mt-1.5 line-clamp-1">{business.description}</p>
         )}
 
         {/* mt-auto: açıklaması kısa/hiç olmayan kartlarda bile buton en alta
-            yapışsın -- ızgaradaki kartların butonları aynı hizada dursun.
-            stopPropagation: kart geneli zaten aynı yere (onOpen) götürüyor,
-            bu olmadan tıklama önce buton onClick'ini sonra kartın kendi
-            onClick'ini de tetikler (aynı yere iki kez navigate -- zararsız
-            ama temiz değil). */}
-        <div className="mt-auto pt-2 border-t border-slate-100">
+            yapışsın. stopPropagation: kart geneli zaten aynı yere (onOpen)
+            götürüyor, bu olmadan tıklama önce buton onClick'ini sonra kartın
+            kendi onClick'ini de tetikler. */}
+        <div className="mt-3 pt-2.5 border-t border-slate-100">
+          {earliestSlot && (
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                <Clock className="w-3 h-3 text-brand" />
+                Bugün En Erken: {earliestSlot.slice(0, 5)}
+              </span>
+            </div>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
               onOpen(business.id);
             }}
-            className="w-full py-1.5 text-xs font-semibold text-white bg-brand hover:bg-brand-hover rounded-lg transition-colors duration-200 cursor-pointer"
+            className="w-full py-2 text-xs sm:text-sm font-semibold text-white bg-brand hover:bg-brand-hover rounded-xl transition-colors duration-200 cursor-pointer"
           >
             Randevu Al
           </button>
