@@ -1,20 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
 
-  /* Marka rengi "gece mavisi" -- Google AI Studio prototipiyle
-     karşılaştırma sonrası #161b33'ten #0a1e42'ye güncellendi (2026-08-30).
-     -hover buton hover'ı için açık ton, -mid/-glow BusinessCard kapak
-     gradyanının ara durakları -- üçü de aynı bazdan orantılı türetildi,
-     tek yerden değişsin diye. Bu paleti kullanan yerler: Navbar, HomePage,
-     BusinessCard, ProfilePage, FavoritesPage, App.tsx footer, BottomTabBar.
-     Panel/detay sayfalarının eski koyu teması (aşağıdaki --color-surface
-     vb.) BUNDAN AYRI, kademeli geçecek (bkz. CLAUDE.md).*/
-  --color-brand: #0a1e42;
-  --color-brand-hover: #142959;
-  --color-brand-mid: #172f61;
-  --color-brand-glow: #1f3a75;
+  /* Marka rengi "gece mavisi" -- 2. Google AI Studio prototipiyle
+     karşılaştırma sonrası (2026-09-04) güncellendi: eski tek-baz türetilmiş
+     palet (#0a1e42) yerine artık AI Studio'nun tam navy-50..950 skalası +
+     gerçek buton rengi #0e2439 kullanılıyor. --color-brand'ı KULLANAN HER
+     YER (bg-brand, text-brand, hover:bg-brand-hover vb.) bu değişiklikle
+     otomatik yeni renge geçiyor, dosya dosya arama gerekmedi. -mid/-glow
+     artık ayrı türetilmiş ton değil, navy skalasındaki gerçek duraklar.
+     Bu paleti kullanan yerler: Navbar, HomePage, BusinessCard, ProfilePage,
+     FavoritesPage, App.tsx footer, BottomTabBar. Panel/detay sayfalarının
+     eski koyu teması (aşağıdaki --color-surface vb.) BUNDAN AYRI, kademeli
+     geçecek (bkz. CLAUDE.md). */
+  --color-navy-50: #f0f4f9;
+  --color-navy-100: #dbe4f0;
+  --color-navy-200: #bccfe4;
+  --color-navy-300: #8fb3d3;
+  --color-navy-400: #5b90bf;
+  --color-navy-500: #3873a9;
+  --color-navy-600: #275a8c;
+  --color-navy-700: #1f4770;
+  --color-navy-800: #193858;
+  --color-navy-900: #10243d;
+  --color-navy-950: #0a1626;
+  --color-midnight: #0b1523;
+
+  --color-brand: #0e2439;
+  --color-brand-hover: #193d62;
+  --color-brand-mid: #10243d;
+  --color-brand-glow: #1f4770;
 
   /* Prototipten alınan mercan accent -- favori kalbi gibi marka
      lacivertinden bilerek ayrışan tek sıcak "dikkat çek" rengi. */
@@ -67,36 +83,24 @@ html {
   display: none;
 }
 
-/* HomePage Hero'sunun soyut arka planı -- fotoğraf YOK, tamamen CSS
-   (2026-08-31 kararı: dosya boyutu sıfır, her ekran boyutunda sorunsuz
-   ölçeklenir, mobilde kırpma sorunu olmaz). Arkadan öne 4 katman:
-   (4) düz yumuşak degrade (--color-canvas -> -soft -> canvas, eskiden
-       Hero'nun kendi Tailwind sınıflarındaydı),
-   (3-2) iki büyük, çok düşük opasiteli radial "glow" lekesi (marka
-       renginde) -- köşelere yakın, yumuşak bir derinlik hissi verir,
-   (1) ince tekrarlayan nokta ızgarası -- "doku" hissi, background-size
-       ile sonsuz tekrarlar, çözünürlükten bağımsız.
-   Hepsi %5-8 opasitede -- BİLEREK bu kadar hafif: arka plan asla ön
-   plana çıkmamalı, üstündeki başlık/arama kutusu kontrastı bozulmamalı.
-   color-mix() kullanıldı: --color-brand değişirse bu doku otomatik
-   takip eder, ayrı bir rgba() değeri elle senkronize edilmesi gerekmez.
-
-   KOYU TEMA NOTU: bu sınıf şu an SADECE açık canvas token'larına göre
-   ayarlı. İleride koyu tema eklenirse (CLAUDE.md: "açık tema, lacivert"
-   kararı verilmişti ama panel/detay sayfaları hâlâ eski koyu temada,
-   kademeli geçiş sürüyor) bu sınıf GÖZDEN GEÇİRİLMELİ -- koyu bir
-   zeminde aynı %6-8 opasiteli LACİVERT lekeler neredeyse hiç görünmez
-   olur (koyu üstüne koyu, doku kaybolur); koyu temada bunun yerine
-   --color-canvas/-soft yerine koyu bir taban + daha AÇIK/beyaz tonlu
-   (örn. color-mix(in srgb, white 6%, transparent)) bir varyant
-   gerekir. Şimdilik tek tema olduğu için ayrı bir dark-mode bloğu
-   yazılmadı, bilinçli olarak ertelendi. */
-.hero-bg-texture {
+/* HomePage Hero'sunun koyu lacivert arka planı -- 2. Google AI Studio
+   prototipiyle karşılaştırma sonrası (2026-09-04), eski açık/beyaz
+   .hero-bg-texture'ın yerine (o sınıf artık hiçbir yerde kullanılmıyor,
+   kaldırıldı). Fotoğraf YOK, tamamen CSS: dosya boyutu sıfır, her ekran
+   boyutunda sorunsuz ölçeklenir. Arkadan öne 3 katman:
+   (3) düz koyu navy taban (--color-navy-950),
+   (2) üç büyük, düşük opasiteli radial "glow" lekesi -- AI Studio'daki
+       HeroSection'ın üç ambiyans lekesiyle aynı yerleşim (üstte ortada,
+       sağda, solda),
+   (1) ince tekrarlayan nokta ızgarası -- açık mavi noktalar, %20 opasite
+       (AI Studio'daki ile birebir: radial-gradient #60a5fa 0.75px). */
+.hero-bg-dark {
+  background-color: var(--color-navy-950);
   background-image:
-    radial-gradient(circle, color-mix(in srgb, var(--color-brand) 8%, transparent) 1px, transparent 1px),
-    radial-gradient(640px circle at 12% 20%, color-mix(in srgb, var(--color-brand) 7%, transparent), transparent 60%),
-    radial-gradient(560px circle at 88% 80%, color-mix(in srgb, var(--color-brand) 6%, transparent), transparent 60%),
-    linear-gradient(to bottom, var(--color-canvas), var(--color-canvas-soft), var(--color-canvas));
+    radial-gradient(circle, color-mix(in srgb, #60a5fa 20%, transparent) 0.75px, transparent 0.75px),
+    radial-gradient(720px 360px at 50% -10%, color-mix(in srgb, #2563eb 25%, transparent), transparent 70%),
+    radial-gradient(420px 280px at 110% 25%, color-mix(in srgb, #1d4ed8 20%, transparent), transparent 70%),
+    radial-gradient(380px 260px at -10% 35%, color-mix(in srgb, #312e81 30%, transparent), transparent 70%);
   background-repeat: repeat, no-repeat, no-repeat, no-repeat;
-  background-size: 22px 22px, auto, auto, auto;
+  background-size: 24px 24px, auto, auto, auto;
 }

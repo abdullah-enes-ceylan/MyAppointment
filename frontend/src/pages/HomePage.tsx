@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, type FormEvent, type KeyboardEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowRight, Navigation, Search } from "lucide-react";
 import api from "../api/axios";
+import { getErrorMessage } from "../api/errors";
 import { useAuth } from "../context/AuthContext";
 import BusinessCard from "../components/BusinessCard";
 import { CATEGORIES, GENDERS, getCategoryLabel } from "../components/CategoryIcons";
@@ -45,6 +47,13 @@ export default function HomePage() {
 
   const [businesses, setBusinesses] = useState<HomeBusiness[]>([]);
   const [loading, setLoading] = useState(true);
+  // fetchBusinesses/filterByCategory bir istek hatasini (ör. 429 rate limit)
+  // eskiden sessizce yutup businesses'i BOŞ birakiyordu -- bu da "bu
+  // kategoride işletme yok" gibi YANLIŞ bir mesaja yol açıyordu (gerçek sebep
+  // "çok fazla istek attınız" iken kullanıcıya "burada hiç işletme yok"
+  // gösteriliyordu). Artık gerçek hata ayrı bir state, kendi mesajıyla
+  // (backend'in 429 gövdesi dahil) gösteriliyor.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<BusinessCategory | "ALL">("ALL");
   const [activeGender, setActiveGender] = useState<ServedGender | "ALL">("ALL");
   const [nearbyMode, setNearbyMode] = useState(false);
@@ -129,11 +138,13 @@ export default function HomePage() {
 
   async function fetchBusinesses() {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await api.get<BusinessDetailResponse[]>("/api/businesses");
       setBusinesses(res.data);
     } catch (err) {
-      console.error("İşletmeler yüklenemedi:", err);
+      setBusinesses([]);
+      setLoadError(getErrorMessage(err, "İşletmeler yüklenirken bir hata oluştu."));
     } finally {
       setLoading(false);
     }
@@ -143,12 +154,14 @@ export default function HomePage() {
     setNearbyMode(false);
     setActiveCategory(categoryKey);
     setLoading(true);
+    setLoadError(null);
     try {
       const url = categoryKey === "ALL" ? "/api/businesses" : `/api/businesses/category/${categoryKey}`;
       const res = await api.get<BusinessDetailResponse[]>(url);
       setBusinesses(res.data);
     } catch (err) {
-      console.error("Filtreleme hatası:", err);
+      setBusinesses([]);
+      setLoadError(getErrorMessage(err, "İşletmeler yüklenirken bir hata oluştu."));
     } finally {
       setLoading(false);
     }
@@ -254,36 +267,41 @@ export default function HomePage() {
 
   return (
     <div className="bg-slate-50 min-h-[calc(100vh-3.5rem)]">
-      {/* Hero — başlık, büyük pill arama+konum kutusu, cinsiyet filtresi.
-          Google AI Studio prototipiyle karşılaştırma sonrası eklendi
-          (2026-08-30). Kompakt arama+konum Navbar'da da AYRICA duruyor
-          (2. karşılaştırma sonrası geri eklendi, bkz. Navbar.tsx) -- burada
-          duran büyük pill kutu Hero'nun görsel odak noktası, bilerek iki kez
-          var. Cinsiyet filtresi de eski ayrı satırından buraya taşındı,
-          prototipteki HeroSection ile aynı gruplama. STICKY DEĞİL -- sadece
-          aşağıdaki kategori şeridi sticky, Hero sayfayla birlikte kayıp
-          gidiyor. Arka plan: fotoğraf değil, saf CSS doku (bkz. index.css
-          .hero-bg-texture). */}
-      <div className="relative overflow-hidden hero-bg-texture py-10 sm:py-14">
+      {/* Hero — koyu lacivert zemin, başlık, büyük pill arama+konum kutusu,
+          cinsiyet filtresi. 2. Google AI Studio prototipiyle karşılaştırma
+          sonrası (2026-09-04): açık/beyaz zemin yerine koyu navy (AI
+          Studio'daki HeroSection ile birebir), nokta ızgara + yumuşak glow
+          lekeleri saf CSS (bkz. index.css .hero-bg-dark). AI Studio'daki
+          "Zaman" (Bugün/Yarın/Hafta Sonu) hızlı tarih filtresi BİLEREK
+          taşınmadı -- backend'de sadece BUGÜNÜN müsaitliği hesaplanıyor
+          (earliestSlots), gelecek günler için filtre desteği yok; sahte bir
+          dropdown hiçbir şeyi gerçekten filtrelemezdi. */}
+      <div className="relative overflow-hidden hero-bg-dark py-12 sm:py-16 text-white">
         <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
-          <h1 className="text-2xl sm:text-3xl md:text-[40px] font-bold text-slate-900 tracking-tight leading-tight mb-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 mb-6">
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+            <span className="text-xs font-semibold tracking-wide text-blue-100 uppercase">
+              Modern & Zahmetsiz Randevu Deneyimi
+            </span>
+          </div>
+
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight mb-3">
             Güzellik ve Bakım Randevunuzu{" "}
-            <span className="text-brand underline decoration-brand/30 decoration-wavy">Alın</span>
+            <span className="text-white underline decoration-sky-400 decoration-wavy decoration-2 underline-offset-8">
+              Alın
+            </span>
           </h1>
-          <p className="text-sm sm:text-base text-slate-500 max-w-xl mx-auto mb-7">
+          <p className="text-sm sm:text-base text-blue-100/80 max-w-xl mx-auto mb-8">
             En iyi işletmeleri keşfedin, size uygun zamanı seçin ve hemen yerinizi ayırtın.
           </p>
 
           {/* Büyük pill arama + konum kutusu */}
           <form
             onSubmit={handleSearchSubmit}
-            className="bg-white rounded-2xl md:rounded-full p-2 md:p-2.5 shadow-xl shadow-brand/10 border border-slate-200 flex flex-col md:flex-row items-center gap-2 md:gap-3 max-w-2xl mx-auto mb-6"
+            className="bg-white p-2 md:p-2.5 rounded-2xl md:rounded-full shadow-[0_16px_50px_-8px_rgba(0,0,0,0.35)] border border-blue-900/40 flex flex-col md:flex-row items-center gap-2 md:gap-3 max-w-2xl mx-auto mb-6 text-slate-800"
           >
             <div className="relative flex-1 w-full flex items-center pl-3">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-400 shrink-0">
-                <circle cx="11" cy="11" r="7" />
-                <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-              </svg>
+              <Search className="w-[18px] h-[18px] text-slate-400 shrink-0" />
               <input
                 type="search"
                 placeholder="İşletme, kuaför veya hizmet ara..."
@@ -301,7 +319,7 @@ export default function HomePage() {
               onClick={handleNearbyClick}
               className="w-full md:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl md:rounded-full text-xs sm:text-sm font-medium bg-canvas-soft hover:bg-slate-200/70 text-slate-700 transition-colors cursor-pointer shrink-0"
             >
-              <span className="shrink-0">📍</span>
+              <Navigation className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate max-w-[140px]">{locationLabel ?? "Yakınımdakiler"}</span>
             </button>
 
@@ -309,24 +327,24 @@ export default function HomePage() {
               type="submit"
               className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl md:rounded-full bg-brand hover:bg-brand-hover text-white text-sm sm:text-base font-semibold shadow-md shadow-brand/30 transition-all cursor-pointer shrink-0"
             >
-              Ara
+              <span>Ara</span>
+              <ArrowRight className="w-4 h-4 text-sky-400" />
             </button>
           </form>
 
           {/* Cinsiyet filtresi — kategoriden AYRI bir eksen olduğu için ayrı
-              bir grup (bkz. backend ServedGender). Eski yeri: kategori
-              şeridinin altındaki içerik alanı; artık Hero'nun parçası. */}
-          <div className="flex flex-col items-center gap-2.5">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Kime</span>
-            <div className="flex items-center justify-center gap-2 bg-white/80 p-1.5 rounded-full border border-slate-200 shadow-sm">
+              bir grup (bkz. backend ServedGender). */}
+          <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap">
+            <span className="text-[11px] font-bold text-blue-200/60 uppercase tracking-widest mr-1">Kime</span>
+            <div className="inline-flex p-1 bg-white/10 backdrop-blur-sm rounded-full border border-white/15">
               {GENDERS.map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => setActiveGender(key)}
-                  className={`px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all cursor-pointer ${
+                  className={`px-4 py-1.5 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                     activeGender === key
-                      ? "bg-brand text-white shadow-sm"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-canvas-soft"
+                      ? "bg-sky-500 text-white shadow-xs"
+                      : "text-blue-100/70 hover:text-white hover:bg-white/10"
                   }`}
                 >
                   {label}
@@ -337,41 +355,32 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Kategori sekmeleri — dikey ikon-kare kutucuklar (Google AI Studio
-          prototipiyle karşılaştırma sonrası, 2026-08-30, eski yatay
-          ikon+etiket pill stilinin yerine). Navbar'ın altında sticky duruyor
-          -- Navbar artık tek satır olduğu için ofset onunla birebir aynı
-          (h-14 sm:h-16).
-          nearbyMode'dayken hiçbir sekme aktif görünmüyor: o an aktif olan
-          filtre kategori değil, konum. Sekmeye tıklamak konum modundan
-          çıkmanın da yolu (filterByCategory nearbyMode'u false yapıyor). */}
-      <div className="bg-canvas border-b border-slate-200/80 sticky top-14 sm:top-16 z-30 py-4 sm:py-5">
+      {/* Kategori şeridi — yatay pill butonlar (2. karşılaştırma sonrası,
+          dikey ikon-kare kutucukların yerine). AI Studio'daki her pilldeki
+          sayı rozeti (ör. "Kuaför 12") BİLEREK taşınmadı -- mockData'da
+          sabit/uydurma sayılardı, bizde kategori başına gerçek toplam sayan
+          bir uç yok; sahte bir sayı göstermek yanıltıcı olurdu (₺ simgesi
+          kararıyla aynı gerekçe). Navbar'ın altında sticky duruyor -- Navbar
+          artık tek satır olduğu için ofset onunla birebir aynı (h-16 sm:h-18). */}
+      <div className="bg-white border-b border-slate-200/90 sticky top-16 sm:top-18 z-30 py-5">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6">
-          <div className="flex items-center gap-3 sm:gap-6 md:gap-8 overflow-x-auto scrollbar-none sm:justify-center py-1">
+          <div className="flex items-center gap-2.5 overflow-x-auto scrollbar-none sm:justify-center py-1">
             {CATEGORIES.map(({ key, label, Icon }) => {
               const active = !nearbyMode && activeCategory === key;
               return (
                 <button
                   key={key}
                   onClick={() => filterByCategory(key)}
-                  className="group/cat flex flex-col items-center gap-2 shrink-0 cursor-pointer"
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 border cursor-pointer ${
+                    active
+                      ? "bg-brand text-white border-brand shadow-sm"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200/90"
+                  }`}
                 >
-                  <div
-                    className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-all duration-200 ${
-                      active
-                        ? "bg-brand text-white shadow-lg shadow-brand/25 scale-105 ring-4 ring-brand/15"
-                        : "bg-canvas-soft text-brand hover:bg-slate-200/70"
-                    }`}
-                  >
+                  <span className={active ? "text-sky-300" : "text-slate-500"}>
                     <Icon />
-                  </div>
-                  <span
-                    className={`text-xs sm:text-sm font-medium transition-colors ${
-                      active ? "text-brand font-bold" : "text-slate-600 group-hover/cat:text-slate-900"
-                    }`}
-                  >
-                    {label}
                   </span>
+                  <span>{label}</span>
                 </button>
               );
             })}
@@ -441,6 +450,17 @@ export default function HomePage() {
               </svg>
               Yükleniyor...
             </div>
+          </div>
+        ) : loadError ? (
+          <div className="text-center py-24">
+            <p className="text-5xl mb-4">⚠️</p>
+            <p className="text-slate-600 text-lg font-medium">{loadError}</p>
+            <button
+              onClick={() => filterByCategory(activeCategory)}
+              className="mt-4 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition cursor-pointer"
+            >
+              Tekrar Dene
+            </button>
           </div>
         ) : visibleBusinesses.length === 0 ? (
           <div className="text-center py-24">
