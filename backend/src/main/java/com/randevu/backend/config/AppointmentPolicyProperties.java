@@ -28,6 +28,13 @@ public class AppointmentPolicyProperties {
     private static final double DEFAULT_EXPIRY_RATIO = 0.10;
     private static final Duration DEFAULT_BOOKING_HORIZON = Duration.ofDays(90);
     private static final int DEFAULT_MAX_OPEN_REQUESTS = 3;
+    // AvailabilityCalculator'ın izgara adımıyla (app.scheduling.slot-granularity-minutes,
+    // varsayılan 15 dk) BİLEREK aynı büyüklükte: "bugün" için müsaitlik
+    // listesi artık şu andan itibaren en az bir izgara adımı kadar ileriye
+    // bakıyor. Bunun altında bir pay pratikte anlamsız olurdu (kullanıcı
+    // saati görüp tıklayana kadar zaten geçer), üstünde bir pay ise
+    // gerçekte müsait olan bir saati gereksiz yere gizlerdi.
+    private static final Duration DEFAULT_MINIMUM_BOOKING_LEAD_TIME = Duration.ofMinutes(15);
 
     // Talep, randevu saatinden BU KADAR once cevaplanmamissa duser.
     private Duration expiryLeadTime = DEFAULT_EXPIRY_LEAD_TIME;
@@ -52,6 +59,12 @@ public class AppointmentPolicyProperties {
     // duzenli musterinin mevcut randevusu varken bir sonrakini almasi
     // engellenmemeli.
     private int maxOpenRequestsPerBusiness = DEFAULT_MAX_OPEN_REQUESTS;
+
+    // "Bugün" için müsaitlik listesinden, şu andan itibaren bu kadar
+    // yakındaki saatler çıkarılır (bkz. AppointmentService.excludePastSlotsForToday).
+    // Sıfır olabilir ("sadece gerçekten geçmiş saatleri ele, yakınlık payı
+    // isteme") ama negatif olamaz.
+    private Duration minimumBookingLeadTime = DEFAULT_MINIMUM_BOOKING_LEAD_TIME;
 
     // Gecersiz ayarlar uygulamayi durdurmuyor, guvenli varsayilana dusup
     // uyari logluyor -- AvailabilityCalculator.effectiveGranularity ile ayni
@@ -81,6 +94,11 @@ public class AppointmentPolicyProperties {
             log.warn("app.appointment.max-open-requests-per-business geçersiz ({}), varsayılan {} kullanılıyor",
                     maxOpenRequestsPerBusiness, DEFAULT_MAX_OPEN_REQUESTS);
             maxOpenRequestsPerBusiness = DEFAULT_MAX_OPEN_REQUESTS;
+        }
+        if (minimumBookingLeadTime == null || minimumBookingLeadTime.isNegative()) {
+            log.warn("app.appointment.minimum-booking-lead-time geçersiz ({}), varsayılan {} kullanılıyor",
+                    minimumBookingLeadTime, DEFAULT_MINIMUM_BOOKING_LEAD_TIME);
+            minimumBookingLeadTime = DEFAULT_MINIMUM_BOOKING_LEAD_TIME;
         }
     }
 
@@ -114,5 +132,13 @@ public class AppointmentPolicyProperties {
 
     public void setMaxOpenRequestsPerBusiness(int maxOpenRequestsPerBusiness) {
         this.maxOpenRequestsPerBusiness = maxOpenRequestsPerBusiness;
+    }
+
+    public Duration getMinimumBookingLeadTime() {
+        return minimumBookingLeadTime;
+    }
+
+    public void setMinimumBookingLeadTime(Duration minimumBookingLeadTime) {
+        this.minimumBookingLeadTime = minimumBookingLeadTime;
     }
 }

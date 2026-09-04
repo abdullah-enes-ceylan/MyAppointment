@@ -133,6 +133,24 @@ public class AppointmentService {
         LocalDateTime now = LocalDateTime.now(clock);
         newAppointment.setCreatedAt(now);
 
+        // "Cok yakinda" kontrolu: getAvailableTimeSlots'un "bugun" icin
+        // uyguladigi filtreyle (excludePastSlotsForToday) AYNI esik
+        // (expiryPolicy.getMinimumBookingLeadTime(), tek kaynak
+        // AppointmentPolicyProperties.minimumBookingLeadTime) -- kural iki
+        // ayri yerde tanimli OLMAMALI, aksi halde biri degisip digeri
+        // degismezse liste ile olusturma sessizce ayrisir. @Future (DTO'daki
+        // alan doğrulaması) SADECE gecmisi engelliyor -- "3 dakika sonrasi"
+        // gibi pratikte yetismeyecek bir ani hala kabul ediyordu, yani
+        // /available-slots'un artik HIC GOSTERMEDIGI bir saate, listeyi hic
+        // gormeden DOGRUDAN API ile randevu olusturulabiliyordu. Mesaj
+        // gercek esigi (dakika cinsinden) aciklikla soyluyor -- kullanici
+        // "neden olmadi" diye tahmin etmek zorunda kalmasin.
+        if (newAppointment.getAppointmentDate().isBefore(now.plus(expiryPolicy.getMinimumBookingLeadTime()))) {
+            throw new BusinessRuleException("Bu saat için randevu artık alınamaz — en az "
+                    + expiryPolicy.getMinimumBookingLeadTime().toMinutes()
+                    + " dakika sonrası için bir saat seçin.");
+        }
+
         // Randevu ufku: onceden hicbir ust sinir yoktu (@Future sadece gecmisi
         // engelliyordu), yani 2099'a randevu alinabiliyordu. Sinirsiz ufuk hem
         // slotu aylarca kilitliyor hem de isletmenin taahhut edemeyecegi bir
@@ -497,10 +515,11 @@ public class AppointmentService {
                 // Personel var ama o gun HICBIRI calismiyor (hepsi kapali/izinli).
                 return List.of();
             }
-            return availabilityCalculator.calculateForStaff(date, serviceItem.getDurationInMinutes(), staffAvailabilities)
+            List<LocalTime> staffSlots = availabilityCalculator.calculateForStaff(date, serviceItem.getDurationInMinutes(), staffAvailabilities)
                     .stream()
                     .map(AvailabilityCalculator.SlotAssignment::time)
                     .toList();
+            return excludePastSlotsForToday(date, staffSlots);
         }
 
         Optional<EffectiveHours> hours = resolveWorkingHours(businessId, business, date);
@@ -524,8 +543,36 @@ public class AppointmentService {
                         app.getAppointmentDate().plusMinutes(app.getServiceItem().getDurationInMinutes())))
                 .toList();
 
-        return availabilityCalculator.calculate(date, hours.get().openTime(), hours.get().closeTime(),
+        List<LocalTime> slots = availabilityCalculator.calculate(date, hours.get().openTime(), hours.get().closeTime(),
                 serviceItem.getDurationInMinutes(), busyIntervals);
+        return excludePastSlotsForToday(date, slots);
+    }
+
+    // "Bugün" için müsaitlik listesinden şu andan (+ minimumBookingLeadTime
+    // payından) daha erken saatleri eler -- gelecek bir tarih için hiçbir
+    // filtre uygulanmaz. Personelli/personelsiz HER İKİ yol da (yukarıdaki
+    // iki return noktası) buradan geçiyor, tek kaynak.
+    //
+    // "Bugün" karşılaştırması ve "şu an" DAİMA enjekte edilen Clock'tan
+    // geliyor (bkz. TimeConfig) -- Clock zaten Europe/Istanbul'a sabit,
+    // sunucu işletim sisteminin UTC olması sonucu etkilemiyor (CLAUDE.md'de
+    // canlı doğrulanmış aynı mekanizma).
+    //
+    // LocalTime değil LocalDateTime üzerinden karşılaştırılıyor: saat
+    // 23:50 gibi gün sonuna yakın bir anda salt LocalTime.plusMinutes
+    // gece yarısını "sarardı" (23:50 + 15dk -> 00:05), bu da sabahın erken
+    // saatlerini yanlışlıkla "henüz gelmedi, müsait" sanmaya yol açardı.
+    // date.atTime(slot) ile mutlak bir an kurup cutoff'la (o da mutlak bir
+    // an) kıyaslamak bu sarmayı yapısal olarak imkansız kılıyor.
+    private List<LocalTime> excludePastSlotsForToday(LocalDate date, List<LocalTime> slots) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (!date.equals(now.toLocalDate())) {
+            return slots;
+        }
+        LocalDateTime cutoff = now.plus(expiryPolicy.getMinimumBookingLeadTime());
+        return slots.stream()
+                .filter(slot -> !date.atTime(slot).isBefore(cutoff))
+                .toList();
     }
 
     private record EffectiveHours(LocalTime openTime, LocalTime closeTime) {

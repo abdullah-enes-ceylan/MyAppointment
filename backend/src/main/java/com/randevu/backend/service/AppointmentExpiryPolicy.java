@@ -76,6 +76,10 @@ public class AppointmentExpiryPolicy {
         return properties.getMaxOpenRequestsPerBusiness();
     }
 
+    public Duration getMinimumBookingLeadTime() {
+        return properties.getMinimumBookingLeadTime();
+    }
+
     private static Duration min(Duration a, Duration b) {
         return a.compareTo(b) <= 0 ? a : b;
     }
