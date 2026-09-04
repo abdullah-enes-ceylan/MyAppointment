@@ -49,13 +49,16 @@ COPY --from=extract /extract/extracted/spring-boot-loader/ ./
 COPY --from=extract /extract/extracted/snapshot-dependencies/ ./
 COPY --from=extract /extract/extracted/application/ ./
 
-# /app/business-photo-storage bind mount ile host'tan geliyor (bkz.
-# docker-compose.yml); appuser'in buraya yazabilmesi icin dizin appuser
-# sahipliginde olmali. mkdir + chown, mount noktasi henuz bos bir dizinken
-# de calisir -- bind mount uzerine binince host tarafinin kendi sahipligi
-# gecerli olacagi icin, host klasoru de appuser'in UID'sine (1000) gore
-# hazirlanmis olmali (README/kurulum adiminda belirtilecek).
-RUN mkdir -p /app/business-photo-storage && chown -R appuser:appgroup /app
+# appuser'in jar'i calistirabilmesi ve (varsa) kendi yazdigi dosyalari
+# okuyabilmesi icin /app appuser sahipliginde olmali.
+#
+# ONCEDEN burada /app/business-photo-storage icin ayrica bir "mkdir -p" da
+# vardi (isletme fotograflari icin bir bind/named volume mount noktasi
+# hazirlamak amacli) -- Faz 3.15'te depolama R2'ye tasinip prod'da
+# storage-provider SABIT "r2" olunca (bkz. docker-compose.yml, NOTLAR.md
+# "R2'ye tasima" karari) backend container'in yerel diskine hic yazmiyor,
+# o dizine gerek kalmadi.
+RUN chown -R appuser:appgroup /app
 
 USER appuser
 

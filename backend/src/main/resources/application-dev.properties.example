@@ -25,3 +25,17 @@ jwt.secret=BURAYA_OPENSSL_ILE_URETTIGIN_SECRET
 # CORS — sadece yerel gelistirme originleri. Prod'da bu deger tamamen farkli
 # (gercek frontend domain'i, localhost YOK) olmali -- bkz. application-prod.properties.
 app.cors.allowed-origins=http://localhost:*,http://127.0.0.1:*
+
+# Isletme kapak fotografi depolamasi -- VARSAYILAN "local" (yerel diske
+# yazar), asagidaki satirlara HIC DOKUNMADAN calisir. Prod'a cikmadan once R2
+# implementasyonunu gercek bir staging bucket'a karsi denemek istersen (bkz.
+# NOTLAR.md "R2'ye tasima" karari, "prod'da ilk kez calismasin" gerekcesi)
+# alttaki satirlarin basindaki # isaretini kaldirip kendi degerlerini yaz --
+# gercek Access Key ID/Secret Access Key'i BURAYA DISINDA HICBIR DOSYAYA
+# yazma, bu dosya gitignore'da.
+# app.business-photo.storage-provider=r2
+# app.business-photo.r2.account-id=BURAYA_CLOUDFLARE_ACCOUNT_ID
+# app.business-photo.r2.bucket-name=BURAYA_BUCKET_ADI
+# app.business-photo.r2.access-key-id=BURAYA_ACCESS_KEY_ID
+# app.business-photo.r2.secret-access-key=BURAYA_SECRET_ACCESS_KEY
+# app.business-photo.r2.public-base-url=BURAYA_CUSTOM_DOMAIN (ornek: https://cdn.randevumweb.com)

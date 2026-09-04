@@ -310,6 +310,50 @@ rm -f ./Caddyfile.smoketest
 hatası görürsün, ama bu STAGING'e karşı olduğu için ZARARSIZ — saatte-5 sınırı olan gerçek
 bütçeyi hiç etkilemez.
 
+## A3.2. R2 custom domain (`cdn.randevumweb.com`) — sunucudan BAĞIMSIZ, önceden yapılabilir
+
+İşletme kapak fotoğrafı depolaması Cloudflare R2'de (Faz 3.15, bkz. NOTLAR.md "R2'ye
+taşıma" kararı). Bucket (`randevum-storage`) ve API token zaten oluşturuldu — kalan tek
+altyapı adımı, herkese açık okumayı sağlayan custom domain'i bağlamak. **A3'ün aksine bu
+adım sunucunun IP'sine bağlı DEĞİL, deploy'dan bağımsız olarak istediğin an yapılabilir.**
+
+**⚠️ Elle bir DNS kaydı AÇMA.** R2'nin "Custom Domains" ayarından bağlarken Cloudflare
+CNAME kaydını **kendisi** oluşturuyor — önden manuel bir kayıt açarsan çakışma çıkar.
+Adımlar:
+1. Cloudflare panelinde R2 → `randevum-storage` bucket'ı → **Settings** → **Custom Domains**
+   → **Connect Domain**.
+2. `cdn.randevumweb.com` yaz, onayla. Cloudflare kendi sertifikasını çıkarıp DNS kaydını
+   otomatik ekler (birkaç dakika sürebilir).
+3. **Doğrulama — apex/`www` ile ÇELİŞMEDİĞİNİ kanıtla:** Cloudflare DNS panelinde üç kaydı
+   birden gör: `randevumweb.com` ve `www` **gri (DNS only)** kalmalı (bkz. A3 — Let's
+   Encrypt HTTP-01 için şart), `cdn` ise **turuncu (Proxied)** olmalı — bu ayrı bir
+   subdomain olduğu için A3'teki kuralla ÇELİŞMİYOR, R2'nin custom domain'i zaten proxied
+   olmayı gerektiriyor.
+   ```bash
+   dig @8.8.8.8 +short cdn.randevumweb.com
+   dig @8.8.8.8 +short randevumweb.com
+   ```
+   İlki Cloudflare'in kendi IP aralığını (`104.16.*` vb.) dönmeli, ikincisi sunucunun gerçek
+   IP'sini — birbirine KARIŞMAMALI.
+4. **`Cache-Control` doğrulaması** — gerçek bir yükleme sonrası (bkz. aşağıdaki "R2
+   doğrulaması"):
+   ```bash
+   curl -sI https://cdn.randevumweb.com/<gercek-bir-key>-card.jpg | grep -i cache-control
+   ```
+   Beklenen: `public, max-age=31536000, immutable` (bkz. `R2BusinessPhotoStorage.store`).
+5. **A3'ten SONRA bir kez daha:** apex/`www` için Let's Encrypt yenilemesinin (A10) `cdn`
+   kaydı eklendikten sonra da sorunsuz çalıştığını doğrula — farklı bir subdomain olsa da,
+   "DNS panelinde bir şey değişti, HTTP-01 hâlâ çalışıyor mu" sorusu her DNS değişikliğinden
+   sonra tekrar sorulmalı.
+
+**R2 doğrulaması (staging bucket'a karşı, sunucu kurulmadan ÖNCE de yapılabilir):**
+gerçek bir işletmeye panelinden fotoğraf yükle (`storage-provider=r2` ile, bkz.
+`application-dev.properties.example`), CDN URL'inin tarayıcıda gerçekten görüntü
+döndürdüğünü, ikinci bir yüklemede eski nesnenin R2'den gerçekten silindiğini (R2
+dashboard'da "Objects" listesi), ve `GET /api/business-photos/<herhangi-bir-key>` isteğinin
+`r2` modunda **404** döndüğünü (`BusinessPhotoController`'ın bu modda hiç yayınlanmadığının
+kanıtı — bkz. NOTLAR.md) doğrula.
+
 ## A4. Kod sunucuya
 
 ```bash
