@@ -98,4 +98,12 @@ jobs:
         env:
           JWT_SECRET: ci-build-only-not-a-real-secret
           POSTGRES_PASSWORD: ci-build-only-not-a-real-secret
+          # Faz 3.15 (R2'ye tasima) sonrasi eklendi -- ayni gerekce,
+          # interpolasyon icin sahte deger, build asamasinda gercek R2'ye
+          # hic baglanilmiyor.
+          R2_ACCOUNT_ID: ci-build-only-not-a-real-value
+          R2_BUCKET_NAME: ci-build-only-not-a-real-value
+          R2_ACCESS_KEY_ID: ci-build-only-not-a-real-value
+          R2_SECRET_ACCESS_KEY: ci-build-only-not-a-real-value
+          R2_PUBLIC_BASE_URL: ci-build-only-not-a-real-value
         run: docker compose build
