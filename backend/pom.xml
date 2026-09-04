@@ -181,6 +181,25 @@
             <version>0.4.20</version>
         </dependency>
 
+        <!-- Isletme kapak fotografi depolamasini yerel diskten Cloudflare R2'ye
+             tasima (bkz. NOTLAR.md "R2'ye tasima" karari). R2, S3 API'siyle
+             uyumlu oldugu icin AWS'in kendi SDK'sini farkli bir endpoint'e
+             isaret ederek kullaniyoruz; ayri bir R2-ozel istemci yok.
+             url-connection-client BILEREK secildi: varsayilan (Apache/Netty
+             tabanli) HTTP istemcileri yerine, senkron ve tek-istek-bazli bu
+             kullanim (yukleme/silme, yuksek eszamanlilik degil) icin en hafif
+             secenek; gereksiz reaktif/async yigin bagimliligi eklemiyor. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.46.7</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>2.46.7</version>
+        </dependency>
+
         <!-- Faz 3.3: API dokumantasyonu (Swagger UI + OpenAPI semasi).
              springdoc-openapi'nin 2.x hatti Spring Boot 3.x'i hedefliyor,
              3.x hatti Spring Boot 4.x icin; testcontainers-bom'daki surum

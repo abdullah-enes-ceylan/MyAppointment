@@ -28,6 +28,14 @@ public class BusinessPhotoProperties {
     private static final Set<String> DEFAULT_ALLOWED_INPUT_FORMATS = Set.of("JPEG", "PNG");
     private static final int DEFAULT_CARD_TARGET_WIDTH = 480;
     private static final int DEFAULT_DETAIL_TARGET_WIDTH = 1200;
+    private static final BusinessPhotoStorageProvider DEFAULT_STORAGE_PROVIDER = BusinessPhotoStorageProvider.LOCAL;
+
+    // Depolama arka ucu: LOCAL (varsayilan, dev/test) veya R2 (prod). Enum
+    // oldugu icin BILEREK asagidaki validate()'e girmiyor -- gecersiz bir
+    // deger Spring'in kendi binding'i tarafindan acilista hata verilerek
+    // yakalanir, sessiz bir varsayilana dusme riski yok (bkz.
+    // BusinessPhotoStorageProvider'daki gerekce).
+    private BusinessPhotoStorageProvider storageProvider = DEFAULT_STORAGE_PROVIDER;
 
     // Fotograflarin diske yazildigi dizin. classpath/static DEGIL -- ayri bir
     // klasor, boylece Spring'in otomatik static resource handler'i uzerinden
@@ -108,6 +116,14 @@ public class BusinessPhotoProperties {
                     detailTargetWidth, DEFAULT_DETAIL_TARGET_WIDTH);
             detailTargetWidth = DEFAULT_DETAIL_TARGET_WIDTH;
         }
+    }
+
+    public BusinessPhotoStorageProvider getStorageProvider() {
+        return storageProvider;
+    }
+
+    public void setStorageProvider(BusinessPhotoStorageProvider storageProvider) {
+        this.storageProvider = storageProvider;
     }
 
     public String getStorageDir() {

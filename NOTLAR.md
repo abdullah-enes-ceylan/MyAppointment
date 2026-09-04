@@ -49,6 +49,53 @@ ayrışma riski yapısal olarak kapatıldı, kural iki yerde ayrı ayrı tanıml
 `date.atTime(slot)` ile mutlak bir an kurup mutlak bir cutoff'la kıyaslamak bu sarmayı
 yapısal olarak imkansız kılıyor (bkz. `AppointmentService.excludePastSlotsForToday`).
 
+**(2026-09-04) İşletme kapak fotoğrafı depolaması yerel diskten Cloudflare R2'ye
+taşınıyor, 3.8 (deploy) öncesinde.** Gerekçe: henüz gerçek prod verisi yok, yani şimdi
+yapılırsa "veri göçü" diye ayrı bir iş hiç doğmuyor; deploy sonrasına bırakılırsa hem
+kalıcı disk riskiyle (CLAUDE.md karar tablosu) uğraşılır hem de sonradan taşıma yazılır.
+Kilit kararlar (Claude Code + bir başka Claude oturumunun çapraz incelemesiyle):
+- **Yazma backend'den geçer, okuma doğrudan CDN'den** (`cdn.randevumweb.com`, R2 custom
+  domain) — presigned URL ile tarayıcıdan direkt yükleme YOK, çünkü sunucuya inmeyen bir
+  dosyanın magic-byte doğrulaması yapılamaz.
+- **Config-flag deseni:** `app.business-photo.storage-provider` (`BusinessPhotoStorageProvider`
+  enum, `LOCAL`/`R2`, varsayılan `LOCAL`) — `AppointmentPolicyProperties`'teki "geçersiz
+  değerde güvenli varsayılana düş" deseninin BİLEREK DIŞINDA: bu alan enum, geçersiz bir
+  değer Spring'in binding'i tarafından **açılışta hata verilerek** yakalanır (canlı
+  doğrulandı: `storage-provider=bogus` ile `APPLICATION FAILED TO START` +
+  `No enum constant ...bogus`). Sebebi: sessizce `local`'e düşmek, prod'da fark edilmeden
+  fotoğrafların container diskine yazılması gibi tam da kaçınılmak istenen senaryoyu
+  üretirdi. Prod'da `storage-provider=r2` **açıkça** yazılacak, varsayılana güvenilmeyecek.
+- **`R2StorageProperties`'e asla `@ToString`/`@Data` eklenmesin** — `secretAccessKey`
+  alanı taşıyor, projenin mevcut DTO deseni zaten sadece `@Getter`/`@Setter` kullanıyor
+  (bkz. `LoginRequest`), burada bu ayrıca güvenlik gerekçesiyle zorunlu.
+- **`{uuid}-card.jpg`/`{uuid}-detail.jpg` adlandırması R2'de birebir korunacak.**
+- **`read()` metodu R2 implementasyonunda da gerçek çalışacak** (Liskov ihlali olmasın
+  diye `UnsupportedOperationException` atılmayacak), ama `GET /api/business-photos/**`
+  ucu SADECE `storage-provider=local` iken yayınlanacak — aksi halde biri CDN yerine bu
+  ucu kullanıp VPS bandwidth'ini/R2 class B operasyonlarını tüketebilir, edge cache
+  tamamen atlanır.
+- **Backup için ek bir strateji kurulmayacak** — tek VPS diskinden R2'ye geçmek zaten
+  net bir iyileşme (dağıtık depolama), ek yedekleme kuruluncaya kadar beklemek anlamsız.
+  R2 versiyonlama/lifecycle değerlendirmesi ayrı bir ROADMAP maddesi (bkz. ROADMAP.md).
+- **Custom domain R2 panelinden bağlanacak, elle DNS kaydı AÇILMAYACAK** — R2, custom
+  domain bağlarken CNAME'i kendisi oluşturuyor; elle önden açılırsa çakışma çıkar. Kurulum
+  sonrası apex/`www` DNS-only (gri) kalmalı, sadece `cdn` proxied (turuncu) olmalı — bkz.
+  aşağıdaki "Cloudflare proxy" notu, bu ayrı bir subdomain olduğu için mevcut kararla
+  ÇELİŞMİYOR.
+- **Bucket CORS'a gerek yok** — görseller `<img src>` ile çekiliyor, tarayıcıdan doğrudan
+  upload yok, CORS hiç devreye girmiyor.
+
+**(2026-09-04) WebP'ye geçiş (görsel çıktı formatı) R2 taşımasından AYRI, sonraya
+bırakıldı.** Sebep: JDK'nın yerleşik `ImageIO`'sunda (Thumbnailator'ın dayandığı) hiç
+WebP yazıcısı yok — `outputFormat("webp")` "uygun writer bulunamadı" ile patlar. Aday
+çözüm `org.sejda.imageio:webp-imageio` (native/JNI, glibc-Linux için) — bizim
+`backend/Dockerfile`'ın ZATEN `eclipse-temurin:21-jre-jammy` (Alpine DEĞİL, glibc)
+kullanması bu kütüphaneyle uyumluluğu muhtemel kılıyor (Dockerfile'daki gerekçe: geçmişte
+JPEG için de aynı native-codec sorunu yaşanmıştı). **Ama bu doğrulanmadı** — R4 başlarsa
+ilk adım, resize kodunu hiç yazmadan önce, image içinde gerçek bir WebP yazma denemesi
+olacak. Sonuç olumsuzsa WebP tamamen ayrı bir araştırma kalemi olur, R2 ile hiç
+karıştırılmaz.
+
 ---
 
 ## Dikkat Edilmesi Gereken Tuzaklar
@@ -102,6 +149,16 @@ ama merkezi bir yerden OTOMATİK uygulanmıyor, her create-yolu bunu bilerek ekl
 **Backend kod değişikliği sonrası hot-reload YOK** (devtools kurulu değil) — her Java
 değişikliğinden sonra süreç manuel yeniden başlatılmalı: `cd backend && ./mvnw spring-boot:run`
 (gerekirse `-Dspring-boot.run.profiles=dev` ile).
+
+**Cloudflare R2 bucket:** `randevum-storage` (Standard storage class, Automatic/Eastern
+Europe location, Public Access disabled — herkese açık okuma custom domain ile ayrıca
+açılacak). API token **Account API Token**, "Object Read & Write", sadece bu bucket'a
+scope'lu, **TTL 1 yıl** (2026-09-04'te oluşturuldu) — **2027-09-04 civarında yenilenmesi
+gerekiyor**, süresi dolarsa yeni fotoğraf yükleme/silme sessizce 401/403 almaya başlar
+(mevcut fotoğrafların CDN'den servis edilmesini ETKİLEMEZ, o ayrı bir erişim yolu).
+Access Key ID/Secret Access Key hiçbir dosyaya (git'e giren hiçbir yere) yazılmadı —
+sadece geliştiricinin kendi güvenli notunda; koda bağlanınca `application-dev.properties`
+(gitignore'da) içine girecek.
 
 ---
 
