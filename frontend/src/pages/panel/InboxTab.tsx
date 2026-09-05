@@ -31,12 +31,25 @@ interface ToastState {
 // Bekleyen randevu talepleri — eskiden PendingAppointments.jsx sayfasıydı,
 // businessId sabit kodluydu (=1). Artık BusinessPanelPage'den seçili
 // işletmenin id'sini prop olarak alıyor.
-export default function InboxTab({ businessId, suspended = false }: { businessId: number | null; suspended?: boolean }) {
+interface InboxTabProps {
+  businessId: number | null;
+  suspended?: boolean;
+  // Sidebar'daki rozet sayısı için -- gerçek veri, sahte/sabit değer değil.
+  // Bu sekme zaten SADECE bekleyen talepleri çekiyor, o yüzden liste uzunluğu
+  // doğrudan rozet sayısıyla aynı.
+  onCountChange?: (count: number) => void;
+}
+
+export default function InboxTab({ businessId, suspended = false, onCountChange }: InboxTabProps) {
   const [appointments, setAppointments] = useState<AppointmentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+
+  useEffect(() => {
+    onCountChange?.(appointments.length);
+  }, [appointments, onCountChange]);
 
   useEffect(() => {
     if (!businessId) return;
@@ -116,10 +129,10 @@ export default function InboxTab({ businessId, suspended = false }: { businessId
       {error && !loading && (
         <div className="text-center py-16">
           <p className="text-5xl mb-4">⚠️</p>
-          <p className="text-red-400 text-lg mb-4">{error}</p>
+          <p className="text-red-500 text-lg mb-4">{error}</p>
           <button
             onClick={() => fetchPending()}
-            className="text-emerald-400 hover:text-emerald-300 text-sm font-medium cursor-pointer"
+            className="text-brand hover:text-brand-hover text-sm font-medium cursor-pointer"
           >
             Tekrar Dene
           </button>
@@ -128,19 +141,19 @@ export default function InboxTab({ businessId, suspended = false }: { businessId
 
       {!loading && !error && appointments.length === 0 && (
         <div className="text-center py-16">
-          <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-5">
+          <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-5">
             <span className="text-4xl">🎉</span>
           </div>
-          <p className="text-white text-lg font-medium mb-1">Tüm istekler işlendi!</p>
-          <p className="text-slate-400 text-sm">Bekleyen randevu talebi bulunmuyor.</p>
+          <p className="text-slate-900 text-lg font-medium mb-1">Tüm istekler işlendi!</p>
+          <p className="text-slate-500 text-sm">Bekleyen randevu talebi bulunmuyor.</p>
         </div>
       )}
 
       {!loading && !error && appointments.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-xs font-medium text-amber-400">
-              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse" />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs font-medium text-amber-700">
+              <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
               {appointments.length} bekleyen istek
             </span>
           </div>
@@ -148,32 +161,32 @@ export default function InboxTab({ businessId, suspended = false }: { businessId
           {appointments.map((apt) => (
             <div
               key={apt.id}
-              className="group bg-surface/80 backdrop-blur-sm border border-white/10 rounded-2xl overflow-hidden hover:border-amber-500/20 transition-all duration-300"
+              className="group bg-navy-50 border border-navy-100 rounded-2xl overflow-hidden hover:border-amber-300 transition-all duration-300"
             >
-              <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 px-5 py-2.5 border-b border-white/5 flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400">
-                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
+              <div className="bg-amber-50 px-5 py-2.5 border-b border-amber-100 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700">
+                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
                   Onay Bekliyor
                 </span>
-                <span className="text-xs text-slate-500">#{apt.id}</span>
+                <span className="text-xs text-slate-400">#{apt.id}</span>
               </div>
 
               <div className="p-5">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Müşteri</p>
-                    <p className="text-white font-semibold text-sm">
+                    <p className="text-slate-900 font-semibold text-sm">
                       {apt.customer?.name} {apt.customer?.surName}
                     </p>
-                    <p className="text-slate-400 text-xs flex items-center gap-1.5">
+                    <p className="text-slate-500 text-xs flex items-center gap-1.5">
                       📞 {apt.customer?.phone}
                     </p>
                   </div>
 
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Hizmet</p>
-                    <p className="text-white font-semibold text-sm">{apt.serviceItem?.name}</p>
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <p className="text-slate-900 font-semibold text-sm">{apt.serviceItem?.name}</p>
+                    <div className="flex items-center gap-3 text-xs text-slate-500">
                       <span>💰 {apt.serviceItem?.price} ₺</span>
                       <span>⏱ {apt.serviceItem?.durationInMinutes} dk</span>
                     </div>
@@ -181,32 +194,32 @@ export default function InboxTab({ businessId, suspended = false }: { businessId
 
                   <div className="space-y-1.5">
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tarih & Saat</p>
-                    <p className="text-white font-semibold text-sm">
+                    <p className="text-slate-900 font-semibold text-sm">
                       📅 {formatDate(apt.appointmentDate)}
                     </p>
                     {/* Bu uctan donen talepler zaten hep PENDING, yani expiresAt her zaman dolu
                         geliyor (bkz. backend AppointmentService.expiresAt) -- formulu burada
                         tekrar uretmiyoruz, sunucudan geldigi gibi gosteriyoruz. */}
                     {apt.expiresAt && (
-                      <p className="text-[11px] text-amber-400/80">
+                      <p className="text-[11px] text-amber-700/80">
                         ⏰ Son yanıt: {formatDate(apt.expiresAt)}
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-3 border-t border-white/5">
+                <div className="flex gap-3 pt-3 border-t border-navy-100">
                   <button
                     onClick={() => handleAction(apt.id, "approve")}
                     disabled={actionLoading === apt.id || suspended}
-                    className="flex-1 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                    className="flex-1 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                   >
                     {actionLoading === apt.id ? "İşleniyor..." : "✅ Onayla"}
                   </button>
                   <button
                     onClick={() => handleAction(apt.id, "reject")}
                     disabled={actionLoading === apt.id || suspended}
-                    className="flex-1 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-rose-700 to-red-700 hover:from-rose-600 hover:to-red-600 rounded-xl shadow-lg shadow-rose-500/20 hover:shadow-rose-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                    className="flex-1 py-2.5 text-sm font-semibold text-red-600 bg-white border border-red-200 hover:bg-red-50 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                   >
                     {actionLoading === apt.id ? "İşleniyor..." : "❌ Reddet"}
                   </button>

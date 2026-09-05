@@ -148,7 +148,7 @@ export default function WorkingHoursTab({ businessId, suspended = false }: { bus
   }
 
   const timeInputClass =
-    "px-2.5 py-1.5 bg-bg-light border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all disabled:opacity-40";
+    "px-2.5 py-1.5 bg-white border border-navy-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 transition-all disabled:opacity-40";
 
   if (loading) {
     return (
@@ -168,8 +168,8 @@ export default function WorkingHoursTab({ businessId, suspended = false }: { bus
     return (
       <div className="text-center py-16">
         <p className="text-5xl mb-4">⚠️</p>
-        <p className="text-red-400 text-lg mb-4">{error}</p>
-        <button onClick={fetchAll} className="text-emerald-400 hover:text-emerald-300 text-sm font-medium cursor-pointer">
+        <p className="text-red-500 text-lg mb-4">{error}</p>
+        <button onClick={fetchAll} className="text-brand hover:text-brand-hover text-sm font-medium cursor-pointer">
           Tekrar Dene
         </button>
       </div>
@@ -177,28 +177,28 @@ export default function WorkingHoursTab({ businessId, suspended = false }: { bus
   }
 
   return (
-    <div className="space-y-8">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       {/* Haftalık çalışma saatleri */}
       <div>
-        <h2 className="text-sm font-semibold text-white mb-3">Haftalık Çalışma Saatleri</h2>
+        <h2 className="text-sm font-semibold text-slate-900 mb-3">Haftalık Çalışma Saatleri</h2>
         <div className="space-y-2">
           {DAYS.map((d) => {
             const day = days[d.key];
             return (
               <div
                 key={d.key}
-                className="flex flex-wrap items-center gap-3 bg-surface/80 border border-white/10 rounded-xl px-4 py-3"
+                className="flex flex-wrap items-center gap-3 bg-navy-50 border border-navy-100 rounded-xl px-4 py-3"
               >
-                <span className="w-24 shrink-0 text-sm font-medium text-white">{d.label}</span>
+                <span className="w-24 shrink-0 text-sm font-medium text-slate-900">{d.label}</span>
 
-                <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer">
+                <label className="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={day.closed}
                     onChange={(e: ChangeEvent<HTMLInputElement>) => updateDay(d.key, { closed: e.target.checked })}
-                    className="cursor-pointer"
+                    className="cursor-pointer accent-brand"
                   />
                   Kapalı
                 </label>
@@ -210,7 +210,7 @@ export default function WorkingHoursTab({ businessId, suspended = false }: { bus
                   onChange={(e: ChangeEvent<HTMLInputElement>) => updateDay(d.key, { openTime: e.target.value })}
                   className={timeInputClass}
                 />
-                <span className="text-slate-500 text-xs">—</span>
+                <span className="text-slate-400 text-xs">—</span>
                 <input
                   type="time"
                   disabled={day.closed}
@@ -220,13 +220,13 @@ export default function WorkingHoursTab({ businessId, suspended = false }: { bus
                 />
 
                 {!day.configured && (
-                  <span className="text-xs text-slate-500 italic">yapılandırılmamış</span>
+                  <span className="text-xs text-slate-400 italic">yapılandırılmamış</span>
                 )}
 
                 <button
                   onClick={() => saveDay(d.key)}
                   disabled={savingDay === d.key || suspended}
-                  className="ml-auto px-3 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+                  className="ml-auto px-3 py-1.5 text-xs font-semibold text-white bg-brand hover:bg-brand-hover rounded-lg disabled:opacity-50 transition-all cursor-pointer"
                 >
                   {savingDay === d.key ? "Kaydediliyor..." : "Kaydet"}
                 </button>
@@ -238,7 +238,7 @@ export default function WorkingHoursTab({ businessId, suspended = false }: { bus
 
       {/* Özel kapanış günleri */}
       <div>
-        <h2 className="text-sm font-semibold text-white mb-3">Özel Kapanış Günleri</h2>
+        <h2 className="text-sm font-semibold text-slate-900 mb-3">Özel Kapanış Günleri</h2>
 
         <form onSubmit={handleAddClosure} className="flex flex-wrap gap-3 mb-4">
           <input
@@ -247,19 +247,19 @@ export default function WorkingHoursTab({ businessId, suspended = false }: { bus
             min={new Date().toISOString().slice(0, 10)}
             value={closureForm.date}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setClosureForm({ ...closureForm, date: e.target.value })}
-            className="px-3 py-2 bg-bg-light border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+            className="px-3 py-2 bg-white border border-navy-200 rounded-lg text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 transition-all"
           />
           <input
             type="text"
             placeholder="Sebep (opsiyonel — ör. Resmi Tatil)"
             value={closureForm.reason ?? ""}
             onChange={(e: ChangeEvent<HTMLInputElement>) => setClosureForm({ ...closureForm, reason: e.target.value })}
-            className="flex-1 min-w-[180px] px-3 py-2 bg-bg-light border border-white/10 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+            className="flex-1 min-w-[180px] px-3 py-2 bg-white border border-navy-200 rounded-lg text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 transition-all"
           />
           <button
             type="submit"
             disabled={addingClosure || suspended}
-            className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+            className="px-4 py-2 text-sm font-semibold text-white bg-brand hover:bg-brand-hover rounded-lg disabled:opacity-50 transition-all cursor-pointer"
           >
             {addingClosure ? "Ekleniyor..." : "Ekle"}
           </button>
@@ -272,16 +272,16 @@ export default function WorkingHoursTab({ businessId, suspended = false }: { bus
             {closures.map((c) => (
               <div
                 key={c.id}
-                className="flex items-center justify-between bg-surface/80 border border-white/10 rounded-xl px-4 py-3"
+                className="flex items-center justify-between bg-navy-50 border border-navy-100 rounded-xl px-4 py-3"
               >
                 <div>
-                  <span className="text-white text-sm font-medium">{c.date}</span>
-                  {c.reason && <span className="text-slate-400 text-xs ml-2">— {c.reason}</span>}
+                  <span className="text-slate-900 text-sm font-medium">{c.date}</span>
+                  {c.reason && <span className="text-slate-500 text-xs ml-2">— {c.reason}</span>}
                 </div>
                 <button
                   onClick={() => handleDeleteClosure(c.id)}
                   disabled={deletingClosureId === c.id || suspended}
-                  className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
+                  className="px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 border border-red-200 hover:border-red-300 rounded-lg disabled:opacity-50 transition-all cursor-pointer"
                 >
                   {deletingClosureId === c.id ? "Siliniyor..." : "Sil"}
                 </button>

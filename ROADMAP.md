@@ -1458,6 +1458,44 @@ mevcut duruma göre net iyileşme" gerekçesiyle) ertelendi, ama unutulmamalı.
 
 ---
 
+### 3.16 — İşletme paneli yeniden tasarımı (sol menü + mobil) `[SEN]` `[AI]`
+
+**(2026-09-05)** Google AI Studio mockup'ına göre başlatıldı. Eski yatay üst-sekme çubuğu
+(koyu tema) yerine sol dikey menü (açık tema), mobilde hamburger menüyle açılıp kapanan
+overlay. `LocationTab` (harita/enlem-boylam) ve `InfoTab` (ad/adres/telefon/açıklama/
+kategori/hizmet-grubu/otomatik-onay/kapak-fotoğrafı) kullanıcı kararıyla TEK sekmede
+(`LocationInfoTab`, "Konum & İletişim") birleştirildi; kapak fotoğrafı ayrı, YENİ bir
+"Galeri & Fotoğraflar" sekmesine (`GalleryTab`) taşındı. Sekme rozetleri (İstek Kutusu/
+Onaylananlar/Hizmetler/Personel sayıları) gerçek veriye dayanıyor — her sekme kendi
+`onCountChange` callback'iyle sayıyı üst bileşene (`BusinessPanelPage`) bildiriyor, sahte/
+sabit sayı YOK.
+
+**Kullanıcı kararıyla kapsam dışı bırakıldı (2026-09-05):**
+- Mockup'taki **"İlçe/Semt"** (ayrı alan) ve **"WhatsApp Randevu Hattı"** alanları
+  eklenmedi — backend'de (Business entity) bu alanlar hiç yok, eklemek yeni bir migration
+  gerektirirdi. Şimdilik mevcut tek `address`/`phone` alanlarıyla ilerleniyor. Bu, NOTLAR.md'de
+  zaten kayıtlı olan "İl/ilçe ile manuel konum seçimi" konusuyla aynı — ayrı bir iş kalemi
+  olarak ele alınmalı, istenirse bu ikisi (district kolonu + whatsapp_phone kolonu) birlikte
+  eklenebilir.
+- Mockup'taki **"İşletme Çevrimiçi"** durumu (yeşil nokta) hiç eklenmedi — backend'de böyle
+  bir "canlı durum" kavramı yok, uydurmak yanıltıcı olurdu (bkz. Navbar'daki bildirim zili
+  ile aynı durustluk gerekcesi). Sidebar'da onun yerine gerçek veriye dayanan "✓ Onaylı
+  İşletme" rozeti (sadece `business.verified` true ise) gösteriliyor.
+
+**Henüz yapılmadı, sıradaki adım olarak bırakıldı (bilerek, "adım adım" kuralı gereği):**
+`InboxTab`/`ApprovedTab`/`ServicesTab`/`StaffTab`/`WorkingHoursTab`'in İÇERİKLERİ hâlâ eski
+koyu temada (bkz. CLAUDE.md "işletme paneli sekmeleri hâlâ eski koyu temada, kademeli
+geçecek") — sadece etraflarındaki kabuk (sidebar + genel sayfa) yeni açık temaya geçti.
+Bu sekmelerin kendi kart/form stillerinin açık temaya çevrilmesi ayrı bir adım.
+
+**Galeri & Fotoğraflar sekmesi kasıtlı olarak YARIM kapsamlı:** sadece mevcut TEK kapak
+fotoğrafı (zaten çalışan gerçek özellik, "Ana Kapak" etiketiyle) gösteriliyor/yönetilebiliyor;
+gerçek çoklu-fotoğraf galerisi (birden fazla yükleme, sıralama, silme) backend'i HENÜZ YOK —
+ek galeri slotları bilerek "Yakında" etiketli, tıklanamaz. Gerçek çoklu galeri ayrı bir iş
+kalemi (yeni tablo/entity — `BusinessPhoto` gibi — + sıralama + silme uçları).
+
+---
+
 # DEPLOYMENT — Öğrenci Bütçesiyle Gerçekçi Plan
 
 ## Önerilen kurulum (~5-6 €/ay)
