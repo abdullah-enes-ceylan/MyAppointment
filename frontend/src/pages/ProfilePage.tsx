@@ -383,7 +383,6 @@ export default function ProfilePage() {
                 label="Telefon"
                 type="tel"
                 inputMode="numeric"
-                maxLength={11}
                 value={infoForm.phone}
                 // Backend'deki @Pattern (UpdateProfileRequest.phone) ile AYNI
                 // format: "05" + 9 hane. Rakam dışı karakterler yazarken

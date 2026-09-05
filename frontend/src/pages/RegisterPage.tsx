@@ -192,7 +192,6 @@ export default function RegisterPage() {
                   name="phone"
                   type="tel"
                   inputMode="numeric"
-                  maxLength={11}
                   required
                   value={form.phone}
                   onChange={handlePhoneChange}
