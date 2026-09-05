@@ -6,6 +6,7 @@ import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.Staff;
 import com.randevu.backend.entity.StaffWorkingHour;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.repository.BusinessPhotoRepository;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
 import com.randevu.backend.repository.StaffRepository;
@@ -51,6 +52,8 @@ class StaffControllerOwnershipTest {
     @Mock
     private StaffRepository staffRepository;
     @Mock
+    private BusinessPhotoRepository businessPhotoRepository;
+    @Mock
     private Authentication authentication;
 
     private StaffController controller;
@@ -58,7 +61,8 @@ class StaffControllerOwnershipTest {
 
     @BeforeEach
     void setUp() {
-        OwnershipGuard ownershipGuard = new OwnershipGuard(businessRepository, serviceItemRepository, staffRepository);
+        OwnershipGuard ownershipGuard = new OwnershipGuard(businessRepository, serviceItemRepository, staffRepository,
+                businessPhotoRepository);
         controller = new StaffController(staffService, currentUserService, ownershipGuard);
 
         Business business = Business.builder().id(BUSINESS_ID).owner(User.builder().id(OWNER_ID).build()).build();

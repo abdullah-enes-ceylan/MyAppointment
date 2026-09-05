@@ -1,10 +1,12 @@
 package com.randevu.backend.service;
 
 import com.randevu.backend.entity.Business;
+import com.randevu.backend.entity.BusinessPhoto;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.Staff;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.exception.BusinessRuleException;
+import com.randevu.backend.repository.BusinessPhotoRepository;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
 import com.randevu.backend.repository.StaffRepository;
@@ -36,6 +38,7 @@ class OwnershipGuardTest {
     private static final Long BUSINESS_ID = 100L;
     private static final Long SERVICE_ITEM_ID = 200L;
     private static final Long STAFF_ID = 300L;
+    private static final Long PHOTO_ID = 400L;
 
     @Mock
     private BusinessRepository businessRepository;
@@ -43,6 +46,8 @@ class OwnershipGuardTest {
     private ServiceItemRepository serviceItemRepository;
     @Mock
     private StaffRepository staffRepository;
+    @Mock
+    private BusinessPhotoRepository businessPhotoRepository;
 
     private OwnershipGuard ownershipGuard;
     private Business activeBusiness;
@@ -50,7 +55,8 @@ class OwnershipGuardTest {
 
     @BeforeEach
     void setUp() {
-        ownershipGuard = new OwnershipGuard(businessRepository, serviceItemRepository, staffRepository);
+        ownershipGuard = new OwnershipGuard(businessRepository, serviceItemRepository, staffRepository,
+                businessPhotoRepository);
 
         User owner = User.builder().id(OWNER_ID).build();
         activeBusiness = Business.builder().id(BUSINESS_ID).owner(owner).build();
@@ -135,5 +141,41 @@ class OwnershipGuardTest {
         when(businessRepository.findById(BUSINESS_ID)).thenReturn(Optional.of(suspendedBusiness));
 
         assertThatCode(() -> ownershipGuard.assertOwnsStaff(OWNER_ID, STAFF_ID)).doesNotThrowAnyException();
+    }
+
+    // V17 (coklu fotograf) -- IDOR'a karsi kritik test (bkz. NOTLAR.md).
+    // assertOwnsServiceItem/assertOwnsStaff ile AYNI desen: guard, path'teki
+    // businessId'ye degil, kaydin (burada: fotografin) KENDI isletmesine bakar.
+    @Test
+    @DisplayName("assertOwnsActiveBusinessPhoto: gerçek sahip kendi fotoğrafında geçer")
+    void assertOwnsActiveBusinessPhoto_sahipIcinGecer() {
+        BusinessPhoto photo = BusinessPhoto.builder().id(PHOTO_ID).business(activeBusiness).build();
+        when(businessPhotoRepository.findById(PHOTO_ID)).thenReturn(Optional.of(photo));
+        when(businessRepository.findById(BUSINESS_ID)).thenReturn(Optional.of(activeBusiness));
+
+        assertThatCode(() -> ownershipGuard.assertOwnsActiveBusinessPhoto(OWNER_ID, PHOTO_ID))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("assertOwnsActiveBusinessPhoto: başkasının fotoğrafında 403 (IDOR)")
+    void assertOwnsActiveBusinessPhoto_baskasininFotografindaYetkisiz() {
+        BusinessPhoto photo = BusinessPhoto.builder().id(PHOTO_ID).business(activeBusiness).build();
+        when(businessPhotoRepository.findById(PHOTO_ID)).thenReturn(Optional.of(photo));
+        when(businessRepository.findById(BUSINESS_ID)).thenReturn(Optional.of(activeBusiness));
+
+        assertThatThrownBy(() -> ownershipGuard.assertOwnsActiveBusinessPhoto(STRANGER_ID, PHOTO_ID))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("assertOwnsActiveBusinessPhoto: askıdaki işletmenin fotoğrafında 409")
+    void assertOwnsActiveBusinessPhoto_askidakiIsletmedeReddeder() {
+        BusinessPhoto photo = BusinessPhoto.builder().id(PHOTO_ID).business(suspendedBusiness).build();
+        when(businessPhotoRepository.findById(PHOTO_ID)).thenReturn(Optional.of(photo));
+        when(businessRepository.findById(BUSINESS_ID)).thenReturn(Optional.of(suspendedBusiness));
+
+        assertThatThrownBy(() -> ownershipGuard.assertOwnsActiveBusinessPhoto(OWNER_ID, PHOTO_ID))
+                .isInstanceOf(BusinessRuleException.class);
     }
 }

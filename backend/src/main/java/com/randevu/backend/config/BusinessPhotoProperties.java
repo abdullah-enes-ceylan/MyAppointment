@@ -29,6 +29,7 @@ public class BusinessPhotoProperties {
     private static final int DEFAULT_CARD_TARGET_WIDTH = 480;
     private static final int DEFAULT_DETAIL_TARGET_WIDTH = 1200;
     private static final BusinessPhotoStorageProvider DEFAULT_STORAGE_PROVIDER = BusinessPhotoStorageProvider.LOCAL;
+    private static final int DEFAULT_MAX_PHOTOS_PER_BUSINESS = 5;
 
     // Depolama arka ucu: LOCAL (varsayilan, dev/test) veya R2 (prod). Enum
     // oldugu icin BILEREK asagidaki validate()'e girmiyor -- gecersiz bir
@@ -68,6 +69,11 @@ public class BusinessPhotoProperties {
     // madde 4) -- simdilik yer tutucu.
     private int cardTargetWidth = DEFAULT_CARD_TARGET_WIDTH;
     private int detailTargetWidth = DEFAULT_DETAIL_TARGET_WIDTH;
+
+    // Isletme basina en fazla kac fotograf (V17, coklu galeri). Sayi
+    // sabit kodlanmiyor -- saha geri bildirimiyle (ornegin "3 az geldi,
+    // 5 olsun") kod degisikligi/deploy gerektirmeden ayarlanabilmeli.
+    private int maxPhotosPerBusiness = DEFAULT_MAX_PHOTOS_PER_BUSINESS;
 
     // Gecersiz ayarlar uygulamayi durdurmuyor, guvenli varsayilana dusup
     // uyari logluyor -- AppointmentPolicyProperties.validate ile ayni gerekce.
@@ -115,6 +121,11 @@ public class BusinessPhotoProperties {
             log.warn("app.business-photo.detail-target-width geçersiz ({}), varsayılan {} kullanılıyor",
                     detailTargetWidth, DEFAULT_DETAIL_TARGET_WIDTH);
             detailTargetWidth = DEFAULT_DETAIL_TARGET_WIDTH;
+        }
+        if (maxPhotosPerBusiness <= 0) {
+            log.warn("app.business-photo.max-photos-per-business geçersiz ({}), varsayılan {} kullanılıyor",
+                    maxPhotosPerBusiness, DEFAULT_MAX_PHOTOS_PER_BUSINESS);
+            maxPhotosPerBusiness = DEFAULT_MAX_PHOTOS_PER_BUSINESS;
         }
     }
 
@@ -180,5 +191,13 @@ public class BusinessPhotoProperties {
 
     public void setDetailTargetWidth(int detailTargetWidth) {
         this.detailTargetWidth = detailTargetWidth;
+    }
+
+    public int getMaxPhotosPerBusiness() {
+        return maxPhotosPerBusiness;
+    }
+
+    public void setMaxPhotosPerBusiness(int maxPhotosPerBusiness) {
+        this.maxPhotosPerBusiness = maxPhotosPerBusiness;
     }
 }

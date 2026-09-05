@@ -66,15 +66,11 @@ public class Business {
     @Column(name = "served_gender", nullable = false)
     private ServedGender servedGender = ServedGender.UNISEX;
 
-    // Kapak fotografi icin tek anahtar (uzantisiz UUID). Nullable -- isletme
-    // henuz fotograf yuklememis olabilir, bu durumda mapper eski gradyan
-    // kapagin gosterilmesi icin null URL uretir. Kart/detay dosya adlari
-    // ({photoKey}-card.jpg, {photoKey}-detail.jpg) BusinessMapper'da bu
-    // alandan turetiliyor -- bkz. plan "Isletme Kapak Fotografi" PR2.
-    // BusinessRequest'te BILEREK yok: sadece fotograf yukleme ucu (PR3)
-    // set eder, genel guncelleme akisiyla degistirilemez.
-    @Column(name = "photo_key")
-    private String photoKey;
+    // V17'den itibaren BURADA YOK -- kapak fotografi artik BusinessPhoto
+    // (ayri tablo, coklu fotograf) uzerinden okunuyor. businesses.photo_key
+    // kolonu DB'de HALA DURUYOR (expand-contract, bkz. V17 migration) ama
+    // hicbir Java kodu artik bunu okumuyor/yazmiyor -- gercekten kaldirilmasi
+    // ayri, sonraki bir migration.
 
     // Sahibi hesap silme talep ettiginde dolar (Faz 3.9). Dolu oldugu surece
     // bu isletme aramada/listelemede GORUNMEZ, detay ucu 404 doner (bkz.

@@ -38,5 +38,10 @@ public record BusinessDetailResponse(
         // Faz 3.9 — bkz. BusinessResponse'daki aynı alanın açıklaması.
         boolean suspended,
         // "Otomatik onay" anahtarı — bkz. BusinessResponse'daki aynı alanın açıklaması.
-        boolean autoApprove) {
+        boolean autoApprove,
+        // V17: TÜM fotoğraflar, sıralı (ilki = kapak, coverPhotoCardUrl ile
+        // aynı fotoğraf). Müşteri tarafı carousel'i (PR3) bunu kullanacak;
+        // panel Galeri sekmesi de aynı şekilde. Hiç fotoğraf yoksa boş liste
+        // (null DEĞİL) — frontend'de "photos.length === 0" kontrolü yeterli.
+        List<BusinessPhotoResponse> photos) {
 }

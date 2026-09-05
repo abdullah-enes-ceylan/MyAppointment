@@ -3,9 +3,11 @@ package com.randevu.backend.controller;
 import com.randevu.backend.config.RateLimitProperties;
 import com.randevu.backend.dto.request.BusinessRequest;
 import com.randevu.backend.dto.response.BusinessDetailResponse;
+import com.randevu.backend.dto.response.BusinessPhotoResponse;
 import com.randevu.backend.dto.response.BusinessResponse;
 import com.randevu.backend.dto.response.NearbyBusinessResponse;
 import com.randevu.backend.entity.Business;
+import com.randevu.backend.entity.BusinessPhoto;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.exception.RateLimitExceededException;
 import com.randevu.backend.mapper.BusinessMapper;
@@ -26,7 +28,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/businesses")
@@ -59,11 +63,15 @@ public class BusinessController {
     // tüm listeyi buradan çekip client'ta filtreliyor ve serviceItems'a
     // ihtiyaç duyuyor. Eskiden entity dönüyordu; herkese açık (permitAll)
     // bu uçta her işletme sahibinin email/telefon/rolü çıplak sızıyordu.
+    //
+    // Fotoğraflar (V17) BİLEREK önce TOPLU çekiliyor (bkz.
+    // BusinessPhotoService.getPhotosGroupedByBusinessId) — işletme başına
+    // ayrı bir sorgu atılsaydı, tam olarak ROADMAP 3.14'ün çözmeyi
+    // planladığı puan-ortalaması N+1'iyle AYNI hatayı fotoğraf tarafında
+    // yeniden üretmiş olurduk (bkz. NOTLAR.md "N+1" notu).
     @GetMapping
     public List<BusinessDetailResponse> getAllBusinesses() {
-        return businessService.getAllBusinesses().stream()
-                .map(this::toDetailResponseWithRating)
-                .toList();
+        return toDetailResponsesWithRating(businessService.getAllBusinesses());
     }
 
     // YENİ: tekil işletme detayı. Eskiden bu uç hiç yoktu — frontend
@@ -86,7 +94,11 @@ public class BusinessController {
     // atlıyor, herkes için davranış aynı kalıyor.
     @GetMapping("/{id:\\d+}")
     public BusinessDetailResponse getBusinessById(@PathVariable Long id, Authentication authentication) {
-        return toDetailResponseWithRating(businessService.getBusinessById(id, resolveViewerIdOrNull(authentication)));
+        Business business = businessService.getBusinessById(id, resolveViewerIdOrNull(authentication));
+        RatingStats stats = businessService.getRatingStats(business.getId());
+        List<BusinessPhoto> photos = businessPhotoService.getPhotos(business.getId());
+        return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount(), photos,
+                photoStorage);
     }
 
     private Long resolveViewerIdOrNull(Authentication authentication) {
@@ -109,9 +121,7 @@ public class BusinessController {
     @GetMapping("/my")
     public List<BusinessResponse> getMyBusinesses(Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        return businessService.getBusinessesByOwner(currentUser.getId()).stream()
-                .map(this::toResponseWithRating)
-                .toList();
+        return toResponsesWithRating(businessService.getBusinessesByOwner(currentUser.getId()));
     }
 
     // İşletme oluşturma — Token'dan sahip kimliği alınır. Artık Business
@@ -122,7 +132,9 @@ public class BusinessController {
                                             Authentication authentication) {
         User owner = currentUserService.getCurrentUser(authentication);
         Business created = businessService.createBusiness(owner, BusinessMapper.toEntity(request));
-        return ResponseEntity.ok(toResponseWithRating(created));
+        // Yeni olusturulan bir isletmenin fotografi OLAMAZ (henuz var olmuyordu) --
+        // sorgu atmadan dogrudan null gecebiliyoruz.
+        return ResponseEntity.ok(toResponseWithRating(created, null));
     }
 
     // YENİ: işletme güncelleme, sahiplik kontrollü. OwnershipGuard olmadan,
@@ -135,14 +147,13 @@ public class BusinessController {
         User currentUser = currentUserService.getCurrentUser(authentication);
         ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
         Business updated = businessService.updateBusiness(businessId, request);
-        return toResponseWithRating(updated);
+        return toResponseWithRating(updated, singleCoverKey(businessId));
     }
 
-    // YENİ: kapak fotoğrafı yükleme, sahiplik kontrollü. OwnershipGuard
-    // olmadan giriş yapmış herhangi bir kullanıcı başka bir işletmenin
-    // kapağını değiştirebilirdi -- updateBusiness ile aynı desen. Dosyanın
-    // doğrulanması/yeniden kodlanması/depolanması BusinessPhotoService'te
-    // (bkz. o sınıf, plan "Isletme Kapak Fotografi" PR3).
+    // Isletmeye fotograf ekleme, sahiplik kontrollü. OwnershipGuard olmadan
+    // giriş yapmış herhangi bir kullanıcı başka bir işletmeye fotoğraf
+    // ekleyebilirdi -- updateBusiness ile aynı desen. Dosyanın doğrulanması/
+    // yeniden kodlanması/depolanması BusinessPhotoImageProcessor+BusinessPhotoService'te.
     //
     // Faz 3.5: rate limit KULLANICI id bazinda (IP degil) -- uc zaten
     // kimlik dogrulamali, saldiri modeli "ele gecirilmis/kotu niyetli
@@ -150,8 +161,11 @@ public class BusinessController {
     // biri zaten 403 aliyor, pahali decode/resize islemine hic girmeden --
     // rate limit sadece GERCEKTEN o isletmenin sahibi olan (dolayisiyla
     // pahali islemi tetikleyebilecek) istekleri sayar.
-    @PostMapping("/{id:\\d+}/photo")
-    public BusinessResponse uploadPhoto(@PathVariable("id") Long businessId,
+    //
+    // V17: uc tekilden ("/photo") cogula ("/photos") tasindi -- kaynak artik
+    // bir koleksiyon, tekil isim okuyani yanıltırdı (bkz. NOTLAR.md notu).
+    @PostMapping("/{id:\\d+}/photos")
+    public List<BusinessPhotoResponse> addPhoto(@PathVariable("id") Long businessId,
                                          @RequestParam("file") MultipartFile file,
                                          Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
@@ -165,21 +179,25 @@ public class BusinessController {
                     result.retryAfterSeconds());
         }
 
-        Business updated = businessPhotoService.uploadPhoto(businessId, file);
-        return toResponseWithRating(updated);
+        List<BusinessPhoto> photos = businessPhotoService.addPhoto(businessId, file);
+        return photos.stream().map(p -> BusinessMapper.toPhotoResponse(p, photoStorage)).toList();
     }
 
-    // YENİ: kapak fotoğrafını kaldırma, sahiplik kontrollü -- uploadPhoto ile
-    // aynı OwnershipGuard deseni. IDEMPOTENT: zaten fotoğrafı olmayan bir
-    // işletmede çağrılırsa da 204 döner, hata fırlatmaz (bkz.
-    // BusinessPhotoService.removePhoto) -- FavoriteController.removeFavorite
-    // ile aynı "toggle'in kapa ucu" felsefesi.
-    @DeleteMapping("/{id:\\d+}/photo")
-    public ResponseEntity<Void> removePhoto(@PathVariable("id") Long businessId, Authentication authentication) {
+    // Belirli bir fotoğrafı kaldırma. IDOR'a KAPALI: assertOwnsActiveBusinessPhoto
+    // path'teki {id}'ye GUVENMIYOR, fotografin KENDI isletmesini bulup onu
+    // doğruluyor (bkz. OwnershipGuard, NOTLAR.md "IDOR" notu) --
+    // BusinessPhotoService.removePhoto'daki findByIdAndBusinessId de aynı
+    // eşleşmeyi ikinci, savunma amaçlı katman olarak tekrar doğruluyor.
+    // Güncel fotoğraf listesini dönüyor (frontend yeniden fetch atmadan
+    // grid'i güncelleyebilsin diye) -- eski tekil kapakta 204/boş gövde
+    // yeterliydi, artık bir koleksiyon söz konusu.
+    @DeleteMapping("/{id:\\d+}/photos/{photoId}")
+    public List<BusinessPhotoResponse> removePhoto(@PathVariable("id") Long businessId,
+                                                    @PathVariable Long photoId, Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        ownershipGuard.assertOwnsActiveBusiness(currentUser.getId(), businessId);
-        businessPhotoService.removePhoto(businessId);
-        return ResponseEntity.noContent().build();
+        ownershipGuard.assertOwnsActiveBusinessPhoto(currentUser.getId(), photoId);
+        List<BusinessPhoto> photos = businessPhotoService.removePhoto(businessId, photoId);
+        return photos.stream().map(p -> BusinessMapper.toPhotoResponse(p, photoStorage)).toList();
     }
 
     // Faz 2.8: konuma göre yakın işletme listeleme. /api/businesses ile
@@ -200,32 +218,73 @@ public class BusinessController {
 
         int fromIndex = Math.min(page * size, nearby.size());
         int toIndex = Math.min(fromIndex + size, nearby.size());
+        List<NearbyBusiness> pagedResults = nearby.subList(fromIndex, toIndex);
 
-        return nearby.subList(fromIndex, toIndex).stream()
-                .map(nb -> new NearbyBusinessResponse(toResponseWithRating(nb.business()), nb.distanceKm()))
+        Map<Long, List<BusinessPhoto>> photosByBusiness = businessPhotoService.getPhotosGroupedByBusinessId(
+                pagedResults.stream().map(nb -> nb.business().getId()).toList());
+
+        return pagedResults.stream()
+                .map(nb -> new NearbyBusinessResponse(
+                        toResponseWithRating(nb.business(), coverKey(photosByBusiness, nb.business().getId())),
+                        nb.distanceKm()))
                 .toList();
     }
 
     // Belirtilen kategori adına göre işletmeleri getirir.
     @GetMapping("/category/{categoryName}")
     public ResponseEntity<List<BusinessDetailResponse>> getBusinessesByCategory(@PathVariable String categoryName) {
-        List<BusinessDetailResponse> businesses = businessService.getBusinessesByCategory(categoryName).stream()
-                .map(this::toDetailResponseWithRating)
-                .toList();
-        return ResponseEntity.ok(businesses);
+        return ResponseEntity.ok(toDetailResponsesWithRating(businessService.getBusinessesByCategory(categoryName)));
     }
 
     // Faz 2.7: her işletme yanıtına puan ortalaması + yorum sayısı ekliyor.
     // İş listesi başına bir sorgu (N+1) — bilerek: 5-10 işletmelik beta
     // ölçeğinde önemsiz, erken optimizasyon yapmıyoruz (bkz. ROADMAP 2.7).
-    private BusinessResponse toResponseWithRating(Business business) {
+    // coverPhotoKey artık DIŞARIDAN geliyor (bkz. BusinessMapper.toResponse
+    // yorumu) -- bu metot tek bir işletme için, çağıran taraf listede mi
+    // tekil bağlamda mı olduğuna göre toplu ya da tekil sorgudan besliyor.
+    private BusinessResponse toResponseWithRating(Business business, String coverPhotoKey) {
         RatingStats stats = businessService.getRatingStats(business.getId());
-        return BusinessMapper.toResponse(business, stats.averageRating(), stats.reviewCount(), photoStorage);
+        return BusinessMapper.toResponse(business, stats.averageRating(), stats.reviewCount(), coverPhotoKey,
+                photoStorage);
     }
 
-    private BusinessDetailResponse toDetailResponseWithRating(Business business) {
-        RatingStats stats = businessService.getRatingStats(business.getId());
-        return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount(), photoStorage);
+    // Liste uçları (getAllBusinesses/getBusinessesByCategory) için TOPLU
+    // sürüm -- fotoğraflar TEK sorguyla önceden çekilip business.id'ye göre
+    // gruplanıyor, sonra her işletme kendi grubundan besleniyor. Puan
+    // ortalaması hâlâ işletme başına ayrı sorgu (bilinen, ERTELENMİŞ N+1,
+    // bkz. yukarısı) -- bu metot SADECE fotoğraf tarafını düzeltiyor.
+    private List<BusinessDetailResponse> toDetailResponsesWithRating(List<Business> businesses) {
+        Map<Long, List<BusinessPhoto>> photosByBusiness = businessPhotoService.getPhotosGroupedByBusinessId(
+                businesses.stream().map(Business::getId).toList());
+        return businesses.stream()
+                .map(business -> {
+                    RatingStats stats = businessService.getRatingStats(business.getId());
+                    List<BusinessPhoto> photos = photosByBusiness.getOrDefault(business.getId(), Collections.emptyList());
+                    return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount(),
+                            photos, photoStorage);
+                })
+                .toList();
+    }
+
+    private List<BusinessResponse> toResponsesWithRating(List<Business> businesses) {
+        Map<Long, List<BusinessPhoto>> photosByBusiness = businessPhotoService.getPhotosGroupedByBusinessId(
+                businesses.stream().map(Business::getId).toList());
+        return businesses.stream()
+                .map(business -> toResponseWithRating(business, coverKey(photosByBusiness, business.getId())))
+                .toList();
+    }
+
+    private static String coverKey(Map<Long, List<BusinessPhoto>> photosByBusiness, Long businessId) {
+        List<BusinessPhoto> photos = photosByBusiness.get(businessId);
+        return (photos == null || photos.isEmpty()) ? null : photos.get(0).getPhotoKey();
+    }
+
+    // Tekil bağlamlar (updateBusiness) için: sadece bu işletmenin fotoğrafları,
+    // TEK sorgu -- liste bağlamındaki toplu sorgudan farklı ama aynı şekilde
+    // N+1 üretmiyor (zaten tek işletme işleniyor).
+    private String singleCoverKey(Long businessId) {
+        List<BusinessPhoto> photos = businessPhotoService.getPhotos(businessId);
+        return photos.isEmpty() ? null : photos.get(0).getPhotoKey();
     }
 
 }

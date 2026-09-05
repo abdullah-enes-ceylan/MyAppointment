@@ -4,6 +4,7 @@ import com.randevu.backend.dto.request.ServiceItemRequest;
 import com.randevu.backend.entity.Business;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.User;
+import com.randevu.backend.repository.BusinessPhotoRepository;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
 import com.randevu.backend.repository.StaffRepository;
@@ -51,6 +52,8 @@ class ServiceItemControllerOwnershipTest {
     @Mock
     private StaffRepository staffRepository;
     @Mock
+    private BusinessPhotoRepository businessPhotoRepository;
+    @Mock
     private Authentication authentication;
 
     private ServiceItemController controller;
@@ -58,7 +61,8 @@ class ServiceItemControllerOwnershipTest {
 
     @BeforeEach
     void setUp() {
-        OwnershipGuard ownershipGuard = new OwnershipGuard(businessRepository, serviceItemRepository, staffRepository);
+        OwnershipGuard ownershipGuard = new OwnershipGuard(businessRepository, serviceItemRepository, staffRepository,
+                businessPhotoRepository);
         controller = new ServiceItemController(serviceItemService, currentUserService, ownershipGuard);
 
         Business business = Business.builder().id(BUSINESS_ID).owner(User.builder().id(OWNER_ID).build()).build();
