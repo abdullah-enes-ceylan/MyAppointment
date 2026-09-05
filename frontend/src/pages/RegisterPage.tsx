@@ -28,6 +28,15 @@ export default function RegisterPage() {
     setForm({ ...form, [e.target.name]: e.target.value });
   }
 
+  // Backend'deki @Pattern (RegisterRequest.phone) ile AYNI format: "05" +
+  // 9 hane, 11 karakter. Rakam dışı her şey (boşluk, harf, "+90" vb.) yazarken
+  // ELENIR -- kullanıcı sınırsız/karışık karakter yapıştıramaz. Asıl güvenlik
+  // sınırı backend'de (bu sadece kullanıcı deneyimi, curl ile atlanabilir).
+  function handlePhoneChange(e: ChangeEvent<HTMLInputElement>) {
+    const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 11);
+    setForm({ ...form, phone: digitsOnly });
+  }
+
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
@@ -182,9 +191,10 @@ export default function RegisterPage() {
                   id="phone"
                   name="phone"
                   type="tel"
+                  inputMode="numeric"
                   required
                   value={form.phone}
-                  onChange={handleChange}
+                  onChange={handlePhoneChange}
                   placeholder="05XX XXX XX XX"
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand/30 focus:border-brand/50 transition-all"
                 />
