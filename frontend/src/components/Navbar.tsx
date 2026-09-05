@@ -101,6 +101,13 @@ export default function Navbar() {
   // belirli bir işletmeye bakıyor) -- kullanıcı isteği üzerine bu sayfada
   // gizlendi.
   const isBusinessDetailPage = location.pathname.startsWith("/business/");
+  // Giriş sayfası kendi minimal ust cubugunu gosteriyor (bkz. LoginPage.tsx)
+  // -- dikkat dagitici ana navigasyon burada bilerek hic render edilmiyor.
+  const isLoginPage = location.pathname === "/login";
+
+  if (isLoginPage) {
+    return null;
+  }
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.03)]">
