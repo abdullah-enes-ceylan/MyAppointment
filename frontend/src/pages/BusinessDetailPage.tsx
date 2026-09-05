@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   BadgeCheck,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Heart,
   MapPin,
@@ -97,10 +99,16 @@ export default function BusinessDetailPage() {
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
-  const [imgFailed, setImgFailed] = useState(false);
+  // Coklu fotograf carousel'i (bkz. ROADMAP 3.17) -- kalici disk/R2 kaybi
+  // senaryosunda birden fazla fotograf ayni anda kirik olabilir, GalleryTab'daki
+  // ile ayni gerekce (tek bir boolean yetmez, fotograf bazinda takip).
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const [failedPhotoIds, setFailedPhotoIds] = useState<Set<number>>(new Set());
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setImgFailed(false);
+    setFailedPhotoIds(new Set());
+    setActivePhotoIndex(0);
     setLoading(true);
     setLoadError(null);
     api
@@ -221,6 +229,34 @@ export default function BusinessDetailPage() {
 
   const selectedDay = useMemo(() => DAY_OPTIONS.find((d) => d.iso === selectedDate), [selectedDate]);
 
+  function markPhotoFailed(photoId: number) {
+    setFailedPhotoIds((prev) => {
+      if (prev.has(photoId)) return prev;
+      const next = new Set(prev);
+      next.add(photoId);
+      return next;
+    });
+  }
+
+  // Ok/nokta tiklamasiyla programatik kaydirma -- native scroll-snap zaten
+  // parmak/touchpad ile calisiyor, bu SADECE fare ile tiklayan masaustu
+  // kullanicilar icin (bkz. ROADMAP 3.17, musteri tarafi kaydirma karari).
+  function scrollToIndex(index: number) {
+    const container = carouselRef.current;
+    if (!container) return;
+    const clamped = Math.max(0, Math.min(index, container.children.length - 1));
+    container.scrollTo({ left: clamped * container.clientWidth, behavior: "smooth" });
+  }
+
+  // Kullanici parmakla/touchpad'le kaydirdiginda nokta gostergesini senkron
+  // tutar -- programatik scrollToIndex de scroll event'i tetikledigi icin
+  // ayri bir state guncellemesine gerek yok, tek kaynak burasi.
+  function handleCarouselScroll() {
+    const container = carouselRef.current;
+    if (!container || container.clientWidth === 0) return;
+    setActivePhotoIndex(Math.round(container.scrollLeft / container.clientWidth));
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
@@ -247,7 +283,7 @@ export default function BusinessDetailPage() {
   }
 
   const { Icon } = getCategory(business.category);
-  const coverUrl = imgFailed ? null : resolvePhotoUrl(business.coverPhotoDetailUrl);
+  const photos = business.photos;
   const hasRating = business.reviewCount > 0 && business.averageRating != null;
 
   return (
@@ -266,21 +302,85 @@ export default function BusinessDetailPage() {
           <span className="text-xs text-slate-500 font-medium hidden sm:inline">Randevum • Kolay Randevu Alma</span>
         </div>
 
-        {/* Header banner */}
+        {/* Header banner — fotograf(lar) kaydirilabilir, ustteki bilgi
+            katmani (rozetler/isim/favori) sabit kalir, SADECE arka plan
+            fotografi degisir (bkz. ROADMAP 3.17). */}
         <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl border border-white/10 mb-6 min-h-[190px] flex flex-col justify-end bg-gradient-to-br from-brand via-brand-mid to-brand-glow">
-          {coverUrl ? (
-            <img
-              src={coverUrl}
-              alt={business.name}
-              onError={() => setImgFailed(true)}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
+          {photos.length > 0 ? (
+            <div
+              ref={carouselRef}
+              onScroll={handleCarouselScroll}
+              className="absolute inset-0 flex overflow-x-auto snap-x snap-mandatory scrollbar-none"
+            >
+              {photos.map((photo, index) => (
+                <div key={photo.id} className="relative w-full h-full shrink-0 snap-center">
+                  {!failedPhotoIds.has(photo.id) ? (
+                    <img
+                      src={resolvePhotoUrl(photo.detailUrl) ?? undefined}
+                      alt={index === 0 ? business.name : `${business.name} — fotoğraf ${index + 1}`}
+                      loading={index === 0 ? "eager" : "lazy"}
+                      decoding="async"
+                      draggable={false}
+                      onError={() => markPhotoFailed(photo.id)}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center text-white/15 scale-[3.2]">
+                      <Icon />
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
           ) : (
             <span className="absolute inset-0 flex items-center justify-center text-white/15 scale-[3.2]">
               <Icon />
             </span>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#081120]/90 via-[#081120]/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#081120]/90 via-[#081120]/40 to-transparent pointer-events-none" />
+
+          {/* Ok + nokta gostergesi TEK bir ust seride, banner'in serbest ust
+              boslugunda (bkz. yorum) -- dikey ortalanmis oklar denendi ama
+              bu kisa banner'da sag sutundaki favori/durum kutusuyla piksel
+              seviyesinde CAKISTI (gercek tarayicida bulundu, elementFromPoint
+              ile dogrulandi: tiklama okun yerine alttaki metin katmanina
+              gidiyordu). Ust seritte kalarak bu cakisma yapisal olarak
+              ORTADAN KALKIYOR -- herhangi bir banner yuksekliginde gecerli. */}
+          {photos.length > 1 && (
+            <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => scrollToIndex(activePhotoIndex - 1)}
+                disabled={activePhotoIndex === 0}
+                aria-label="Önceki fotoğraf"
+                className="hidden sm:flex w-6 h-6 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <div className="flex items-center gap-1.5">
+                {photos.map((photo, index) => (
+                  <button
+                    key={photo.id}
+                    type="button"
+                    onClick={() => scrollToIndex(index)}
+                    aria-label={`${index + 1}. fotoğrafa git`}
+                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                      index === activePhotoIndex ? "w-4 bg-white" : "w-1.5 bg-white/40 hover:bg-white/60"
+                    }`}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => scrollToIndex(activePhotoIndex + 1)}
+                disabled={activePhotoIndex === photos.length - 1}
+                aria-label="Sonraki fotoğraf"
+                className="hidden sm:flex w-6 h-6 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-sm text-white items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           <div className="relative p-5 sm:p-7 flex items-end justify-between gap-4">
             <div className="min-w-0">

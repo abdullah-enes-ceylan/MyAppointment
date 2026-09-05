@@ -1490,8 +1490,8 @@ Bu sekmelerin kendi kart/form stillerinin açık temaya çevrilmesi ayrı bir ad
 
 **(2026-09-05 güncellemesi) Galeri & Fotoğraflar sekmesindeki "YARIM kapsam" notu artık
 GEÇERSİZ — bkz. 3.17.** Gerçek çoklu-fotoğraf galerisi (`BusinessPhoto` entity'si, tam olarak
-burada tahmin edildiği gibi) eklendi; panel tarafı (`GalleryTab.tsx`) henüz bu yeni API'ye
-bağlanmadı, bu da 3.17'nin kapsamında.
+burada tahmin edildiği gibi) eklendi; panel tarafı (`GalleryTab.tsx`) de yeni API'ye taşındı,
+gerçek bir ızgara gösteriyor (bkz. 3.17'nin "panel tarafı da tamamlandı" güncellemesi).
 
 ---
 
@@ -1510,12 +1510,49 @@ kanıtlandı: gerçek bir `photo_key`'e sahip işletme migration'dan ÖNCE/SONRA
 değer birebir eşleşti. `businesses.photo_key` kolonu BİLEREK silinmedi (expand-contract) —
 gerçek kaldırılması ayrı, sonraki bir migration.
 
-**Henüz yapılmadı:**
-- Panel tarafı (`GalleryTab.tsx`) hâlâ eski tek-fotoğraf API'sini (`/photo`, tekil) çağırıyor —
-  yeni çoğul API'ye (`/photos`) taşınması, gerçek ızgara (silinen fotoğraf sonrası boşluklu
-  sıralamayı doğru göstermek dahil) ayrı bir PR.
-- Müşteri tarafı: `BusinessDetailPage.tsx`'teki sabit banner yerine kaydırmalı carousel
-  (`BusinessDetailResponse.photos` alanı zaten hazır, sadece tüketen taraf yok).
+**(2026-09-05 güncellemesi) Panel tarafı da tamamlandı.** `GalleryTab.tsx` yeni çoğul API'ye
+(`POST/DELETE .../photos`) taşındı, sahte "Yakında" kutuları kalktı — gerçek bir ızgara
+(`business.photos`'tan, ilk eleman "Ana Kapak" etiketli), fotoğraf sayısı 5'ten azken bir
+"Ekle" kutusu, 5'e ulaşınca kutu kalkıp "En fazla 5 fotoğraf yükleyebilirsiniz" notu. Her kart
+kendi silme/kırık-görsel durumunu ayrı tutuyor (`removingPhotoId`, `failedPhotoIds` — tek bir
+global state DEĞİL, aksi halde birden fazla fotoğrafta yanlış davranırdı). Silme, mevcut
+`ApprovedTab`'daki "Emin misiniz?" satır-içi onay desenini tekrar kullanıyor (native
+`window.confirm` DEĞİL) — kazara tek tıkla silme riskine karşı. Çift-tıklama koruması hem
+disabled buton hem handler'ın başındaki erken-dönüş kontrolüyle iki katmanlı. Backend'in
+HER reddi (limit/format/boyut/çözünürlük → 409, servlet boyut sınırı → 413, rate limit → 429)
+zaten `getErrorMessage` ile olduğu gibi gösteriliyor — ayrı bir 409/413 kod dalı YOK, tek
+mekanizma hepsini kapsıyor. Canlı doğrulandı: gerçek panelde 2 fotoğraf yüklenip ızgarada
+göründü, biri silinip önce API'nin 200 döndüğü (list güncellendi) SONRA dosyanın diskten
+gerçekten gittiği ayrıca `curl -I` ile (404) doğrulandı — "UI güncellendi" tek başına
+kanıt sayılmadı. 5 fotoğrafa çıkarılıp "Ekle" kutusunun kalktığı, limit notunun çıktığı da
+görüldü. Test fotoğrafları temizlendi.
+
+**(2026-09-05 güncellemesi) Müşteri tarafı carousel de tamamlandı — 3.17 artık tamamen bitti.**
+`BusinessDetailPage.tsx`'teki sabit banner, `business.photos` üzerinde native CSS
+scroll-snap'li (`overflow-x-auto` + `snap-x snap-mandatory`) bir carousel'e dönüştürüldü.
+Tasarım kararı: fotoğraflar KAYDIRILIYOR ama üstteki bilgi katmanı (rozetler/isim/favori/
+randevu durumu) SABİT kalıyor — sadece arka plandaki fotoğraf değişiyor (Instagram profil
+galerisi gibi). Ok butonları + nokta göstergesi masaüstü için, gerçek dokunmatik kaydırma
+(swipe) tarayıcının kendi native scroll-snap'inden geliyor — özel bir drag/touch event
+handler'ı YOK, bu yüzden ek bir kütüphane de gerekmedi. İlk fotoğraf `loading="eager"`, geri
+kalanı `loading="lazy"` (Opus'un ilk PR review turundaki carousel lazy-loading notu buradaydı).
+Fotoğrafsız işletmede (photos boş) eski gradyan+kategori-ikonu davranışı AYNEN korunuyor.
+
+**Canlı bulunup düzeltilen gerçek bir hata:** ok butonları ilk yazımda `top-1/2 -translate-y-1/2`
+ile banner'ın TAMAMINA göre dikey ortalanmıştı — kısa bir banner'da (`min-h-190px`) bu, sağ
+üstteki favori kalp butonuyla/randevu durumu kutusuyla piksel seviyesinde ÇAKIŞTI. Sadece
+z-index eklemek (denendi) yetmedi çünkü asıl sorun üst üste binen tıklama alanıydı, katman
+sırası değil. `elementFromPoint` ile doğrulandı: tıklama oka değil, altındaki metin
+katmanına gidiyordu, `scrollLeft` hiç değişmiyordu. Çözüm: ok butonları nokta göstergesiyle
+AYNI üst şeride taşındı (`top-2.5`, banner'ın serbest üst boşluğu) — dikey ortalama tamamen
+kaldırıldı, bu da çakışmayı KÖKTEN (herhangi bir banner yüksekliğinde) ortadan kaldırdı.
+
+Canlı doğrulandı: gerçek bir işletmeye 3 test fotoğrafı yüklenip detay sayfasında hepsi
+sırayla göründü — ok tıklamasıyla (`scrollTo` + smooth scroll), nokta tıklamasıyla (direkt
+zıplama) ve mobil viewport'ta (375px, oklar `sm:` ile gizli, sadece noktalar) native
+scroll-snap'in doğru CSS'le (`overflow-x:auto`, `touch-action:auto`, `scroll-snap-type:x
+mandatory`) kurulu olduğu ayrıca doğrulandı. İlk/son fotoğrafta ilgili ok doğru şekilde
+disabled oluyor. Test fotoğrafları temizlendi.
 
 **Ek, ayrı bir görev olarak (KVKK/3.9 ile kesişiyor):** askıya alınmış/anonimleştirilmiş bir
 işletmenin fotoğrafları CDN'de (R2 custom domain, herkese açık URL) fiziksel olarak hâlâ
