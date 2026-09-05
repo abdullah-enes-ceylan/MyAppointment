@@ -221,6 +221,11 @@ export default function Navbar() {
                     {[
                       { to: "/profile", label: "👤 Profil" },
                       ...(isOwner ? [{ to: "/panel", label: "🏢 İşletme Paneli" }] : []),
+                      // Sahip zaten olsa bile burada -- tenant modeli "bir
+                      // sahip N işletme yönetebilir" (bkz. CLAUDE.md karar
+                      // tablosu), tek işletmesi olan biri ikinciyi de
+                      // buradan ekleyebilmeli.
+                      { to: "/business/new", label: "➕ İşletme Ekle" },
                     ].map((item) => (
                       <Link
                         key={item.to}

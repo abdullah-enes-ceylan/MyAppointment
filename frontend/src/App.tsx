@@ -9,6 +9,7 @@ import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import BusinessDetailPage from "./pages/BusinessDetailPage";
+import CreateBusinessPage from "./pages/CreateBusinessPage";
 import BusinessPanelPage from "./pages/panel/BusinessPanelPage";
 import MyAppointmentsPage from "./pages/MyAppointmentsPage";
 import FavoritesPage from "./pages/FavoritesPage";
@@ -42,6 +43,14 @@ function Layout() {
             element={
               <ProtectedRoute>
                 <BusinessDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/business/new"
+            element={
+              <ProtectedRoute>
+                <CreateBusinessPage />
               </ProtectedRoute>
             }
           />
