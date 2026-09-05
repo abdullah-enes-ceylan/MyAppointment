@@ -152,15 +152,29 @@ export interface ServiceItemResponse {
   durationInMinutes: number;
 }
 
+// backend/src/main/java/com/randevu/backend/dto/response/BusinessPhotoResponse.java
+// V17 coklu fotograf. displayOrder 0 olan (dizinin ilk elemani, backend zaten
+// siralı donuyor) ayni zamanda coverPhotoCardUrl/coverPhotoDetailUrl'un
+// kaynagidir -- "Ana Kapak" etiketi bu yuzden UI'da ilk elemana yapisik.
+export interface BusinessPhotoResponse {
+  id: number;
+  cardUrl: string;
+  detailUrl: string;
+  displayOrder: number;
+}
+
 // backend/src/main/java/com/randevu/backend/dto/response/BusinessDetailResponse.java
 // BusinessResponse'un hizmetler gomulu hali. GET /api/businesses,
 // /api/businesses/{id} ve /api/businesses/category/{cat} BUNU donuyor
 // (BusinessResponse degil) -- bkz. BusinessController.java:46,61,128.
 // coverPhotoDetailUrl BURADA var, BusinessResponse'ta YOK -- sadece detay
 // sayfasinda ihtiyac duyulan buyuk boyut, liste gorunumune tasinmiyor.
+// photos: display_order'a gore sirali TAM liste (bkz. BusinessPhotoService.getPhotos) --
+// panel Galeri sekmesi ve ileride musteri tarafi carousel bunu kullanir.
 export interface BusinessDetailResponse extends BusinessResponse {
   serviceItems: ServiceItemResponse[];
   coverPhotoDetailUrl: string | null;
+  photos: BusinessPhotoResponse[];
 }
 
 // backend/src/main/java/com/randevu/backend/dto/response/NearbyBusinessResponse.java
