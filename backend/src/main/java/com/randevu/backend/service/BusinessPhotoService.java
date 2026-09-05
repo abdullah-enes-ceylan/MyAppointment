@@ -2,32 +2,34 @@ package com.randevu.backend.service;
 
 import com.randevu.backend.config.BusinessPhotoProperties;
 import com.randevu.backend.entity.Business;
+import com.randevu.backend.entity.BusinessPhoto;
 import com.randevu.backend.exception.BusinessRuleException;
+import com.randevu.backend.exception.ResourceNotFoundException;
+import com.randevu.backend.repository.BusinessPhotoRepository;
+import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.storage.BusinessPhotoStorage;
-import net.coobird.thumbnailator.Thumbnails;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.imageio.ImageIO;
-import javax.imageio.ImageReader;
-import javax.imageio.stream.ImageInputStream;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.Iterator;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-// Isletme kapak fotografi yukleme akisinin tamami: dogrulama, yeniden kodlama,
-// depolama, eskiyi temizleme. Detayli mimari gerekce plan dosyasinda
-// ("Isletme Kapak Fotografi" PR3) -- burada sadece NEDEN bu sirada oldugu
-// ozetleniyor.
-//
-// Isletme satirinin kilitlenmesi (eszamanli yukleme korumasi) BU sinifta
-// DEGIL, BusinessService.swapPhotoKey'de -- bkz. o metottaki self-invocation
-// gerekcesi.
+// Isletme fotograflarinin yasam dongusu: ekle, sil, sirala. Dosya
+// dogrulama/yeniden-kodlama BILEREK burada DEGIL, ayri BusinessPhotoImageProcessor'da
+// (bkz. o sinifin gerekcesi -- bu sinif buyudukce tek sorumluluk ilkesini
+// korumak icin V17'de ayrildi). Bu sinif SADECE "isletmenin fotograf
+// listesini nasil degistiririz" sorusuyla ilgileniyor: kilit, limit,
+// depolama I/O'sunu tetikleme, DB satiri.
 @Service
 public class BusinessPhotoService {
 
@@ -36,168 +38,110 @@ public class BusinessPhotoService {
     private static final String CARD_SUFFIX = "-card.jpg";
     private static final String DETAIL_SUFFIX = "-detail.jpg";
 
-    private final BusinessService businessService;
+    private final BusinessRepository businessRepository;
+    private final BusinessPhotoRepository businessPhotoRepository;
     private final BusinessPhotoStorage photoStorage;
+    private final BusinessPhotoImageProcessor imageProcessor;
     private final BusinessPhotoProperties properties;
+    private final Clock clock;
 
-    public BusinessPhotoService(BusinessService businessService, BusinessPhotoStorage photoStorage,
-            BusinessPhotoProperties properties) {
-        this.businessService = businessService;
+    public BusinessPhotoService(BusinessRepository businessRepository,
+            BusinessPhotoRepository businessPhotoRepository, BusinessPhotoStorage photoStorage,
+            BusinessPhotoImageProcessor imageProcessor, BusinessPhotoProperties properties, Clock clock) {
+        this.businessRepository = businessRepository;
+        this.businessPhotoRepository = businessPhotoRepository;
         this.photoStorage = photoStorage;
+        this.imageProcessor = imageProcessor;
         this.properties = properties;
+        this.clock = clock;
     }
 
-    public Business uploadPhoto(Long businessId, MultipartFile file) {
-        byte[] rawBytes = readBytes(file);
-        validateSize(rawBytes);
-        int originalWidth = validateAndGetWidth(rawBytes);
+    // İsletme satirini kilitliyoruz (findByIdForUpdate, BusinessService'teki
+    // eski swapPhotoKey ile AYNI birincil amac: eszamanli iki ekleme ayni
+    // "bir sonraki sira numarasi"nı hesaplamasin). ESKİ swapPhotoKey'deki
+    // entityManager.refresh() tuzagi BURADA GEREKMIYOR: o, business'in KENDI
+    // bir kolonunu (photoKey) guncelleyip persistence context'teki BAYAT
+    // kopyayi tazelemek icindi. Burada business'in hicbir alanini
+    // degistirmiyoruz -- sadece kilit altinda, businessPhotoRepository
+    // uzerinden TAZE (cache'lenmemis) count/max sorgulari atiyoruz, bu
+    // yuzden ayni bayatlik riski yok.
+    @Transactional
+    public List<BusinessPhoto> addPhoto(Long businessId, MultipartFile file) {
+        Business business = businessRepository.findByIdForUpdate(businessId)
+                .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
 
-        byte[] cardBytes = resizeToJpeg(rawBytes, cappedWidth(properties.getCardTargetWidth(), originalWidth));
-        byte[] detailBytes = resizeToJpeg(rawBytes, cappedWidth(properties.getDetailTargetWidth(), originalWidth));
+        long currentCount = businessPhotoRepository.countByBusinessId(businessId);
+        if (currentCount >= properties.getMaxPhotosPerBusiness()) {
+            throw new BusinessRuleException(
+                    "En fazla " + properties.getMaxPhotosPerBusiness() + " fotoğraf yükleyebilirsiniz.");
+        }
 
-        // Sira BILEREK bu: once yeni dosyalar diske yazilir, SONRA DB
-        // guncellenir, EN SON eski dosyalar silinir. DB guncellemesi
-        // basarisiz olsa bile isletme eski (hala calisan) fotografini
-        // gostermeye devam eder -- kullanici hicbir sey kaybetmez. Sira
-        // tersine cevrilseydi bir hatada isletme fotografsiz kalabilirdi.
+        BusinessPhotoImageProcessor.ProcessedImage processed = imageProcessor.process(file);
+
         String newKey = UUID.randomUUID().toString();
-        writeNewFiles(newKey, cardBytes, detailBytes);
+        writeNewFiles(newKey, processed.cardBytes(), processed.detailBytes());
 
-        BusinessService.PhotoKeySwapResult swap = businessService.swapPhotoKey(businessId, newKey);
+        // MAX+1, count DEGIL -- silme sonrasi bosluklu siralamada (0, 2, 3)
+        // count()==3 ile devam etseydik yeni satir order=3'e carpip VAR OLAN
+        // satirla cakisirdi (bkz. BusinessPhotoRepository.findTopBy... yorumu).
+        short nextOrder = businessPhotoRepository.findTopByBusinessIdOrderByDisplayOrderDesc(businessId)
+                .map(bp -> (short) (bp.getDisplayOrder() + 1))
+                .orElse((short) 0);
 
-        if (swap.previousPhotoKey() != null) {
-            deleteOldFilesQuietly(swap.previousPhotoKey());
-        }
+        BusinessPhoto photo = BusinessPhoto.builder()
+                .business(business)
+                .photoKey(newKey)
+                .displayOrder(nextOrder)
+                .createdAt(LocalDateTime.now(clock))
+                .build();
+        businessPhotoRepository.save(photo);
 
-        return swap.business();
+        return businessPhotoRepository.findByBusinessIdOrderByDisplayOrderAscIdAsc(businessId);
     }
 
-    // Kapak fotografini kaldirir -- photo_key'i NULL'a ceker ve iki dosyayi
-    // diskten siler. Zaten fotografi olmayan bir isletmede cagrilirsa
-    // (previousPhotoKey null) sessizce hicbir sey yapmadan doner -- IDEMPOTENT,
-    // FavoriteController.removeFavorite'teki ayni "toggle'in kapa ucu iki kez
-    // cagrilsa da hata vermez" gerekcesiyle tutarli.
+    // Sira BILEREK eski uploadPhoto'daki ile ayni: ONCE DB satiri silinir,
+    // SONRA dosyalar. DB silme basarisiz olursa hicbir dosya silinmemis olur,
+    // fotograf gostermeye DEVAM eder -- kayip yok. Tersine cevrilseydi bir
+    // hatada "dosya yok ama DB'de hala var" tutarsizligina duserdik.
     //
-    // Sira BILEREK uploadPhoto'nun TERSI: ONCE DB NULL'a cekilir, SONRA
-    // dosyalar silinir. Neden: DB guncellemesi basarisiz olursa (ornegin
-    // kilit zaman asimi) hicbir dosya silinmemis olur, isletme eski
-    // fotografini gostermeye DEVAM eder -- kayip yok. Sira tersine
-    // cevrilseydi (once sil, sonra DB) bir hatada tam olarak az once
-    // kapattigimiz kirik gorsel senaryosuna geri donerdik: dosya yok ama
-    // DB hala eski key'i (varsa) degil, YENI (silinen) key'i mi tutuyor
-    // karisikligi olurdu -- kisacasi DB HER ZAMAN diskteki gercekle
-    // tutarli olacak sekilde ONCE guncellenir.
-    //
-    // swapPhotoKey'in ayni kilit/refresh mekanizmasi (bkz. BusinessService)
-    // burada da gecerli: yukleme ile silme ayni anda gelirse (ornegin
-    // kullanici cift tikladi) ikisi de sirayla, dogru "onceki" degeri
-    // okuyarak calisir -- oksuz dosya kalmaz.
-    public void removePhoto(Long businessId) {
-        BusinessService.PhotoKeySwapResult swap = businessService.swapPhotoKey(businessId, null);
+    // photoId'nin GERCEKTEN bu businessId'ye ait oldugu iki kez dogrulaniyor:
+    // once OwnershipGuard.assertOwnsActiveBusinessPhoto (cagiran controller'da,
+    // fotografin KENDI isletmesi uzerinden), sonra burada
+    // findByIdAndBusinessId (savunma amacli ikinci katman) -- IDOR'a karsi
+    // (bkz. NOTLAR.md "IDOR" notu).
+    @Transactional
+    public List<BusinessPhoto> removePhoto(Long businessId, Long photoId) {
+        businessRepository.findByIdForUpdate(businessId)
+                .orElseThrow(() -> new ResourceNotFoundException("İşletme bulunamadı."));
 
-        if (swap.previousPhotoKey() != null) {
-            deleteOldFilesQuietly(swap.previousPhotoKey());
-        }
+        BusinessPhoto photo = businessPhotoRepository.findByIdAndBusinessId(photoId, businessId)
+                .orElseThrow(() -> new ResourceNotFoundException("Fotoğraf bulunamadı."));
+
+        businessPhotoRepository.delete(photo);
+        deleteFilesQuietly(photo.getPhotoKey());
+
+        return businessPhotoRepository.findByBusinessIdOrderByDisplayOrderAscIdAsc(businessId);
     }
 
-    // Multipart govdesinin okunmasi basarisiz olursa (ornegin istemci
-    // yukleme sirasinda baglantiyi kesti) bu istemci tarafinda sonlanan bir
-    // durum -- 500 degil, anlamli bir BusinessRuleException.
-    private byte[] readBytes(MultipartFile file) {
-        try {
-            return file.getBytes();
-        } catch (IOException e) {
-            throw new BusinessRuleException("Yüklenen dosya okunamadı.");
-        }
+    // Tekil isletme (detay ucu) icin TAM sirali fotograf listesi -- burada
+    // N+1 riski YOK, bu uc zaten tek bir isletmeyi isliyor.
+    public List<BusinessPhoto> getPhotos(Long businessId) {
+        return businessPhotoRepository.findByBusinessIdOrderByDisplayOrderAscIdAsc(businessId);
     }
 
-    private void validateSize(byte[] rawBytes) {
-        if (rawBytes.length == 0) {
-            throw new BusinessRuleException("Boş dosya yüklenemez.");
-        }
-        if (rawBytes.length > properties.getMaxSizeBytes()) {
-            long maxMb = properties.getMaxSizeBytes() / (1024 * 1024);
-            throw new BusinessRuleException("Dosya boyutu çok büyük (en fazla " + maxMb + " MB olabilir).");
-        }
+    // Liste uclari (ana sayfa, kategori, yakinimdakiler) icin: TUM isletmelerin
+    // TUM fotograflari TEK sorguda cekilip business.id'ye gore gruplaniyor
+    // (bkz. BusinessPhotoRepository.findByBusinessIdInOrderBy... yorumu) --
+    // N isletme icin sorgu sayisi HER ZAMAN 1, satir sayisi degil. Fotografi
+    // olmayan bir isletme Map'te hic anahtar olarak GORUNMEZ (bkz.
+    // BusinessMapper.toDetailResponse'daki "photos.isEmpty()" kontrolu,
+    // cagiran taraf Map.getOrDefault(id, List.of()) kullanmali).
+    public Map<Long, List<BusinessPhoto>> getPhotosGroupedByBusinessId(List<Long> businessIds) {
+        return businessPhotoRepository.findByBusinessIdInOrderByBusinessIdAscDisplayOrderAscIdAsc(businessIds).stream()
+                .collect(Collectors.groupingBy(bp -> bp.getBusiness().getId(), LinkedHashMap::new, Collectors.toList()));
     }
 
-    // Icerik-seviyesinde format dogrulama + decompression bomb korumasi TEK
-    // yerde (bkz. plan madde 3 ve 4). Istemcinin Content-Type/uzanti iddiasina
-    // HIC bakilmiyor -- ImageIO.getImageReaders dosyanin kendi baytlarindaki
-    // format imzasina (magic bytes) bakiyor. SVG bu mekanizmayla dogal olarak
-    // reddediliyor: JDK'nin yerlesik okuyuculari onu hic tanimiyor, okuyucu
-    // bulunamayinca asagidaki "readers.hasNext()" kontrolu zaten reddediyor.
-    //
-    // getWidth(0)/getHeight(0) sadece dosyanin HEADER'ini okur, goruntuyu tam
-    // decode ETMEDEN piksel boyutunu verir -- bu yuzden asil (bellek acisindan
-    // pahali) decode/resize adimindan ONCE, guvenle cagrilabiliyor.
-    private int validateAndGetWidth(byte[] rawBytes) {
-        try (ImageInputStream iis = ImageIO.createImageInputStream(new ByteArrayInputStream(rawBytes))) {
-            if (iis == null) {
-                throw new BusinessRuleException("Desteklenmeyen veya bozuk görsel dosyası.");
-            }
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
-            if (!readers.hasNext()) {
-                throw new BusinessRuleException("Desteklenmeyen veya bozuk görsel dosyası.");
-            }
-            ImageReader reader = readers.next();
-            try {
-                reader.setInput(iis, true, true);
-                String format = reader.getFormatName().toUpperCase();
-                if (!properties.getAllowedInputFormats().contains(format)) {
-                    throw new BusinessRuleException("Desteklenmeyen görsel formatı: " + format);
-                }
-
-                int width = reader.getWidth(0);
-                int height = reader.getHeight(0);
-                if (width > properties.getMaxImageWidthPx() || height > properties.getMaxImageHeightPx()) {
-                    throw new BusinessRuleException("Görsel çözünürlüğü çok yüksek (en fazla "
-                            + properties.getMaxImageWidthPx() + "x" + properties.getMaxImageHeightPx()
-                            + " piksel olabilir).");
-                }
-                return width;
-            } finally {
-                reader.dispose();
-            }
-        } catch (IOException e) {
-            throw new BusinessRuleException("Görsel okunamadı.");
-        }
-    }
-
-    // Kucuk bir gorseli hedef genislige buyutmuyoruz -- orijinalden buyuk bir
-    // hedef istenirse (ornegin kucuk bir profil fotosu detay boyutu icin
-    // yetersizse) orijinal genislik kullanilir, aksi halde cikti bulanik olur.
-    private int cappedWidth(int targetWidth, int originalWidth) {
-        return Math.min(targetWidth, originalWidth);
-    }
-
-    // Her iki turetilmis dosya da JPEG'e yeniden kodlanir -- PNG girisse bile.
-    // Bu hem tutarli bir cikti saglar hem format-tabanli metadata/polyglot
-    // risklerini SIFIRLAR hem de EXIF bloguyla birlikte olasi GPS konum
-    // verisini siler (bkz. plan madde 5): dosya sifirdan yeniden ciziliyor,
-    // orijinal baytlar hic diske yazilmiyor. Thumbnailator EXIF orientation'i
-    // varsayilan olarak uyguluyor (dondurulmus bir telefon fotografi yamuk
-    // cikmiyor).
-    //
-    // Buraya kadar validateAndGetWidth basariyla gectiyse dosya zaten bizim
-    // izin verdigimiz formatta ve piksel siniri icinde -- bu yuzden burada
-    // olusacak bir IOException gercek bir bozukluktan cok, beklenmeyen bir
-    // decode hatasidir; yine de istemcinin gonderdigi dosyayla ilgili
-    // oldugu icin BusinessRuleException.
-    private byte[] resizeToJpeg(byte[] source, int targetWidth) {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            Thumbnails.of(new ByteArrayInputStream(source))
-                    .width(targetWidth)
-                    .outputFormat("jpg")
-                    .toOutputStream(out);
-            return out.toByteArray();
-        } catch (IOException e) {
-            throw new BusinessRuleException("Görsel işlenemedi.");
-        }
-    }
-
-    // Disk yazma hatasi istemcinin sucu degil, bizim altyapimizin sorunu --
+    // Disk/R2 yazma hatasi istemcinin sucu degil, bizim altyapimizin sorunu --
     // BusinessRuleException(409) yerine UncheckedIOException firlatiliyor ki
     // GlobalExceptionHandler'in genel Exception yakalayicisi bunu 500 olarak
     // ele alsin ve ERROR seviyesinde loglasin.
@@ -210,17 +154,15 @@ public class BusinessPhotoService {
         }
     }
 
-    // Silme basarisiz olursa istek yine de BASARILI sayilir -- yeni fotograf
-    // zaten kaydedildi ve calisiyor. Hata sadece WARN olarak loglanir; bunu
-    // "yukleme basarisiz" sebebi yapmak, calisan bir ozelligi disk temizligi
-    // sorunu yuzunden kullaniciya hata gibi gostermek olurdu (bkz. plan
-    // madde 7 "Silme basarisiz olursa").
-    private void deleteOldFilesQuietly(String oldKey) {
+    // Silme basarisiz olursa istek yine de BASARILI sayilir -- DB satiri
+    // zaten silindi, kullanici acisindan fotograf gitti. Hata sadece WARN
+    // olarak loglanir; bkz. eski uploadPhoto'daki ayni gerekce.
+    private void deleteFilesQuietly(String key) {
         try {
-            photoStorage.delete(oldKey + CARD_SUFFIX);
-            photoStorage.delete(oldKey + DETAIL_SUFFIX);
+            photoStorage.delete(key + CARD_SUFFIX);
+            photoStorage.delete(key + DETAIL_SUFFIX);
         } catch (IOException e) {
-            log.warn("Eski işletme fotoğrafı silinemedi (key={}): {}", oldKey, e.getMessage());
+            log.warn("İşletme fotoğrafı silinemedi (key={}): {}", key, e.getMessage());
         }
     }
 }

@@ -1,10 +1,12 @@
 package com.randevu.backend.service;
 
 import com.randevu.backend.entity.Business;
+import com.randevu.backend.entity.BusinessPhoto;
 import com.randevu.backend.entity.ServiceItem;
 import com.randevu.backend.entity.Staff;
 import com.randevu.backend.exception.BusinessRuleException;
 import com.randevu.backend.exception.ResourceNotFoundException;
+import com.randevu.backend.repository.BusinessPhotoRepository;
 import com.randevu.backend.repository.BusinessRepository;
 import com.randevu.backend.repository.ServiceItemRepository;
 import com.randevu.backend.repository.StaffRepository;
@@ -25,12 +27,14 @@ public class OwnershipGuard {
     private final BusinessRepository businessRepository;
     private final ServiceItemRepository serviceItemRepository;
     private final StaffRepository staffRepository;
+    private final BusinessPhotoRepository businessPhotoRepository;
 
     public OwnershipGuard(BusinessRepository businessRepository, ServiceItemRepository serviceItemRepository,
-            StaffRepository staffRepository) {
+            StaffRepository staffRepository, BusinessPhotoRepository businessPhotoRepository) {
         this.businessRepository = businessRepository;
         this.serviceItemRepository = serviceItemRepository;
         this.staffRepository = staffRepository;
+        this.businessPhotoRepository = businessPhotoRepository;
     }
 
     // businessId'nin gerçekten userId'ye ait olduğunu doğrular.
@@ -109,5 +113,22 @@ public class OwnershipGuard {
         Staff staff = staffRepository.findById(staffId)
                 .orElseThrow(() -> new ResourceNotFoundException("Personel bulunamadı."));
         return staff.getBusiness().getId();
+    }
+
+    // DELETE /api/businesses/{id}/photos/{photoId} icin -- assertOwnsServiceItem
+    // ile AYNI desen, IDOR'a karsi kritik: path'teki {id}'ye GUVENMIYORUZ,
+    // fotografin KENDI businessId'sini bulup onu dogruluyoruz. Path'teki id
+    // ile fotografin gercek isletmesi uyusmuyorsa (ornegin kotu niyetli bir
+    // isletme sahibi kendi businessId'siyle baska bir isletmenin photoId'sini
+    // gonderirse) burada 403/404 ile durur -- repository sorgusundaki ikinci
+    // savunma katmani (findByIdAndBusinessId) ile birlikte iki kontrol birden.
+    public void assertOwnsActiveBusinessPhoto(Long userId, Long photoId) {
+        assertOwnsActiveBusiness(userId, findBusinessPhotoBusinessId(photoId));
+    }
+
+    private Long findBusinessPhotoBusinessId(Long photoId) {
+        BusinessPhoto photo = businessPhotoRepository.findById(photoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Fotoğraf bulunamadı."));
+        return photo.getBusiness().getId();
     }
 }

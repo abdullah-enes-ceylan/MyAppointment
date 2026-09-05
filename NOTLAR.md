@@ -96,6 +96,28 @@ ilk adım, resize kodunu hiç yazmadan önce, image içinde gerçek bir WebP yaz
 olacak. Sonuç olumsuzsa WebP tamamen ayrı bir araştırma kalemi olur, R2 ile hiç
 karıştırılmaz.
 
+**(2026-09-05) İşletme fotoğrafı tek kolondan (`businesses.photo_key`) ayrı bir tabloya
+(`business_photos`, V17) taşındı — en fazla 5 fotoğraf, ilk yüklenen kapak.** Bkz. ROADMAP
+3.17 tam kapsam için. Buradaki üç mimari karar özellikle not edilmeli:
+- **`Business` entity'sinde KASITLI OLARAK `@OneToMany` yok** — fotoğraflar her zaman
+  `BusinessPhotoRepository` üzerinden (tekil bağlamda tam liste, liste bağlamında TOPLU tek
+  sorgu) çekiliyor. Bu, "biri yanlışlıkla `business.getPhotos()` çağırıp N+1 üretir" riskini
+  bir kod inceleme kuralına değil, ilişkinin o yönde HİÇ VAR OLMAMASINA bağlıyor.
+  `BusinessMapper.toResponse`/`toDetailResponse` artık kapak anahtarını/foto listesini
+  PARAMETRE olarak alıyor, entity'den kendi başına türetmiyor.
+  Bir sonraki maddede yerini bulmadıysa dikkat: bugüne dek üç ayrı listeleme ucunda
+  (ana sayfa/kategori, yakınımdakiler, favoriler) bu toplu sorgu tekrarlanmak zorunda kaldı —
+  DRY açısından ileride bu üçünü ortak bir `BusinessListAssembler`-tarzı yardımcıya
+  toplamak makul bir refactor olur, şimdilik bilerek tekrar ediliyor (üç metot da kısa).
+- **IDOR'a karşı iki katman:** `OwnershipGuard.assertOwnsActiveBusinessPhoto` path'teki
+  `businessId`'ye değil, fotoğrafın KENDİ işletmesine bakıyor (`assertOwnsServiceItem` ile
+  birebir aynı desen); `BusinessPhotoRepository.findByIdAndBusinessId` aynı eşleşmeyi
+  silme sorgusunda ikinci kez doğruluyor.
+- **`BusinessPhotoService` şişmesin diye dosya doğrulama/yeniden-kodlama
+  `BusinessPhotoImageProcessor`'a ayrıldı** — ilk sinyal kullanıcının "SOLID'e uyuyor muyuz,
+  god-class istemiyorum" sorusuydu; cevap "4/5 prensip zaten sağlamdı, SRP'de gerçek bir risk
+  vardı" oldu, kod buna göre bölündü.
+
 ---
 
 ## Dikkat Edilmesi Gereken Tuzaklar
@@ -119,16 +141,24 @@ enjekte eden bir test (`AccountDeletionResponseFieldsTest`'teki `@TestConfigurat
 ek doğrulama olarak yapılır, "canlı deneyemedim" diye özelliği kanıtsız bırakmanın gerekçesi
 olmamalı.
 
-**Java record DTO'lara (`BusinessResponse`/`BusinessDetailResponse`) yeni alan eklemek**
-tüm constructor çağrılarını etkiler gibi görünse de, bu iki DTO SADECE
-`BusinessMapper.toResponse`/`toDetailResponse` içinde kuruluyor — tek çağrı noktası, blast
-radius sanıldığı kadar büyük değil. Asıl değişiklik `BusinessController`'daki liste
-endpoint'lerinin "her işletmeyi bağımsız `.map(...)`'leme" akışını "önce tüm listeyi topla,
-sonra toplu hesapla" şekline çevirmek olacak (bkz. ROADMAP 3.14).
+**(2026-09-05 düzeltme) "Tek çağrı noktası" iddiası YANLIŞ çıktı — ROADMAP 3.17'de
+`BusinessMapper.toDetailResponse`'un imzası değişince (V17, coklu fotoğraf) `FavoriteController`
+da AYNI metodu çağırıyordu, bunu SADECE derleyici hatası sayesinde fark ettik (manuel
+grep/okuma bunu KAÇIRMIŞTI). Ders: bir mapper/DTO'nun "kaç yerden çağrıldığını" iddia etmeden
+önce derleyiciye güven — imza değiştirip `mvn compile`'ı çalıştırmak, tüm çağrı noktalarını
+grep'ten daha güvenilir buluyor (statik tip kontrolü grep'in kaçırdığı bir yeri asla kaçırmaz).
+Asıl N+1 önleme deseni (ROADMAP 3.14/3.17) doğru çıktı: liste uçlarında toplu tek sorgu +
+`Map<businessId, ...>`'ten besleme — sadece "kaç controller'da tekrarlanması gerektiği"
+tahmini eksikti.
 
 **Mockito `@Mock`'lu bir alanı SADECE bazı testlerde stub'lamak gerekiyorsa, ortak
 `@BeforeEach`'e KOYMA** — strict stubs varsayılanıyla `UnnecessaryStubbingException` fırlatır
-(kullanılmayan stub, testi PATLATIR). Sadece ihtiyaç duyan testin kendi içine taşı.
+(kullanılmayan stub, testi PATLATIR). Sadece ihtiyaç duyan testin kendi içine taşı. **İSTİSNA:**
+stub SINIFTAKİ ÇOĞU testte gerekliyse ama bir-iki YENİ test (ör. farklı bir id/senaryo kullanan
+IDOR testi) hiç dokunmuyorsa, stub'ı her testin içine tek tek TAŞIMAK yerine ortak
+`@BeforeEach`'te `lenient().when(...)` yap — çoğunluğun ihtiyacı olan ortak kurulumu
+korurken, azınlıktaki testlerin onu kullanmamasına strict-stubs'ın itiraz etmesini engeller
+(bkz. `BusinessControllerOwnershipTest`, V17 IDOR testi).
 
 **Yeni bir randevu-oluşturma yolu eklenirse** (ör. ileride bir "hızlı yeniden randevu al"
 özelliği, ya da personel panelinden manuel randevu girişi), `expiryPolicy.getMinimumBookingLeadTime()`

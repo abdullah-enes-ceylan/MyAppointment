@@ -1488,11 +1488,42 @@ koyu temada (bkz. CLAUDE.md "işletme paneli sekmeleri hâlâ eski koyu temada, 
 geçecek") — sadece etraflarındaki kabuk (sidebar + genel sayfa) yeni açık temaya geçti.
 Bu sekmelerin kendi kart/form stillerinin açık temaya çevrilmesi ayrı bir adım.
 
-**Galeri & Fotoğraflar sekmesi kasıtlı olarak YARIM kapsamlı:** sadece mevcut TEK kapak
-fotoğrafı (zaten çalışan gerçek özellik, "Ana Kapak" etiketiyle) gösteriliyor/yönetilebiliyor;
-gerçek çoklu-fotoğraf galerisi (birden fazla yükleme, sıralama, silme) backend'i HENÜZ YOK —
-ek galeri slotları bilerek "Yakında" etiketli, tıklanamaz. Gerçek çoklu galeri ayrı bir iş
-kalemi (yeni tablo/entity — `BusinessPhoto` gibi — + sıralama + silme uçları).
+**(2026-09-05 güncellemesi) Galeri & Fotoğraflar sekmesindeki "YARIM kapsam" notu artık
+GEÇERSİZ — bkz. 3.17.** Gerçek çoklu-fotoğraf galerisi (`BusinessPhoto` entity'si, tam olarak
+burada tahmin edildiği gibi) eklendi; panel tarafı (`GalleryTab.tsx`) henüz bu yeni API'ye
+bağlanmadı, bu da 3.17'nin kapsamında.
+
+---
+
+### 3.17 — Çoklu işletme fotoğrafı (galeri, en fazla 5) `[BE]` `[SEN]` `[AI]`
+
+**(2026-09-05)** `businesses.photo_key` (tek kolon, V12) yerine ayrı bir `business_photos`
+tablosuna (V17 migration) taşındı — kullanıcı kararıyla en fazla 5 fotoğraf
+(`app.business-photo.max-photos-per-business`, config'den). Backend TAMAMLANDI:
+`BusinessPhoto` entity (Business'a kasıtlı olarak `@OneToMany` YOK — bkz. o entity'nin
+gerekçesi, N+1'i yapısal olarak imkânsız kılıyor), `BusinessPhotoImageProcessor` (dosya
+doğrulama/yeniden kodlama, `BusinessPhotoService`'ten SOLID/god-class gerekçesiyle ayrıldı),
+`POST /api/businesses/{id}/photos` (ekle) + `DELETE /api/businesses/{id}/photos/{photoId}`
+(sil, IDOR'a kapalı — bkz. `OwnershipGuard.assertOwnsActiveBusinessPhoto`), liste uçlarında
+(ana sayfa/kategori/yakınımdakiler/favoriler) toplu tek sorgu ile N+1 önlendi. Backfill canlı
+kanıtlandı: gerçek bir `photo_key`'e sahip işletme migration'dan ÖNCE/SONRA sayıldı, sayı ve
+değer birebir eşleşti. `businesses.photo_key` kolonu BİLEREK silinmedi (expand-contract) —
+gerçek kaldırılması ayrı, sonraki bir migration.
+
+**Henüz yapılmadı:**
+- Panel tarafı (`GalleryTab.tsx`) hâlâ eski tek-fotoğraf API'sini (`/photo`, tekil) çağırıyor —
+  yeni çoğul API'ye (`/photos`) taşınması, gerçek ızgara (silinen fotoğraf sonrası boşluklu
+  sıralamayı doğru göstermek dahil) ayrı bir PR.
+- Müşteri tarafı: `BusinessDetailPage.tsx`'teki sabit banner yerine kaydırmalı carousel
+  (`BusinessDetailResponse.photos` alanı zaten hazır, sadece tüketen taraf yok).
+
+**Ek, ayrı bir görev olarak (KVKK/3.9 ile kesişiyor):** askıya alınmış/anonimleştirilmiş bir
+işletmenin fotoğrafları CDN'de (R2 custom domain, herkese açık URL) fiziksel olarak hâlâ
+duruyor olacak — hesap silme akışı (Faz 3.9) şu an görselleri hiç kapsamıyor. Bu, "3.9
+tamamlandı" denirken gözden kaçan bir soru: anonimleştirme müşteri/işletme KİMLİK bilgisini
+temizliyor ama işletmenin YÜKLEDİĞİ görseller ayrı bir veri kategorisi. Şimdi kodlanacak bir
+iş değil (gerçek bir KVKK talebi/şikayeti gelmeden önce hukuki görüş de gerekebilir), ama
+karar verilmeden unutulmamalı.
 
 ---
 

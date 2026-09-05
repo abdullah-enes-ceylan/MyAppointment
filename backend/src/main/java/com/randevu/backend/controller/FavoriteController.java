@@ -2,8 +2,10 @@ package com.randevu.backend.controller;
 
 import com.randevu.backend.dto.response.BusinessDetailResponse;
 import com.randevu.backend.entity.Business;
+import com.randevu.backend.entity.BusinessPhoto;
 import com.randevu.backend.entity.User;
 import com.randevu.backend.mapper.BusinessMapper;
+import com.randevu.backend.service.BusinessPhotoService;
 import com.randevu.backend.service.BusinessService;
 import com.randevu.backend.service.BusinessService.RatingStats;
 import com.randevu.backend.service.CurrentUserService;
@@ -14,7 +16,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 // businessId path'te ama "kimin favorisi" sorusu HİÇ path'te taşınmıyor --
 // her uç, token'dan çözülen kullanıcının KENDİ favorileri üzerinde çalışır.
@@ -30,13 +34,16 @@ public class FavoriteController {
     private final BusinessService businessService;
     private final CurrentUserService currentUserService;
     private final BusinessPhotoStorage photoStorage;
+    private final BusinessPhotoService businessPhotoService;
 
     public FavoriteController(FavoriteService favoriteService, BusinessService businessService,
-            CurrentUserService currentUserService, BusinessPhotoStorage photoStorage) {
+            CurrentUserService currentUserService, BusinessPhotoStorage photoStorage,
+            BusinessPhotoService businessPhotoService) {
         this.favoriteService = favoriteService;
         this.businessService = businessService;
         this.currentUserService = currentUserService;
         this.photoStorage = photoStorage;
+        this.businessPhotoService = businessPhotoService;
     }
 
     // Kalp ikonu toggle'ının "aç" ucu -- idempotent, zaten favorideyse
@@ -63,13 +70,21 @@ public class FavoriteController {
     @GetMapping("/me")
     public List<BusinessDetailResponse> getMyFavorites(Authentication authentication) {
         User currentUser = currentUserService.getCurrentUser(authentication);
-        return favoriteService.getFavoriteBusinesses(currentUser.getId()).stream()
-                .map(this::toDetailResponseWithRating)
-                .toList();
-    }
+        List<Business> businesses = favoriteService.getFavoriteBusinesses(currentUser.getId());
 
-    private BusinessDetailResponse toDetailResponseWithRating(Business business) {
-        RatingStats stats = businessService.getRatingStats(business.getId());
-        return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount(), photoStorage);
+        // Fotograflar (V17) BILEREK toplu cekiliyor -- bkz. BusinessController'daki
+        // ayni gerekce (NOTLAR.md "N+1" notu). Bu uc da BusinessDetailResponse
+        // dondugu icin (serviceItems gomulu) ayni riski tasiyordu.
+        Map<Long, List<BusinessPhoto>> photosByBusiness = businessPhotoService.getPhotosGroupedByBusinessId(
+                businesses.stream().map(Business::getId).toList());
+
+        return businesses.stream()
+                .map(business -> {
+                    RatingStats stats = businessService.getRatingStats(business.getId());
+                    List<BusinessPhoto> photos = photosByBusiness.getOrDefault(business.getId(), Collections.emptyList());
+                    return BusinessMapper.toDetailResponse(business, stats.averageRating(), stats.reviewCount(),
+                            photos, photoStorage);
+                })
+                .toList();
     }
 }
