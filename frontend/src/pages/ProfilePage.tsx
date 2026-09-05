@@ -381,8 +381,16 @@ export default function ProfilePage() {
               <Field
                 id="phone"
                 label="Telefon"
+                type="tel"
+                inputMode="numeric"
+                maxLength={11}
                 value={infoForm.phone}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setInfoForm({ ...infoForm, phone: e.target.value })}
+                // Backend'deki @Pattern (UpdateProfileRequest.phone) ile AYNI
+                // format: "05" + 9 hane. Rakam dışı karakterler yazarken
+                // elenir -- bkz. RegisterPage.tsx'teki aynı gerekçe.
+                onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                  setInfoForm({ ...infoForm, phone: e.target.value.replace(/\D/g, "").slice(0, 11) })
+                }
                 error={infoErrors.phone}
               />
 
