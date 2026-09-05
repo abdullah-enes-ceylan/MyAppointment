@@ -211,7 +211,7 @@ ROADMAP.md'nin sonundaki checklist tek otorite — burası sadece kısa bir öze
 için oraya bak.
 
 **Migration seviyesi: V17.** **(2026-09-06) Prod CANLI — `https://randevumweb.com`, gerçek
-Let's Encrypt sertifikasıyla, tarayıcı uyarısı yok.** Hetzner CPX22 (Helsinki), Faz 3.8a'nın
+Let's Encrypt sertifikasıyla, tarayıcı uyarısı yok.** Hetzner CX23 (Helsinki), Faz 3.8a'nın
 tamamı (RUNBOOK.md A0-A10) sırayla uygulanıp canlı kanıtlandı: sunucu sertleştirme (SSH
 key-only, root login kapalı, ufw, fail2ban, unattended-upgrades), Docker, GitHub deploy key
 ile private repo çekimi, prod secret'ları taze üretildi, R2 fotoğraf depolaması bağlandı,
