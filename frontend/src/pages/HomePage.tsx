@@ -167,7 +167,13 @@ export default function HomePage() {
     }
   }
 
-  async function fetchNearby(lat: number, lng: number, radiusKm: number, label: string) {
+  // navbarLabel, arama çubuğundaki buton etiketinden (label) AYRI tutuluyor --
+  // GPS akışında ikisi aynı string olsaydı Navbar'daki "Konum seç" kutusu da
+  // "Yakınımdakiler" yazardı, ki bu zaten arama çubuğundaki butonun kendi adı
+  // (bkz. kullanıcı geri bildirimi) -- iki farklı UI öğesi aynı metni tekrar
+  // etmemeli. Şehir seçiminde (navbarLabel verilmezse) ikisi zaten aynı kalıyor
+  // çünkü orada gösterilecek gerçek, bilgilendirici bir isim var (şehir adı).
+  async function fetchNearby(lat: number, lng: number, radiusKm: number, label: string, navbarLabel: string = label) {
     setLoading(true);
     setLocationError(null);
     try {
@@ -176,7 +182,7 @@ export default function HomePage() {
       setNearbyMode(true);
       setShowCityPicker(false);
       setLocationLabel(label);
-      broadcastLocationLabel(label);
+      broadcastLocationLabel(navbarLabel);
     } catch {
       setLocationError("Yakınımdakiler yüklenirken hata oluştu.");
     } finally {
@@ -192,7 +198,7 @@ export default function HomePage() {
     }
     setLoading(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => fetchNearby(pos.coords.latitude, pos.coords.longitude, GPS_RADIUS_KM, "Yakınımdakiler"),
+      (pos) => fetchNearby(pos.coords.latitude, pos.coords.longitude, GPS_RADIUS_KM, "Yakınımdakiler", "Konum"),
       () => {
         setShowCityPicker(true);
         setLoading(false);
