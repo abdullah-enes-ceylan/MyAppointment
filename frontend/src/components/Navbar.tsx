@@ -101,11 +101,14 @@ export default function Navbar() {
   // belirli bir işletmeye bakıyor) -- kullanıcı isteği üzerine bu sayfada
   // gizlendi.
   const isBusinessDetailPage = location.pathname.startsWith("/business/");
-  // Giriş sayfası kendi minimal ust cubugunu gosteriyor (bkz. LoginPage.tsx)
-  // -- dikkat dagitici ana navigasyon burada bilerek hic render edilmiyor.
-  const isLoginPage = location.pathname === "/login";
+  // Giriş/Kayıt sayfaları kendi minimal ust cubuklarini gosteriyor (bkz.
+  // LoginPage.tsx/RegisterPage.tsx) -- dikkat dagitici ana navigasyon
+  // burada bilerek hic render edilmiyor. Ikisi de AYNI kural, /register
+  // once unutulmustu (RegisterPage kendi yorumunda "gizli" diyordu ama
+  // buradaki kontrol sadece /login'e bakiyordu).
+  const isAuthPage = location.pathname === "/login" || location.pathname === "/register";
 
-  if (isLoginPage) {
+  if (isAuthPage) {
     return null;
   }
 
