@@ -102,12 +102,12 @@ dosyası zorunlu** (aşağıda A1.7). Bunu atlama.
 Sunucuyu bundan küçük almayı düşünüyorsan durup tekrar konuşalım — 4 GB + swap altına inmek bu
 planın varsayımlarını geçersiz kılar.
 
-**Ölçülen gerçek build tepe değeri:** `~1004 MB` (2026-09-06, Hetzner CPX22'de canlı ölçüldü —
-4096 MB'lık toplam RAM'in çok altında, swap'a hiç taşmadı). Sunucu son anda stokta kalmayan
-CX22 yerine **CPX22** (AMD, 2 vCPU/4 GB/80 GB, ~19,49 €/ay) oldu — Hetzner'in tüm "Cost-Optimized"
-(CX) serisi 2026-09 itibarıyla DRAM/NAND fiyat artışı yüzünden dünya genelinde satıştan
-kaldırılmıştı, bölgesel bir stok sorunu değildi. Spesifikasyon (2 vCPU/4 GB) aynı kaldığı için
-planın hiçbir varsayımı değişmedi, sadece aylık maliyet arttı.
+**Ölçülen gerçek build tepe değeri:** `~1004 MB` (2026-09-06, Hetzner CX23'te canlı ölçüldü —
+4096 MB'lık toplam RAM'in çok altında, swap'a hiç taşmadı). Satın alma anında "Cost-Optimized"
+(CX) serisi geçici olarak tüm Hetzner'de stokta yoktu (DRAM/NAND fiyat artışı, bölgesel bir
+sorun değildi) — kısa süre sonra stok açılıp **CX23** (2 vCPU/4 GB/40 GB, Helsinki, ~6 €/ay)
+alındı, CPX22'ye (~19,49 €/ay) hiç geçilmedi. Spesifikasyon (2 vCPU/4 GB) planın varsaydığıyla
+aynı, sadece sunucu adı/lokasyon farklı çıktı.
 
 ## A1. İlk bağlantı ve sertleştirme
 
@@ -624,7 +624,7 @@ kilit simgesi normal.
 
 ## ✅ 2026-09-06 — Bölüm A (3.8a) canlı sunucuda tamamlandı
 
-Hetzner CPX22 (Helsinki) üzerinde A0'dan A10'a kadar hepsi sırayla uygulandı ve kanıtlandı.
+Hetzner CX23 (Helsinki) üzerinde A0'dan A10'a kadar hepsi sırayla uygulandı ve kanıtlandı.
 Notlar, sadece runbook metninden SAPAN ya da EK doğrulama gerektiren kısımlar için:
 
 - **A8'in "14 satır" kanıtı artık 17 satır** — aradan geçen migration'larla (V15-V17) bu sayı
@@ -649,8 +649,9 @@ Notlar, sadece runbook metninden SAPAN ya da EK doğrulama gerektiren kısımlar
   Caddyfile'da hiç yoktu) — yukarıdaki IP testi için gerekliydi, ama "Deploy Sonrası İlk 48
   Saat" bölümündeki elle log izlemeyi de gerçek anlamda kullanılabilir kılıyor, kalıcı olarak
   bırakıldı.
-- **Sunucu, planlanan Hetzner CX22 değil CPX22 oldu** (bkz. A0 güncellemesi) — CX serisi
-  (Cost-Optimized) tüm Hetzner'de satıştan kalkmıştı, bölgesel değil.
+- **Sunucu, planlanan CX22 değil CX23 oldu** (bkz. A0 güncellemesi) — CX serisi (Cost-Optimized)
+  satın alma anında tüm Hetzner'de geçici olarak stokta yoktu (bölgesel değil), kısa süre sonra
+  açılınca CX23 (~6 €/ay, Helsinki) alındı, daha pahalı CPX22'ye hiç geçilmedi.
 
 ---
 

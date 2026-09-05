@@ -530,7 +530,7 @@ testler için geçici eklenen dosya) hiçbir commit'e girmediği `git log --all 
 kabul kriterlerini takip eder — komut sırası ve "ne görmeliyim" kanıt satırları runbook'ta.
 
 **(2026-09-06) 3.8a TAMAMLANDI — `randevumweb.com` canlıda, gerçek Let's Encrypt prod
-sertifikasıyla.** Hetzner CPX22 (Helsinki) üzerinde RUNBOOK'un A0'dan A10'a kadar HER adımı
+sertifikasıyla.** Hetzner CX23 (Helsinki) üzerinde RUNBOOK'un A0'dan A10'a kadar HER adımı
 sırayla uygulanıp canlı kanıtlandı — tam liste ve sapan noktalar RUNBOOK.md'nin "2026-09-06 —
 Bölüm A tamamlandı" bölümünde. Öne çıkanlar: build tepe belleği ~1004 MB (4 GB'ın çok altında),
 Flyway zinciri V1→V17 sıfır veritabanında sorunsuz çalıştı, `/api/businesses` boş döndü
@@ -1693,7 +1693,7 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.6 Loglama, izleme ve hata takibi
 - [x] 3.7 Konteynerleştirme
 - [x] 3.8a Sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama — 2026-09-06, Hetzner
-      CPX22, `randevumweb.com` canlı, gerçek Let's Encrypt prod sertifikası (bkz. RUNBOOK.md)
+      CX23, `randevumweb.com` canlı, gerçek Let's Encrypt prod sertifikası (bkz. RUNBOOK.md)
 - [ ] 3.8b Yedekleme + restore provası + izleme (3.8a bitmeden başlanmaz) — "İlk 48 Saat"
       gözlem penceresi bekleniyor
 - [ ] 3.9 KVKK ve hukuki metinler — hesap silme akışı backend'i (eaf1c86) VE frontend'i
