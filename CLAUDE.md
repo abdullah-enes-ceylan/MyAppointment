@@ -205,19 +205,21 @@ düzeltmek, sonraki oturumu aynı yanlışa götürür.
 
 ## Mevcut Durum
 
-**Faz 0, 1, 2 tamamlandı. Faz 3 sürüyor: 3.1-3.7 tamamlandı, 3.8 (deploy) henüz
-BAŞLAMADI, 3.9 (KVKK) kısmen tamamlandı.** Güncel faz ilerleme tablosu için
+**Faz 0, 1, 2 tamamlandı. Faz 3 sürüyor: 3.1-3.7 ve 3.8a (deploy) tamamlandı, 3.8b
+(yedekleme/izleme) bekliyor, 3.9 (KVKK) kısmen tamamlandı.** Güncel faz ilerleme tablosu için
 ROADMAP.md'nin sonundaki checklist tek otorite — burası sadece kısa bir özet, ayrıntı
 için oraya bak.
 
-**Migration seviyesi: V17.** Prod **henüz deploy edilmedi** — Dockerfile/compose ve
-`RUNBOOK.md` (Faz 3.7/3.8'de) hazırlandı, ama gerçek sunucuya ilk deploy (3.8a) daha
-yapılmadı. Tek veritabanı hâlâ yerel geliştirme ortamı. **(2026-09-03) Domain alındı:
-`randevumweb.com` (Cloudflare üzerinden)** — RUNBOOK.md/ROADMAP.md'deki yer tutucu
-güncellendi, `www` için apex'e yönlendiren ayrı bir Caddy site bloğu eklendi, Cloudflare'e
-özgü DNS/proxy adımları RUNBOOK'a işlendi (detay: yukarıdaki karar tablosunda "Cloudflare
-proxy" satırı, prosedür: RUNBOOK.md A3/A3.1). Bu, 3.8a'nın kendisini BAŞLATMIYOR — sunucu
-satın alma, sertleştirme, ilk deploy hâlâ yapılmadı, sadece bir ön koşul (domain) karşılandı.
+**Migration seviyesi: V17.** **(2026-09-06) Prod CANLI — `https://randevumweb.com`, gerçek
+Let's Encrypt sertifikasıyla, tarayıcı uyarısı yok.** Hetzner CPX22 (Helsinki), Faz 3.8a'nın
+tamamı (RUNBOOK.md A0-A10) sırayla uygulanıp canlı kanıtlandı: sunucu sertleştirme (SSH
+key-only, root login kapalı, ufw, fail2ban, unattended-upgrades), Docker, GitHub deploy key
+ile private repo çekimi, prod secret'ları taze üretildi, R2 fotoğraf depolaması bağlandı,
+Flyway V1→V17 sıfır veritabanında sorunsuz çalıştı, reboot sonrası üç servis kendiliğinden
+ayağa kalktı, rate limiter'ın gerçek istemci IP'lerini doğru ayırdığı iki farklı gerçek IP'yle
+kanıtlandı. Detay ve sapan noktalar: RUNBOOK.md'nin "2026-09-06 — Bölüm A tamamlandı" bölümü,
+ROADMAP.md 3.8. **Sıradaki adım 3.8b** (yedekleme + restore provası) — RUNBOOK'un "İlk 48 Saat"
+gözlem penceresi bitmeden başlanmayacak.
 
 **Faz 3.9 (hesap silme akışı, KVKK unutulma hakkı) — backend VE frontend tamamlandı,
 canlı tarayıcıda doğrulandı; sadece hukuki metinler (aydınlatma/VERBİS/sözleşme,
@@ -245,7 +247,7 @@ ve müşteri tarafı (`BusinessDetailPage`'teki kaydırmalı carousel) PR #35 il
   personel uçlarına sahiplik, login hata yönetimi handler'a taşındı
 - Test altyapısı (Testcontainers Postgres), yetkilendirme entegrasyon testleri, API dokümantasyonu
 - Bildirim altyapısı (`NotificationPort`, kanal-bağımsız), rate limiting, loglama/izleme
-- Konteynerleştirme (Dockerfile'lar, docker-compose, Caddy) — henüz deploy edilmedi
+- Konteynerleştirme (Dockerfile'lar, docker-compose, Caddy) — artık gerçek sunucuda deploy edilmiş durumda (Faz 3.8a)
 - Hesap silme akışı (USER + BUSINESS_OWNER, backend + frontend) — bkz. yukarısı
 - İşletme fotoğrafları: yerel diskten Cloudflare R2'ye taşındı (ROADMAP 3.15, uçtan uca
   canlı doğrulandı), tek kapak fotoğrafından en fazla 5 fotoğraflık galeriye genişledi
@@ -261,7 +263,7 @@ ve müşteri tarafı (`BusinessDetailPage`'teki kaydırmalı carousel) PR #35 il
 |---|---|
 | `favorites.created_at`'te `DEFAULT now()` | Kullanılmıyor ama şemada duruyor; ayrı küçük migration ile temizlenecek |
 | İl/ilçe ile manuel konum seçimi | Tasarım konuşuldu (`city`/`district` alanları), yazılmadı |
-| Faz 3.8 deploy (sunucu, DNS, ilk canlı deploy, yedekleme) | **Başlamadı** — plan/RUNBOOK.md hazır |
+| Faz 3.8b (yedekleme, restore provası, kalan izleme) | 3.8a tamamlandı (bkz. Mevcut Durum) — 3.8b, "İlk 48 Saat" gözlem penceresi bitince başlayacak |
 | KVKK hukuki metinleri (aydınlatma/VERBİS/sözleşme) | Taslak yazıldı (`AYDINLATMA_METNI_TASLAGI.md`), avukat onayı bekliyor |
 | Randevuya katılım oranı (ROADMAP 3.12) | **Ertelendi** — beta ölçeğinde veri birikmez + `NO_SHOW` fiilen işaretlenemiyor |
 | İşletme paneli sekme içerikleri (İstek Kutusu/Onaylananlar/Hizmetler/Personel/Çalışma Saatleri) hâlâ eski koyu tema | ROADMAP 3.16 — sadece kabuk (sidebar) açık temaya geçti, sekmelerin kendi kart/form stilleri kademeli geçecek |

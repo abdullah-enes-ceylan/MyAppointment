@@ -529,6 +529,16 @@ testler için geçici eklenen dosya) hiçbir commit'e girmediği `git log --all 
 Çalıştırılabilir adım adım prosedür: [RUNBOOK.md](RUNBOOK.md). Bu bölüm sadece kararları ve
 kabul kriterlerini takip eder — komut sırası ve "ne görmeliyim" kanıt satırları runbook'ta.
 
+**(2026-09-06) 3.8a TAMAMLANDI — `randevumweb.com` canlıda, gerçek Let's Encrypt prod
+sertifikasıyla.** Hetzner CPX22 (Helsinki) üzerinde RUNBOOK'un A0'dan A10'a kadar HER adımı
+sırayla uygulanıp canlı kanıtlandı — tam liste ve sapan noktalar RUNBOOK.md'nin "2026-09-06 —
+Bölüm A tamamlandı" bölümünde. Öne çıkanlar: build tepe belleği ~1004 MB (4 GB'ın çok altında),
+Flyway zinciri V1→V17 sıfır veritabanında sorunsuz çalıştı, `/api/businesses` boş döndü
+(seeder prod'da çalışmadı), reboot sonrası üç servis kendiliğinden ayağa kalktı, rate limiter'ın
+gerçek istemci IP'lerini doğru ayırdığı iki farklı gerçek IP'yle (geliştirici PC'si + telefon,
+aynı anda) kanıtlandı. Sıradaki adım **3.8b** (yedekleme + restore provası + kalan izleme) —
+ama önce RUNBOOK'un "Deploy Sonrası İlk 48 Saat" gözlem penceresi bekleniyor.
+
 **İki alt faza bölündü, 3.8b'ye 3.8a bitmeden geçilmeyecek:**
 - **3.8a** — sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama turu + **uptime
   monitor kurulumu** (bilerek burada — 3.8b'ye ertelenirse 3.8a'nın kendi "48 saat kesintisiz
@@ -1682,8 +1692,10 @@ Tamamlanan adımın kutusu işaretlenir ve karşısına commit hash'i yazılır.
 - [x] 3.5 Rate limiting ve kötüye kullanım koruması — b201bb7
 - [x] 3.6 Loglama, izleme ve hata takibi
 - [x] 3.7 Konteynerleştirme
-- [ ] 3.8a Sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama
-- [ ] 3.8b Yedekleme + restore provası + izleme (3.8a bitmeden başlanmaz)
+- [x] 3.8a Sunucu kurulumu + sertleştirme + DNS + ilk deploy + doğrulama — 2026-09-06, Hetzner
+      CPX22, `randevumweb.com` canlı, gerçek Let's Encrypt prod sertifikası (bkz. RUNBOOK.md)
+- [ ] 3.8b Yedekleme + restore provası + izleme (3.8a bitmeden başlanmaz) — "İlk 48 Saat"
+      gözlem penceresi bekleniyor
 - [ ] 3.9 KVKK ve hukuki metinler — hesap silme akışı backend'i (eaf1c86) VE frontend'i
       (847fe9a, canlı doğrulandı) tamamlandı; sadece aydınlatma metni/VERBİS/sözleşmenin
       avukatla kesinleştirilmesi kaldı (taslak: `AYDINLATMA_METNI_TASLAGI.md`)

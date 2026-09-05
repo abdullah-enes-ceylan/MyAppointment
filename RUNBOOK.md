@@ -102,7 +102,12 @@ dosyası zorunlu** (aşağıda A1.7). Bunu atlama.
 Sunucuyu bundan küçük almayı düşünüyorsan durup tekrar konuşalım — 4 GB + swap altına inmek bu
 planın varsayımlarını geçersiz kılar.
 
-**Ölçülen gerçek build tepe değeri (A8'den sonra buraya yaz):** `___ MB` (henüz ölçülmedi)
+**Ölçülen gerçek build tepe değeri:** `~1004 MB` (2026-09-06, Hetzner CPX22'de canlı ölçüldü —
+4096 MB'lık toplam RAM'in çok altında, swap'a hiç taşmadı). Sunucu son anda stokta kalmayan
+CX22 yerine **CPX22** (AMD, 2 vCPU/4 GB/80 GB, ~19,49 €/ay) oldu — Hetzner'in tüm "Cost-Optimized"
+(CX) serisi 2026-09 itibarıyla DRAM/NAND fiyat artışı yüzünden dünya genelinde satıştan
+kaldırılmıştı, bölgesel bir stok sorunu değildi. Spesifikasyon (2 vCPU/4 GB) aynı kaldığı için
+planın hiçbir varsayımı değişmedi, sadece aylık maliyet arttı.
 
 ## A1. İlk bağlantı ve sertleştirme
 
@@ -506,7 +511,7 @@ zamanla büyümemeli.
 Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan maddeler yerelde
 **kanıtlanamayan**, sadece burada gerçek anlam kazanan testler.
 
-- [ ] **`[SUNUCUDA DOĞRULANACAK]` Postgres port kapalı.** Sunucudan (host'un kendisinden,
+- [x] **`[SUNUCUDA DOĞRULANACAK]` Postgres port kapalı.** Sunucudan (host'un kendisinden,
   container içinden değil):
   ```bash
   psql -h localhost -p 5432
@@ -514,7 +519,7 @@ Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan ma
   **Beklenen:** `connection refused` ya da benzeri bir hata. Bağlanabiliyorsan `docker-compose.yml`'i
   tekrar kontrol et — `postgres` servisinde bir `ports:` satırı sızmış olabilir.
 
-- [ ] **Fotoğraf kalıcılığı — gerçek Linux'ta ilk kez.** Uygulamaya gerçek bir işletme fotoğrafı
+- [x] **Fotoğraf kalıcılığı — gerçek Linux'ta ilk kez.** Uygulamaya gerçek bir işletme fotoğrafı
   yükle (panelden), sonra:
   ```bash
   docker compose down && docker compose up -d
@@ -523,13 +528,13 @@ Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan ma
   edildi ve named volume sayesinde izin hatası beklenmiyor — ama bu, GERÇEK bir Linux
   dosya-sistemi izin modeliyle ilk kez çalıştığı an, o yüzden yine de bak.)
 
-- [ ] **Backend root değil.**
+- [x] **Backend root değil.**
   ```bash
   docker compose exec backend id
   ```
   **Beklenen:** `uid=1000(appuser) gid=1000(appgroup)`.
 
-- [ ] **`[SUNUCUDA DOĞRULANACAK]` HTTPS sertifikası + HSTS.** Tarayıcıda `https://randevumweb.com`
+- [x] **`[SUNUCUDA DOĞRULANACAK]` HTTPS sertifikası + HSTS.** Tarayıcıda `https://randevumweb.com`
   aç. Staging CA kullandıysan tarayıcı "güvenli değil" uyarısı verecek — BU AŞAMADA BEKLENEN,
   devam et (A10'da prod CA'ya geçilecek). Sertifikanın gerçekten sunulduğunu doğrula:
   ```bash
@@ -538,7 +543,7 @@ Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan ma
   **Beklenen:** `Strict-Transport-Security: max-age=31536000; includeSubDomains` header'ı
   yanıtta olmalı (`-k`, staging'in güvenilmeyen sertifikasını görmezden gelmek için).
 
-- [ ] **`[SUNUCUDA DOĞRULANACAK]` `www` yönlendirmesi.**
+- [x] **`[SUNUCUDA DOĞRULANACAK]` `www` yönlendirmesi.**
   ```bash
   curl -kI https://www.randevumweb.com
   ```
@@ -547,11 +552,11 @@ Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan ma
   emin ol (`-k` staging sertifikasını görmezden gelmek için, prod CA'ya geçtikten sonra `-k`
   olmadan da dene).
 
-- [ ] **`[SUNUCUDA DOĞRULANACAK]` Deep-link F5.** Tarayıcıda doğrudan `https://randevumweb.com/randevularim`
+- [x] **`[SUNUCUDA DOĞRULANACAK]` Deep-link F5.** Tarayıcıda doğrudan `https://randevumweb.com/randevularim`
   adresine git (linke tıklamadan, adres çubuğuna yazıp Enter), sayfa açılınca F5 bas.
   **Beklenen:** `404` değil, sayfa yeniden yükleniyor ve React uygulaması render oluyor.
 
-- [ ] **Actuator kapalı uçlar.**
+- [x] **Actuator kapalı uçlar.**
   ```bash
   curl -k -o /dev/null -w "%{http_code}\n" https://randevumweb.com/actuator
   curl -k -o /dev/null -w "%{http_code}\n" https://randevumweb.com/actuator/env
@@ -559,7 +564,7 @@ Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan ma
   ```
   **Beklenen:** İlk ikisi `401`, üçüncüsü `200`.
 
-- [ ] **`[SUNUCUDA DOĞRULANACAK]` Gerçek istemci IP — bu, yerelde HİÇ kanıtlanamayan madde.**
+- [x] **`[SUNUCUDA DOĞRULANACAK]` Gerçek istemci IP — bu, yerelde HİÇ kanıtlanamayan madde.**
   Telefonunu **WiFi'den çıkar**, mobil veriye geçir (farklı bir gerçek IP'den bağlanman şart),
   siteye gir, bir istek at (ör. işletme listesini aç). Sonra sunucuda:
   ```bash
@@ -572,7 +577,7 @@ Her madde: komut + beklenen çıktı. `[SUNUCUDA DOĞRULANACAK]` etiketi olan ma
   `server.forward-headers-strategy=native`'in çalışmadığı anlamına gelir, ROADMAP 3.5'teki
   riskin gerçekleştiği andır.
 
-- [ ] **`[SUNUCUDA DOĞRULANACAK]` Reboot sonrası kendiliğinden ayağa kalkma.**
+- [x] **`[SUNUCUDA DOĞRULANACAK]` Reboot sonrası kendiliğinden ayağa kalkma.**
   ```bash
   sudo reboot
   ```
@@ -614,6 +619,40 @@ echo | openssl s_client -connect randevumweb.com:443 -servername randevumweb.com
 sertifikası servis ediliyor demektir, `docker compose logs caddy` ile ACME denemesinin gerçekten
 tetiklendiğini kontrol et. Tarayıcıda da `https://randevumweb.com` — "güvenli değil" uyarısı YOK,
 kilit simgesi normal.
+
+---
+
+## ✅ 2026-09-06 — Bölüm A (3.8a) canlı sunucuda tamamlandı
+
+Hetzner CPX22 (Helsinki) üzerinde A0'dan A10'a kadar hepsi sırayla uygulandı ve kanıtlandı.
+Notlar, sadece runbook metninden SAPAN ya da EK doğrulama gerektiren kısımlar için:
+
+- **A8'in "14 satır" kanıtı artık 17 satır** — aradan geçen migration'larla (V15-V17) bu sayı
+  büyüdü, gerçek koşumda `installed_rank` 1'den 17'ye kadar hepsi `success=t` çıktı. Bu satır
+  ileride yeni migration eklendikçe yine büyüyecek — "tam N satır" değil "1'den mevcut en yüksek
+  versiyona kadar boşluksuz, hepsi success=t" diye okunmalı.
+- **`.env.example` R2 değişkenlerini hiç içermiyordu** (Faz 3.15 R2 migrasyonundan sonra
+  güncellenmemiş kalmış) — `docker compose build` ilk denemede bu yüzden patladı
+  (`R2_ACCOUNT_ID gerekli` vb. 5 hata). Ayrı bir düzeltmeyle `.env.example`'a eklendi, bir daha
+  bu şaşırtmayacak.
+- **Fotoğraf kalıcılığı testi (A9) bilinçli olarak atlandı** — prod `storage-provider=r2`
+  kullanıyor (yerel disk DEĞİL), yani bu maddenin orijinal endişesi (gerçek Linux dosya sistemi
+  izin modeli) artık geçerli değil. R2 credential'larının doğru yüklendiği, backend'in
+  `healthy` durumda açılmasından dolaylı ama sağlam şekilde kanıtlandı (`R2BusinessPhotoStorage`
+  bean'i boş bir değerde açılışta `IllegalStateException` fırlatacak şekilde yazılmıştı).
+- **Gerçek istemci IP testi telefon yerine iki farklı gerçek IP'yle yapıldı** — geliştiricinin
+  PC'si global rate limit'i (300 istek/dk) paralel curl ile tetikleyip 429 aldı, TAM O SIRADA
+  telefondan (mobil veri) siteye girilip normal 200 alındığı görüldü — rate limiter'ın iki farklı
+  gerçek IP'yi doğru ayırdığının, Docker'ın tek bir iç IP'sini herkese ortak uygulamadığının
+  kesin kanıtı.
+- **Caddy'ye kalıcı bir `log { output stdout; format json }` bloğu eklendi** (orijinal
+  Caddyfile'da hiç yoktu) — yukarıdaki IP testi için gerekliydi, ama "Deploy Sonrası İlk 48
+  Saat" bölümündeki elle log izlemeyi de gerçek anlamda kullanılabilir kılıyor, kalıcı olarak
+  bırakıldı.
+- **Sunucu, planlanan Hetzner CX22 değil CPX22 oldu** (bkz. A0 güncellemesi) — CX serisi
+  (Cost-Optimized) tüm Hetzner'de satıştan kalkmıştı, bölgesel değil.
+
+---
 
 ## A11. Karar: `/actuator/health` dışarıda kalsın mı? — ✅ ONAYLANDI, açık kalıyor
 
