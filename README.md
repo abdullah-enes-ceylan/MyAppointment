@@ -23,8 +23,6 @@ The engineering didn't stop because it got hard — it stopped because I made a 
 
 A real SaaS product shape, not a CRUD tutorial: business owners register, manage their own tenant (services, staff, working hours, photo gallery), and customers discover, filter, and book appointments — with the whole thing deployed, secured, and once running live on a real server (see *Project status* above).
 
-The interesting part isn't the CRUD. It's everything around it that a tutorial never covers.
-
 ## Why this is worth a second look
 
 - **Tenant isolation is structural, not a convention.** A business owner's `businessId` is never trusted from a request path or embedded in the JWT — every mutation re-derives ownership from the database (`OwnershipGuard`), and it's asserted twice for anything sensitive (once against the parent, once against the resource's *own* foreign key) to close IDOR gaps that a single check would miss.
