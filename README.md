@@ -1,8 +1,8 @@
 # Randevum
 
-**A production-deployed, multi-tenant appointment booking platform for local service businesses** (hairdressers, salons, spas, tattoo studios) — built solo, end to end: backend, frontend, infrastructure, and security.
+**A multi-tenant appointment booking platform for local service businesses** (hairdressers, salons, spas, tattoo studios) — built solo, end to end: backend, frontend, infrastructure, and security.
 
-**🔗 Live: [randevumweb.com](https://randevumweb.com)** — not a localhost demo. Real domain, real Let's Encrypt certificate, hardened Linux server, running right now.
+**This was deployed to a real, hardened production server** (`randevumweb.com` — domain still held, server since torn down to avoid ongoing hosting cost for a project not currently pursued commercially). Every claim below — the security fixes, the rate-limit proof, the deploy hardening — was verified live against that real deployment, not asserted from local development. [`RUNBOOK.md`](RUNBOOK.md) is the actual executed procedure, including the live evidence gathered at each step, so the deployment is fully reproducible from a clean server if needed.
 
 [![CI](https://github.com/abdullah-enes-ceylan/MyAppointment/actions/workflows/ci.yml/badge.svg)](https://github.com/abdullah-enes-ceylan/MyAppointment/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-21-orange)
