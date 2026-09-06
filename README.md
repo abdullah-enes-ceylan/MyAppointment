@@ -21,9 +21,7 @@ The engineering didn't stop because it got hard — it stopped because I made a 
 
 ## What this actually is
 
-Most student portfolio projects are CRUD apps that run on `localhost:3000`. This one is a real SaaS product shape: business owners register, manage their own tenant (services, staff, working hours, photo gallery), and customers discover, filter, and book appointments — with the whole thing deployed, secured, and once running live on a real server (see *Project status* above).
-
-The interesting part isn't the CRUD. It's everything around it that a tutorial never covers.
+A real SaaS product shape, not a CRUD tutorial: business owners register, manage their own tenant (services, staff, working hours, photo gallery), and customers discover, filter, and book appointments — with the whole thing deployed, secured, and once running live on a real server (see *Project status* above).
 
 ## Why this is worth a second look
 
