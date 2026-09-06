@@ -627,6 +627,13 @@ kilit simgesi normal.
 Hetzner CX23 (Helsinki) üzerinde A0'dan A10'a kadar hepsi sırayla uygulandı ve kanıtlandı.
 Notlar, sadece runbook metninden SAPAN ya da EK doğrulama gerektiren kısımlar için:
 
+**⚠️ Bu sunucu aynı gün, doğrulama bittikten SONRA bilerek silindi** (proje ticari hedefini
+askıya alma kararı — hosting maliyetini/bakım yükünü sürdürmenin artık karşılığı yok, bkz.
+CLAUDE.md/ROADMAP.md). Aşağıdaki her madde gerçekten yaşandı ve doğrulandı — bu runbook hâlâ
+eksiksiz, geçerli bir prosedür, istenirse AYNI adımlarla sıfırdan tekrar uygulanabilir. Sadece
+IP adresi (`62.238.123.209`) ve altındaki SSH/DNS kayıtları artık geçersiz, yeni bir sunucu
+alınırsa A0'dan itibaren gerçek/güncel değerlerle tekrar geçilmeli.
+
 - **A8'in "14 satır" kanıtı artık 17 satır** — aradan geçen migration'larla (V15-V17) bu sayı
   büyüdü, gerçek koşumda `installed_rank` 1'den 17'ye kadar hepsi `success=t` çıktı. Bu satır
   ileride yeni migration eklendikçe yine büyüyecek — "tam N satır" değil "1'den mevcut en yüksek
