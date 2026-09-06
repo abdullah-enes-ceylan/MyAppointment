@@ -44,7 +44,7 @@ flowchart TB
     end
 
     subgraph Server["Hetzner VPS — hardened Ubuntu"]
-        Caddy["Caddy\nreverse proxy\nauto HTTPS + security headers"]
+        Caddy["Caddy\nreverse proxy\nauto HTTPS\nsecurity headers"]
         Backend["Spring Boot 4 / Java 21\nREST API, JWT auth, Flyway"]
         Postgres[("PostgreSQL 18\nDocker named volume")]
 
