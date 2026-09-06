@@ -205,21 +205,27 @@ düzeltmek, sonraki oturumu aynı yanlışa götürür.
 
 ## Mevcut Durum
 
-**Faz 0, 1, 2 tamamlandı. Faz 3 sürüyor: 3.1-3.7 ve 3.8a (deploy) tamamlandı, 3.8b
-(yedekleme/izleme) bekliyor, 3.9 (KVKK) kısmen tamamlandı.** Güncel faz ilerleme tablosu için
+**Faz 0, 1, 2 tamamlandı. Faz 3 sürüyor: 3.1-3.7 tamamlandı, 3.8a (deploy) kanıtlandı ama
+sunucu sonradan bilerek geri alındı (bkz. aşağısı), 3.8b artık konu dışı, 3.9 (KVKK) kısmen
+tamamlandı.** Güncel faz ilerleme tablosu için
 ROADMAP.md'nin sonundaki checklist tek otorite — burası sadece kısa bir özet, ayrıntı
 için oraya bak.
 
-**Migration seviyesi: V17.** **(2026-09-06) Prod CANLI — `https://randevumweb.com`, gerçek
-Let's Encrypt sertifikasıyla, tarayıcı uyarısı yok.** Hetzner CX23 (Helsinki), Faz 3.8a'nın
-tamamı (RUNBOOK.md A0-A10) sırayla uygulanıp canlı kanıtlandı: sunucu sertleştirme (SSH
-key-only, root login kapalı, ufw, fail2ban, unattended-upgrades), Docker, GitHub deploy key
-ile private repo çekimi, prod secret'ları taze üretildi, R2 fotoğraf depolaması bağlandı,
-Flyway V1→V17 sıfır veritabanında sorunsuz çalıştı, reboot sonrası üç servis kendiliğinden
-ayağa kalktı, rate limiter'ın gerçek istemci IP'lerini doğru ayırdığı iki farklı gerçek IP'yle
-kanıtlandı. Detay ve sapan noktalar: RUNBOOK.md'nin "2026-09-06 — Bölüm A tamamlandı" bölümü,
-ROADMAP.md 3.8. **Sıradaki adım 3.8b** (yedekleme + restore provası) — RUNBOOK'un "İlk 48 Saat"
-gözlem penceresi bitmeden başlanmayacak.
+**Migration seviyesi: V17.** **(2026-09-06) Faz 3.8a tamamlandı ve canlı kanıtlandı, SONRA
+BİLEREK sökülüp geri alındı.** Hetzner CX23 (Helsinki) üzerinde RUNBOOK.md A0-A10'un tamamı
+sırayla uygulanıp gerçek `https://randevumweb.com`'da (Let's Encrypt prod sertifikası, tarayıcı
+uyarısı yok) doğrulandı: sunucu sertleştirme (SSH key-only, root login kapalı, ufw, fail2ban,
+unattended-upgrades), Docker, GitHub deploy key ile private repo çekimi, prod secret'ları taze
+üretildi, R2 fotoğraf depolaması bağlandı, Flyway V1→V17 sıfır veritabanında sorunsuz çalıştı,
+reboot sonrası üç servis kendiliğinden ayağa kalktı, rate limiter'ın gerçek istemci IP'lerini
+doğru ayırdığı iki farklı gerçek IP'yle kanıtlandı. **Aynı gün proje ticari hedefini askıya
+alma kararı verildi** (portfolyo/GitHub'da sunulabilir proje odağına geçildi) — bunun üzerine
+**Hetzner sunucusu silindi, R2 bucket'ı boşaltıldı, aylık/tekrar eden hiçbir maliyet
+kalmadı.** Sadece domain (`randevumweb.com`, Cloudflare) duruyor. Canlı erişimin gerçekten
+kesildiği doğrulandı (`curl` timeout). **Bu, 3.8a'nın BAŞARISIZ olduğu anlamına gelmiyor** —
+prosedür uçtan uca kanıtlandı, RUNBOOK.md'deki "2026-09-06 — Bölüm A tamamlandı" bölümü ve
+ROADMAP.md 3.8 hâlâ geçerli, gerektiğinde AYNI adımlarla sıfırdan tekrar kurulabilir. 3.8b
+(yedekleme) ve "İlk 48 Saat" gözlem penceresi artık konu dışı — çalışan bir sunucu yok.
 
 **Faz 3.9 (hesap silme akışı, KVKK unutulma hakkı) — backend VE frontend tamamlandı,
 canlı tarayıcıda doğrulandı; sadece hukuki metinler (aydınlatma/VERBİS/sözleşme,
@@ -263,7 +269,8 @@ ve müşteri tarafı (`BusinessDetailPage`'teki kaydırmalı carousel) PR #35 il
 |---|---|
 | `favorites.created_at`'te `DEFAULT now()` | Kullanılmıyor ama şemada duruyor; ayrı küçük migration ile temizlenecek |
 | İl/ilçe ile manuel konum seçimi | Tasarım konuşuldu (`city`/`district` alanları), yazılmadı |
-| Faz 3.8b (yedekleme, restore provası, kalan izleme) | 3.8a tamamlandı (bkz. Mevcut Durum) — 3.8b, "İlk 48 Saat" gözlem penceresi bitince başlayacak |
+| Faz 3.8b (yedekleme, restore provası, kalan izleme) | Konu dışı — 3.8a kanıtlandıktan sonra sunucu bilerek silindi (bkz. Mevcut Durum), şu an yedeklenecek çalışan bir sistem yok |
+| Prod sunucusu / canlı deploy | **Yok** — Hetzner sunucusu ve R2 içeriği silindi (ticari hedef askıya alındı, hosting maliyeti durduruldu). Domain (`randevumweb.com`) duruyor. RUNBOOK.md'deki prosedürle istenirse sıfırdan yeniden kurulabilir |
 | KVKK hukuki metinleri (aydınlatma/VERBİS/sözleşme) | Taslak yazıldı (`AYDINLATMA_METNI_TASLAGI.md`), avukat onayı bekliyor |
 | Randevuya katılım oranı (ROADMAP 3.12) | **Ertelendi** — beta ölçeğinde veri birikmez + `NO_SHOW` fiilen işaretlenemiyor |
 | İşletme paneli sekme içerikleri (İstek Kutusu/Onaylananlar/Hizmetler/Personel/Çalışma Saatleri) hâlâ eski koyu tema | ROADMAP 3.16 — sadece kabuk (sidebar) açık temaya geçti, sekmelerin kendi kart/form stilleri kademeli geçecek |
