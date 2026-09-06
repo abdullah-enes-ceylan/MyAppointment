@@ -44,7 +44,7 @@ flowchart TB
     end
 
     subgraph Server["Hetzner VPS — hardened Ubuntu"]
-        Caddy["Caddy\nreverse proxy + automatic HTTPS\nsecurity headers, rate-limit-aware forwarding"]
+        Caddy["Caddy\nreverse proxy\nauto HTTPS + security headers"]
         Backend["Spring Boot 4 / Java 21\nREST API, JWT auth, Flyway"]
         Postgres[("PostgreSQL 18\nDocker named volume")]
 
@@ -53,7 +53,7 @@ flowchart TB
         Backend --> Postgres
     end
 
-    R2[("Cloudflare R2\nbusiness photos, CDN-served")]
+    R2[("Cloudflare R2\nbusiness photos")]
 
     Browser -->|HTTPS| Caddy
     Backend -->|images| R2
