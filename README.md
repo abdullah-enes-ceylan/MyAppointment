@@ -2,7 +2,7 @@
 
 **A multi-tenant appointment booking platform for local service businesses** (hairdressers, salons, spas, tattoo studios) — built solo, end to end: backend, frontend, infrastructure, and security.
 
-**This was deployed to a real, hardened production server** (`randevumweb.com` — domain still held, server since torn down to avoid ongoing hosting cost for a project not currently pursued commercially). Every claim below — the security fixes, the rate-limit proof, the deploy hardening — was verified live against that real deployment, not asserted from local development. [`RUNBOOK.md`](RUNBOOK.md) is the actual executed procedure, including the live evidence gathered at each step, so the deployment is fully reproducible from a clean server if needed.
+**This was deployed to a real, hardened production server** (`randevumweb.com`) — every claim below (security fixes, rate-limit proof, deploy hardening) was verified live against that deployment, not asserted from local development. [`RUNBOOK.md`](RUNBOOK.md) is the actual executed procedure with the live evidence gathered at each step. Current status ↓
 
 [![CI](https://github.com/abdullah-enes-ceylan/MyAppointment/actions/workflows/ci.yml/badge.svg)](https://github.com/abdullah-enes-ceylan/MyAppointment/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-21-orange)
@@ -13,9 +13,15 @@
 
 ---
 
+## Project status
+
+This went all the way to a real, hardened production deploy — not a decision to stop at `localhost`. Partway through, I made a deliberate call: local-business SaaS is a genuinely hard go-to-market problem (high-touch sales, low willingness to pay — a sales/distribution problem, not a technical one), and pursuing it commercially isn't the right use of time right now. The server was decommissioned the same day it was proven live, specifically to stop paying for infrastructure a paused side project doesn't need.
+
+The engineering didn't stop because it got hard — it stopped because I made a scope call, the same way I would on a team. What's here is a complete, working, once-deployed system, not an abandoned one. [`NOTLAR.md`](NOTLAR.md) and [`ROADMAP.md`](ROADMAP.md) are the actual running decision log for this project — including the couple of known, deliberately deferred tradeoffs (documented with *why*, not just *what*), which I'd rather show than hide.
+
 ## What this actually is
 
-Most student portfolio projects are CRUD apps that run on `localhost:3000`. This one is a real SaaS product shape: business owners register, manage their own tenant (services, staff, working hours, photo gallery), and customers discover, filter, and book appointments — with the whole thing deployed, secured, and monitored on a real server that anyone can visit right now.
+Most student portfolio projects are CRUD apps that run on `localhost:3000`. This one is a real SaaS product shape: business owners register, manage their own tenant (services, staff, working hours, photo gallery), and customers discover, filter, and book appointments — with the whole thing deployed, secured, and once running live on a real server (see *Project status* above).
 
 The interesting part isn't the CRUD. It's everything around it that a tutorial never covers.
 
